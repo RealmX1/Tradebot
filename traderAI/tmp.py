@@ -77,6 +77,9 @@ test_data = data[:test_size,:,:]
 ########### tensorflow dataset ###########
 
 import tensorflow as tf
+print(tf.__version__)
+import tensorflow as tf
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 # Load data
 x_train = train_data[:,:-10,:] # slicing off the target data

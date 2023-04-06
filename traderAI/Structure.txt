@@ -105,3 +105,6 @@ maybe simple fully connected is good enough for short term prediction...
 04/05
 probably should try lumibot for back testing.
 https://www.youtube.com/watch?v=Dek7sKHJ7Zw
+
+04/06
+ADD a feature that embeds the time of the day (how many percent of the day trade time has passed.)
