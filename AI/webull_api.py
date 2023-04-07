@@ -1,4 +1,6 @@
-I use the steps from Method 2 with the following CTraderBot class without issues.
+# not yet started
+
+# I use the steps from Method 2 with the following CTraderBot class without issues.
 from webull import webull, paper_webull
 from _secrets import WEBULL_LOGIN_EMAIL, WEBULL_LOGIN_PWD, WEBULL_DEVICE_ID, \
                      WEBULL_TRADING_PIN, WEBULL_SECURITY_DID

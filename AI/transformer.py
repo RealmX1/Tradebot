@@ -1,3 +1,4 @@
+# UNFINISHED
 # here I'm going to try build a regular transformer model for test genreation. Later, this will be adapted to stock prediction that outputs
 
 import pandas as pd

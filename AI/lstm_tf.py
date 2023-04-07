@@ -1,8 +1,10 @@
+# predict future stock close price using LSTM; prediction window can be changed through output_size.
+
 from tensorflow.keras.layers import LSTM, Dense
 from tensorflow.keras.models import Sequential
 
 cwd = os.getcwd()
-model_path = cwd+"/lstm.pt"
+model_path = cwd+"/lstm.tf"
 
 # Load the CSV file into a Pandas dataframe
 # time,open,high,low,close,Volume,Volume MA
@@ -100,3 +102,23 @@ def main():
     total_loader = DataLoader(total_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False)
     # testing have shown that my gtx1080ti doesn't benefit from changing num_worker; but future hardware might need them.
     print(f'data loading completed in {time.time()-start_time:.2f} seconds')
+
+
+def main():
+    print("loading model")
+    start_time = time.time()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = LSTM(input_size, hidden_size, num_layers, output_size, drop_out).to(device)
+    if os.path.exists(model_path):
+        print("Loading existing model")
+        model.load_state_dict(torch.load(model_path))
+    else:
+        print("No existing model")
+    print(model)
+    print(f'model loading completed in {time.time()-start_time:.2f} seconds')
+
+
+
+
+if __name__ == '__main__':
+    main()

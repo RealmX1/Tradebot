@@ -23,20 +23,22 @@ close_idx = 3 # after removing time column
 df = pd.read_csv('nvda_1min_complex_fixed.csv')
 
 # Define hyperparameters
-input_size = 32 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+feature_num = input_size = 32 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
 hidden_size = 64 # Number of neurons in the hidden layer of the LSTM
 
 num_layers = 8 # Number of layers in the LSTM
 output_size = 10 # Number of output values (closing price 1~10min from now)
 learning_rate = 0.0001
-num_epochs = 0
+num_epochs = 2000
 batch_size = 2048
 
-window_size = 32 # using how much data from the past to make prediction?
-data_prep_window = window_size + 10 # +10 becuase we need to keep 10 for calculating loss
+window_size = 50 # using how much data from the past to make prediction?
+data_prep_window = window_size + output_size # +ouput_size becuase we need to keep 10 for calculating loss
 drop_out = 0.1
 
 train_percent = 0.8
+
+no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to normalize them (and normalization might cause 0 division problem)
 
 # Define the LSTM model
 class LSTM(nn.Module):
@@ -49,28 +51,40 @@ class LSTM(nn.Module):
 
     def forward(self, x): # assumes that x is of shape (batch_size,time_steps, features) 
         batch_size = x.shape[0]
-        out, _ = self.lstm(x.float())
-        predictions = self.fc1(out)
-        # print(predictions.shape)
-        return predictions[:,-1,:]
+        tmp, _ = self.lstm(x) #.float()
+        output = self.fc1(tmp)
+        # print(output.shape)
+        # output.shape
+        return output[:,-1,:]
         
 
 # Define the dataset class
+# data.shape: (data_num, data_prep_window, feature_num)
 class NvidiaStockDataset(Dataset):
     def __init__(self, data):
-        self.x = data[:,:-10,:] # slicing off the last entry of input
+        self.x = data[:,:-output_size,:] # slicing off the last entry of input
+        # print("x.shape: ",self.x.shape)
+        # x.shape: (data_num, window_size, feature_num)
         self.y = data[:,window_size:,close_idx] # moving the target entry one block forward
-        # print(self.x.shape)
-        # print(self.y.shape)
-        # (16713, 32, 32)
-        # (16713, 10)
-        assert self.x.shape[0] == self.y.shape[0]
+        # y.shape: (data_num, output_size)
+        self.x_mean = np.mean(self.x, axis=1)
+        self.x_std = np.std(self.x, axis=1)
+        self.x_mean[:,-no_norm_num:] = 0
+        self.x_std[:,-no_norm_num:] = 1
+        # print("x_mean.shape: ", self.x_mean.shape)
+        # mean/std.shape: (data_num, feature_num)
+
+        # does this normalization broadcast work properly? 
+        # desired effect is x[i,:,j] will be normalized using x_mean[i,j] and x_std[i,j],
+        # and y[i,j] will be normalized using x_mean[i,close_idx] and x_std[i,close_idx]
+        self.x = (self.x - self.x_mean[:,None,:]) / self.x_std[:,None,:]
+        self.y = (self.y - self.x_mean[:,close_idx:close_idx+1]) / self.x_std[:,close_idx:close_idx+1]
 
     def __len__(self):
         return self.y.shape[0]
 
     def __getitem__(self, idx):
-        return self.x[idx,:,:], self.y[idx,:]
+        return self.x[idx,:,:], self.y[idx,:], self.x_mean[idx,:], self.x_std[idx,:]
 
 
 # Prepare the data
@@ -101,26 +115,33 @@ def get_direction_diff(inputs,targets,outputs):
 def main():
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
 
-    df_float = df.values.astype(float)
+    df_float = df.values #.astype(float)
     df_float = df_float[:,1:] # remove the utftime column.
-    print(df_float.shape)
-    feature_means = np.mean(df_float, axis=0,keepdims = True) # shape (1,6)
-    close_mean = feature_means[0,close_idx]
-    feature_stds = np.std(df_float, axis=0,keepdims = True) # shape (1,6)
-    close_stds = feature_stds[0,close_idx]
-    # print("means: ",feature_means)
-    # print("stds: ",feature_stds)
+    # data_num = df_float.shape[0]
+    print("df_float shape:",df_float.shape)
+    # (data_num, output_size)
 
-    df_float = (df_float - feature_means) / feature_stds
-    print(df_float.shape)
-    # (21513, 6)
+    # # old normalization -- normalize the entire dataset at once
+    # feature_means = np.mean(df_float, axis=0,keepdims = True) # shape (1,6)
+    # close_mean = feature_means[0,close_idx]
+    # feature_stds = np.std(df_float, axis=0,keepdims = True) # shape (1,6)
+    # close_stds = feature_stds[0,close_idx]
+    # # print("means: ",feature_means)
+    # # print("stds: ",feature_stds)
+    #df_float = (df_float - feature_means) / feature_stds
+    # NOW THE NORMALIZATION IS DONE IN THE DATASET CLASS, at each prediction input/history window
+    
+    # am I doing this correctly? Should LSTM be trained this way?
+    # or should it be trained using continuous dataset, and progress by feeding one data after another?
+    # at least current method makes it easier to noramlize each window of input independently.
     data = result = sample_z_continuous(df_float, data_prep_window)
     print(data.shape)
-    # (21481, 33, 6)
+    # (data_num, data_prep_window, output_size)
 
     train_size = int(len(data) * train_percent)
     test_size = int(len(data) * (1-train_percent))
-    # note that since we are predicting future stock data, learn on nearer data, and test on a previous data.
+    # learn on nearer data, and test on a previous data; 
+    # not sure which order is better... don't have knowledge of such metric; probably should do experiment and read paper on this
     # train_data = data[:train_size,:,:]
     # test_data = data[train_size:,:,:]
     train_data = data[test_size:,:,:]
@@ -168,13 +189,13 @@ def main():
         for epoch in range(num_epochs):
             total_predictions *= 0.9
             true_prediction *= 0.9
-            for i, (inputs, targets) in enumerate(train_loader):
+            for i, (inputs, targets, _, _) in enumerate(train_loader):
                 avg_loss *= 0.95
                 # print(inputs.shape)
                 # print(targets.shape)
                 # inputs   torch.Size([2048, 32, 6])
                 # targets  torch.Size([2048, 32, 1])
-                inputs = inputs.float().to(device)
+                inputs = inputs.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
                 targets = targets.float().to(device)
                 outputs = model(inputs) # pass batch size to LSTM    
                 # print(outputs.shape)
@@ -205,7 +226,7 @@ def main():
         true_prediction = 0
         with torch.no_grad():
             i = 0
-            for i, (inputs, targets) in enumerate(test_loader):
+            for i, (inputs, targets, _, _) in enumerate(test_loader):
                 inputs = inputs.float().to(device)
                 targets = targets.float().to(device)
                 outputs = model(inputs) # pass batch size to LSTM
@@ -232,20 +253,6 @@ def main():
         model.eval() 
         start_time = time.time()
 
-        # with torch.no_grad():
-        #     # predictions = [0]*window_size addressed later by only ignoring windowed part in plot
-        #     predictions = []
-        #     for i in range(window_size, test_size+window_size-1):
-        #         inputs = torch.tensor(df_float[i-window_size:i,:]).unsqueeze(0).to(device)
-        #         # print(inputs.shape)
-        #         outputs = model(inputs) # pass batch size to LSTM
-        #         prediction = outputs.tolist()
-
-        #         predictions.append(prediction[0])
-        #         if i % 1000 == 0:
-        #             print(i)
-        #     predictions = np.array(predictions)
-
         predictions = None
         with torch.no_grad():
             correct=[0]*3
@@ -253,15 +260,21 @@ def main():
             
             total_predictions = 0
             true_prediction = 0
-            for i, (inputs, targets) in enumerate(total_loader):
+            for i, (inputs, targets, mean, std) in enumerate(total_loader):
                 
                 inputs = inputs.float().to(device)
                 targets = targets.float().to(device)
+                mean = mean.float().to(device)
+                std = std.float().to(device)
                 outputs = model(inputs) # pass batch size to LSTM
+
+                # print("outputs: ",outputs[:,[0,4,9]].shape)
+                # print("mean: ",mean[:,close_idx].shape)
+                prediction = outputs[:,[0,4,9]] * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
                 if predictions is None:
-                    predictions = outputs[:,[0,4,9]]
+                    predictions = prediction
                 else:
-                    predictions = torch.cat((predictions, outputs[:,[0,4,9]]), dim=0)
+                    predictions = torch.cat((predictions, prediction), dim=0)
 
 
                 total_cells, differing_cells = get_direction_diff(inputs, targets, outputs)
@@ -275,10 +288,10 @@ def main():
 
                 
             # Plot the results
-            predictions = predictions * close_stds + close_mean
+            assert data.shape[0] == len(predictions)
             print(data.shape[0])
-            print(len(predictions))
-            plt.plot(df_float[window_size:,close_idx] * close_stds + close_mean, label='Actual')
+            print (predictions)
+            plt.plot(df_float[window_size:,close_idx], label='Actual')
             x = np.arange(len(predictions))
             plt.plot(x+1, predictions[:,0], label='1min')
             plt.plot(x+5, predictions[:,1], label='5min')

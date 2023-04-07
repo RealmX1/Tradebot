@@ -1,3 +1,6 @@
+# attempt to predict up or down in 1~10min
+# for now it performs than the one which predicts the price in 1~10min; despit that one isn't trained to predict up & down movement of stock.
+
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import torch # PyTorch
 import torch.nn as nn # PyTorch neural network module

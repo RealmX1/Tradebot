@@ -108,3 +108,7 @@ https://www.youtube.com/watch?v=Dek7sKHJ7Zw
 
 04/06
 ADD a feature that embeds the time of the day (how many percent of the day trade time has passed.)
+
+
+Also, for each individual inputset, normalize the input (so that the machine doesnt' only learn historical pattern from non-relative stock price, and not making useful prediction)
+(don't include the targets when calculating mean and std, instead target normalization should use mean and std of the inputs) 
