@@ -20,7 +20,7 @@ hidden_size = 64 # Number of neurons in the hidden layer of the LSTM
 num_layers = 8 # Number of layers in the LSTM
 output_size = 10 # Number of output values (closing price 1~10min from now)
 learning_rate = 0.0001
-num_epochs = 0
+num_epochs = 100
 batch_size = 2048
 
 window_size = 32 # using how much data from the past to make prediction?

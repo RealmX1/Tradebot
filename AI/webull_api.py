@@ -1,4 +1,4 @@
-# not yet started
+# not yet started; only copying related informaiton here for now 04/06
 
 # I use the steps from Method 2 with the following CTraderBot class without issues.
 from webull import webull, paper_webull

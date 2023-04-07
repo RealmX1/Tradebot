@@ -92,6 +92,11 @@ Feature Engineering for Multivariate Time Series
 
 VWAP,MACD,EMA
 wt, cci, adx
+TODO: Build index library of my own.
+BIG_IDEA: should those index be given as features incorporated in dataset? 
+    Or should the calculation method (hyperparameters in calculation) also be part of MODEL"S CHOICE?
+    The model output a hyperparameter? Is this viable? Theory problem.
+
 
 
 
@@ -107,8 +112,14 @@ probably should try lumibot for back testing.
 https://www.youtube.com/watch?v=Dek7sKHJ7Zw
 
 04/06
-ADD a feature that embeds the time of the day (how many percent of the day trade time has passed.)
+TODO: ADD a feature that embeds the time of the day (how many percent of the day trade time has passed.)
 
 
 Also, for each individual inputset, normalize the input (so that the machine doesnt' only learn historical pattern from non-relative stock price, and not making useful prediction)
 (don't include the targets when calculating mean and std, instead target normalization should use mean and std of the inputs) 
+DONE!
+
+TODO_L: how to output confidence of a prediction? Maybe use another NN that is trained on original data and output of price prediction lstm.
+
+TODO: calculate return of buying and selling according to stock price prediction. 
+BIG_IDEA: (estimated return, and actual return; train another model -- or a model using this as base -- to estimate actual return & make decision?) Transformer?

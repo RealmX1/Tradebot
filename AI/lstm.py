@@ -29,7 +29,7 @@ hidden_size = 64 # Number of neurons in the hidden layer of the LSTM
 num_layers = 8 # Number of layers in the LSTM
 output_size = 10 # Number of output values (closing price 1~10min from now)
 learning_rate = 0.0001
-num_epochs = 2000
+num_epochs = 10
 batch_size = 2048
 
 window_size = 50 # using how much data from the past to make prediction?
@@ -39,6 +39,10 @@ drop_out = 0.1
 train_percent = 0.8
 
 no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to normalize them (and normalization might cause 0 division problem)
+
+loss_fn = nn.MSELoss()
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Define the LSTM model
 class LSTM(nn.Module):
@@ -66,6 +70,7 @@ class NvidiaStockDataset(Dataset):
         # print("x.shape: ",self.x.shape)
         # x.shape: (data_num, window_size, feature_num)
         self.y = data[:,window_size:,close_idx] # moving the target entry one block forward
+        print("y.shape: ",self.y.shape)
         # y.shape: (data_num, output_size)
         self.x_mean = np.mean(self.x, axis=1)
         self.x_std = np.std(self.x, axis=1)
@@ -111,6 +116,72 @@ def get_direction_diff(inputs,targets,outputs):
 
     return total_cells, differing_cells
 
+def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # mode 0: train, mode 1: test, mode 2: PLOT
+    if mode == 0:
+        model.train()
+    else:
+        model.eval()
+    start_time = time.time()
+    total_predictions = 0
+    true_prediction = 0
+    predictions = None
+
+    for epoch in range(num_epochs):
+        total_loss = 0
+        total_predictions *= 0.9
+        true_prediction *= 0.9
+        i=0
+        for i, (inputs, targets, mean, std) in enumerate(train_loader):
+            # print(inputs.shape)
+            # print(targets.shape)
+            # inputs   [N, window_size, feature_num]
+            # targets & output  [N, output_size]
+            inputs = inputs.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
+            targets = targets.float().to(device)
+            outputs = model(inputs)     
+            loss = loss_fn(outputs, targets) 
+            
+            if mode == 0:
+                optimizer.zero_grad() # removing zero_grad doesn't improve training speed (unlike some claimed); need more testing
+                loss.backward()
+                optimizer.step()
+
+            total_cells, differing_cells = get_direction_diff(inputs, targets, outputs)
+            total_predictions += total_cells
+            true_prediction += total_cells - differing_cells
+
+            if mode == 2:
+                mean = mean.float().to(device)
+                std = std.float().to(device)
+                prediction = outputs[:,[0,4,9]] * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+                if predictions is None:
+                    predictions = prediction
+                else:
+                    predictions = torch.cat((predictions, prediction), dim=0)
+            
+            total_loss += loss.item()
+        total_loss = total_loss / (i+1)
+        correct_direction = true_prediction / total_predictions * 100
+
+        # scheduler.step()
+        print(f'Epoch {epoch+1:3}/{num_epochs:3}, Loss: {total_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Direction: {correct_direction:.2f}%') # Learning Rate: {scheduler.get_last_lr()[0]:9.6f}
+    print(f'completed in {time.time()-start_time:.2f} seconds')
+
+    if mode == 2:
+        return predictions.cpu().numpy()
+
+def plot(predictions, df_float, data, test_size):
+    # Plot the results
+    assert data.shape[0] == len(predictions)
+    print("total entry: ",data.shape[0])
+    plt.plot(df_float[window_size:,close_idx], label='Actual')
+    x = np.arange(len(predictions))
+    plt.plot(x+1, predictions[:,0], label='1min')
+    plt.plot(x+5, predictions[:,1], label='5min')
+    plt.plot(x+10, predictions[:,2], label='10min')
+    plt.legend()
+    plt.axvline(x=test_size, color='r')
+    plt.show()
 
 def main():
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
@@ -120,16 +191,6 @@ def main():
     # data_num = df_float.shape[0]
     print("df_float shape:",df_float.shape)
     # (data_num, output_size)
-
-    # # old normalization -- normalize the entire dataset at once
-    # feature_means = np.mean(df_float, axis=0,keepdims = True) # shape (1,6)
-    # close_mean = feature_means[0,close_idx]
-    # feature_stds = np.std(df_float, axis=0,keepdims = True) # shape (1,6)
-    # close_stds = feature_stds[0,close_idx]
-    # # print("means: ",feature_means)
-    # # print("stds: ",feature_stds)
-    #df_float = (df_float - feature_means) / feature_stds
-    # NOW THE NORMALIZATION IS DONE IN THE DATASET CLASS, at each prediction input/history window
     
     # am I doing this correctly? Should LSTM be trained this way?
     # or should it be trained using continuous dataset, and progress by feeding one data after another?
@@ -162,7 +223,6 @@ def main():
 
     print("loading model")
     start_time = time.time()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = LSTM(input_size, hidden_size, num_layers, output_size, drop_out).to(device)
     if os.path.exists(model_path):
         print("Loading existing model")
@@ -171,134 +231,49 @@ def main():
         print("No existing model")
     print(model)
     print(f'model loading completed in {time.time()-start_time:.2f} seconds')
-        
-    loss_fn = nn.MSELoss()
+
     optimizer = AdamW(model.parameters(),weight_decay=0.01, lr=learning_rate)
     # Define the StepLR scheduler to decrease the learning rate by a factor of gamma every step_size epochs
     scheduler = StepLR(optimizer, step_size=num_epochs/50, gamma=0.95)
 
-
     try:
         # Train the model
         print("Training model")
-        model.train()
-        start_time = time.time()
-        total_predictions = 0
-        true_prediction = 0
-        avg_loss = 0
-        for epoch in range(num_epochs):
-            total_predictions *= 0.9
-            true_prediction *= 0.9
-            for i, (inputs, targets, _, _) in enumerate(train_loader):
-                avg_loss *= 0.95
-                # print(inputs.shape)
-                # print(targets.shape)
-                # inputs   torch.Size([2048, 32, 6])
-                # targets  torch.Size([2048, 32, 1])
-                inputs = inputs.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
-                targets = targets.float().to(device)
-                outputs = model(inputs) # pass batch size to LSTM    
-                # print(outputs.shape)
-                # outputs  torch.Size([2048, 1])        
-                loss = loss_fn(outputs, targets) 
-                
-                optimizer.zero_grad() # when removed, it doesn't improve training speed when not using zero_grad
-                loss.backward()
-                optimizer.step()
-
-                total_cells, differing_cells = get_direction_diff(inputs, targets, outputs)
-                total_predictions += total_cells
-                true_prediction += (total_cells - differing_cells)
-                
-                avg_loss = avg_loss + loss.item()*0.05
-
-            percent_diff = differing_cells / total_cells * 100
-
-            # scheduler.step()
-            print(f'Epoch {epoch+1:3}/{num_epochs:3}, Training Loss: {avg_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Prediction: {true_prediction/total_predictions*100:.2f}%') # Learning Rate: {scheduler.get_last_lr()[0]:9.6f}
-        print(f'Training completed in {time.time()-start_time:.2f} seconds')
+        work(model, train_loader, optimizer, num_epochs, mode = 0)
+        print()
 
         # Test the model
-        model.eval() 
-        test_loss = 0
-        start_time = time.time()
-        total_predictions = 0
-        true_prediction = 0
+        print("Testing model")
         with torch.no_grad():
-            i = 0
-            for i, (inputs, targets, _, _) in enumerate(test_loader):
-                inputs = inputs.float().to(device)
-                targets = targets.float().to(device)
-                outputs = model(inputs) # pass batch size to LSTM
-                loss = loss_fn(outputs, targets)
+            work(model, test_loader, optimizer, 1, mode = 1)
+        print()
+        # Direction prediction accuracy is about 0.5... EVEN AFTER USING NEW NORMALIZATION TECHNIQUE.
+        # Why?
+        # theory 1. market condition is different -- there exist other hidden variables that the model has no access to.
+        # theory 2. over fitting; testing it right now: CONFIRMED -- Training model
+        # 2000 epoch:
+        # Training completed in 0.00 seconds
+        # Test Loss: 4.2465
+        # True prediction: 49.45%
+        # Testing completed in 0.26 seconds
+        # True prediction: 77.86%
+        # Prediction completed in 0.44 seconds
 
-                total_cells, differing_cells = get_direction_diff(inputs, targets, outputs)
-                total_predictions += total_cells
-                true_prediction += (total_cells - differing_cells)
-
-                # percent_diff = differing_cells / total_cells * 100
-
-
-                test_loss += loss.item()
-                if i % 1000 == 0:
-                    print(f"Testing Loss: {loss.item():10.4f}")
-            print("i is ",i)
-            test_loss /= len(test_loader)
-            print(f'Test Loss: {test_loss:.4f}')
-            print(f'True prediction: {true_prediction/total_predictions*100:.2f}%')
-        print(f'Testing completed in {time.time()-start_time:.2f} seconds')
+        # 100 epoch:
+        # Training completed in 69.09 seconds
+        # Test Loss: 3.0350
+        # True prediction: 48.87%
+        # Testing completed in 0.09 seconds
+        # True prediction: 54.83%
+        # Prediction completed in 0.47 seconds
             
 
         # Make predictions
-        model.eval() 
-        start_time = time.time()
-
-        predictions = None
+        print("Making Prediction")
         with torch.no_grad():
-            correct=[0]*3
-            total=[0]*3
-            
-            total_predictions = 0
-            true_prediction = 0
-            for i, (inputs, targets, mean, std) in enumerate(total_loader):
-                
-                inputs = inputs.float().to(device)
-                targets = targets.float().to(device)
-                mean = mean.float().to(device)
-                std = std.float().to(device)
-                outputs = model(inputs) # pass batch size to LSTM
-
-                # print("outputs: ",outputs[:,[0,4,9]].shape)
-                # print("mean: ",mean[:,close_idx].shape)
-                prediction = outputs[:,[0,4,9]] * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
-                if predictions is None:
-                    predictions = prediction
-                else:
-                    predictions = torch.cat((predictions, prediction), dim=0)
-
-
-                total_cells, differing_cells = get_direction_diff(inputs, targets, outputs)
-                total_predictions += total_cells
-                true_prediction += (total_cells - differing_cells)
-
-            test_loss /= len(test_loader)
-            predictions = predictions.cpu().numpy()
-            print(f'True prediction: {true_prediction/total_predictions*100:.2f}%')
-            print(f'Prediction completed in {time.time()-start_time:.2f} seconds')
-
-                
-            # Plot the results
-            assert data.shape[0] == len(predictions)
-            print(data.shape[0])
-            print (predictions)
-            plt.plot(df_float[window_size:,close_idx], label='Actual')
-            x = np.arange(len(predictions))
-            plt.plot(x+1, predictions[:,0], label='1min')
-            plt.plot(x+5, predictions[:,1], label='5min')
-            plt.plot(x+10, predictions[:,2], label='10min')
-            plt.legend()
-            plt.axvline(x=test_size, color='r')
-            plt.show()
+            predictions = work(model, total_loader, optimizer, 1, mode = 2)
+            plot(predictions, df_float, data, test_size)
+        print()
                     
 
         torch.save(model.state_dict(), model_path)
