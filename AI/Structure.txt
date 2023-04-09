@@ -123,3 +123,8 @@ TODO_L: how to output confidence of a prediction? Maybe use another NN that is t
 
 TODO: calculate return of buying and selling according to stock price prediction. 
 BIG_IDEA: (estimated return, and actual return; train another model -- or a model using this as base -- to estimate actual return & make decision?) Transformer?
+
+TODO: plot the direction prediction graph.
+
+
+TODO: follow https://machinelearningmastery.com/lstm-for-time-series-prediction-in-pytorch/ and adjust the training process...???

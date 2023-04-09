@@ -24,15 +24,15 @@ df = pd.read_csv('nvda_1min_complex_fixed.csv')
 
 # Define hyperparameters
 feature_num = input_size = 32 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size = 64 # Number of neurons in the hidden layer of the LSTM
+hidden_size = 32 # Number of neurons in the hidden layer of the LSTM
 
-num_layers = 8 # Number of layers in the LSTM
+num_layers = 4 # Number of layers in the LSTM
 output_size = 10 # Number of output values (closing price 1~10min from now)
 learning_rate = 0.0001
-num_epochs = 10
+num_epochs = 100
 batch_size = 2048
 
-window_size = 50 # using how much data from the past to make prediction?
+window_size = 64 # using how much data from the past to make prediction?
 data_prep_window = window_size + output_size # +ouput_size becuase we need to keep 10 for calculating loss
 drop_out = 0.1
 
@@ -43,6 +43,8 @@ no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to nor
 loss_fn = nn.MSELoss()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+plot_minutes = [0]
 
 # Define the LSTM model
 class LSTM(nn.Module):
@@ -60,6 +62,7 @@ class LSTM(nn.Module):
         # print(output.shape)
         # output.shape
         return output[:,-1,:]
+    
         
 
 # Define the dataset class
@@ -101,11 +104,11 @@ def sample_z_continuous(arr, z):
     return result
 
 
-def get_direction_diff(inputs,targets,outputs):
-    true_direction = targets - inputs[:,-1,close_idx:close_idx+1]
+def get_direction_diff(x_batch,y_batch,y_pred):
+    true_direction = y_batch - x_batch[:,-1,close_idx:close_idx+1]
     true_direction = np.clip(true_direction.cpu(),0,np.inf) # this turns negative to 0, positive to 1
     true_direction[true_direction != 0] = 1
-    pred_direction = outputs - inputs[:,-1,close_idx:close_idx+1]
+    pred_direction = y_pred - x_batch[:,-1,close_idx:close_idx+1]
     pred_direction = np.clip(pred_direction.clone().detach().cpu(),0,np.inf)
     pred_direction[pred_direction != 0] = 1
     # print("True: ", true_direction)
@@ -124,40 +127,53 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
     start_time = time.time()
     total_predictions = 0
     true_prediction = 0
+    
     predictions = None
+    raw_predictions = None
+    targets = None
+    raw_targets = None
 
     for epoch in range(num_epochs):
         total_loss = 0
         total_predictions *= 0.9
         true_prediction *= 0.9
         i=0
-        for i, (inputs, targets, mean, std) in enumerate(train_loader):
-            # print(inputs.shape)
-            # print(targets.shape)
-            # inputs   [N, window_size, feature_num]
-            # targets & output  [N, output_size]
-            inputs = inputs.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
-            targets = targets.float().to(device)
-            outputs = model(inputs)     
-            loss = loss_fn(outputs, targets) 
+        for i, (x_batch, y_batch, mean, std) in enumerate(train_loader):
+            # x_batch   [N, window_size, feature_num]
+            # y_batch & output  [N, output_size]
+            x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
+            y_batch = y_batch.float().to(device)
+            y_pred = model(x_batch)     
+            loss = loss_fn(y_pred, y_batch) 
             
             if mode == 0:
                 optimizer.zero_grad() # removing zero_grad doesn't improve training speed (unlike some claimed); need more testing
                 loss.backward()
                 optimizer.step()
 
-            total_cells, differing_cells = get_direction_diff(inputs, targets, outputs)
+            total_cells, differing_cells = get_direction_diff(x_batch, y_batch, y_pred)
             total_predictions += total_cells
             true_prediction += total_cells - differing_cells
 
             if mode == 2:
                 mean = mean.float().to(device)
                 std = std.float().to(device)
-                prediction = outputs[:,[0,4,9]] * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+                
+                raw_prediction = y_pred[:,plot_minutes]
+                prediction = raw_prediction * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+                raw_target = y_batch[:,plot_minutes]
+                target = raw_target * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+                
                 if predictions is None:
                     predictions = prediction
+                    raw_predictions = raw_prediction
+                    targets = target
+                    raw_targets = raw_target
                 else:
                     predictions = torch.cat((predictions, prediction), dim=0)
+                    raw_predictions = torch.cat((raw_predictions, raw_prediction), dim=0)
+                    targets = torch.cat((targets, target), dim=0)
+                    raw_targets = torch.cat((raw_targets, raw_target), dim=0)
             
             total_loss += loss.item()
         total_loss = total_loss / (i+1)
@@ -168,20 +184,24 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
     print(f'completed in {time.time()-start_time:.2f} seconds')
 
     if mode == 2:
-        return predictions.cpu().numpy()
+        return predictions.cpu().numpy(), raw_predictions.cpu().numpy(), targets.cpu().numpy(), raw_targets.cpu().numpy()
 
-def plot(predictions, df_float, data, test_size):
+def plot(predictions, targets, test_size):
     # Plot the results
-    assert data.shape[0] == len(predictions)
-    print("total entry: ",data.shape[0])
-    plt.plot(df_float[window_size:,close_idx], label='Actual')
+    print("total entry: ",predictions.shape[0])
     x = np.arange(len(predictions))
-    plt.plot(x+1, predictions[:,0], label='1min')
-    plt.plot(x+5, predictions[:,1], label='5min')
-    plt.plot(x+10, predictions[:,2], label='10min')
+    # plt.plot(x+1, targets[:,0], label='Actual_1min')
+    # plt.plot(x+5, targets[:,1], label='Actual_5min')
+    # plt.plot(x+10, targets[:,2], label='Actual_10min')
+    # plt.plot(x+5, predictions[:,1], label='5min',linestyle='dotted')
+    # plt.plot(x+1, predictions[:,0], label='1min',linestyle='dotted')
+    # plt.plot(x+10, predictions[:,2], label='10min',linestyle='dotted')
+    plt.plot(targets, label='Actual')
+    plt.plot(predictions, label='Predicted',linestyle='dotted')
     plt.legend()
     plt.axvline(x=test_size, color='r')
     plt.show()
+    
 
 def main():
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
@@ -232,7 +252,7 @@ def main():
     print(model)
     print(f'model loading completed in {time.time()-start_time:.2f} seconds')
 
-    optimizer = AdamW(model.parameters(),weight_decay=0.01, lr=learning_rate)
+    optimizer = AdamW(model.parameters(),weight_decay=1e-5, lr=learning_rate)
     # Define the StepLR scheduler to decrease the learning rate by a factor of gamma every step_size epochs
     scheduler = StepLR(optimizer, step_size=num_epochs/50, gamma=0.95)
 
@@ -250,29 +270,15 @@ def main():
         # Direction prediction accuracy is about 0.5... EVEN AFTER USING NEW NORMALIZATION TECHNIQUE.
         # Why?
         # theory 1. market condition is different -- there exist other hidden variables that the model has no access to.
-        # theory 2. over fitting; testing it right now: CONFIRMED -- Training model
-        # 2000 epoch:
-        # Training completed in 0.00 seconds
-        # Test Loss: 4.2465
-        # True prediction: 49.45%
-        # Testing completed in 0.26 seconds
-        # True prediction: 77.86%
-        # Prediction completed in 0.44 seconds
-
-        # 100 epoch:
-        # Training completed in 69.09 seconds
-        # Test Loss: 3.0350
-        # True prediction: 48.87%
-        # Testing completed in 0.09 seconds
-        # True prediction: 54.83%
-        # Prediction completed in 0.47 seconds
+        # theory 2. over fitting; testing it right now: CONFIRMED
             
 
         # Make predictions
         print("Making Prediction")
         with torch.no_grad():
-            predictions = work(model, total_loader, optimizer, 1, mode = 2)
-            plot(predictions, df_float, data, test_size)
+            predictions, raw_predictions, targets, raw_targets = work(model, total_loader, optimizer, 1, mode = 2)
+            # plot(predictions, targets, test_size)
+            plot(raw_predictions, raw_targets, test_size)
         print()
                     
 
