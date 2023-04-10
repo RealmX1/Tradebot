@@ -21,16 +21,16 @@ model_path = cwd+"/lstm_updown.pt"
 close_idx = 3 # after removing time column
 
 # df = pd.read_csv('nvda_1min_complex_fixed.csv')
-df = pd.read_csv("bar_set_huge_20200101_20230406_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
+df = pd.read_csv("data/bar_set_huge_20200101_20230406_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
 
 # Define hyperparameters
-feature_num = input_size = 17 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+feature_num = input_size = 20 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
 hidden_size = 20 # Number of neurons in the hidden layer of the LSTM
 
 num_layers = 8 # Number of layers in the LSTM
 output_size = 10 # Number of output values (closing price 1~10min from now)
-learning_rate = 0.003
-num_epochs = 100
+learning_rate = 0.0001
+num_epochs = 5
 batch_size = 2048
 
 window_size = 32 # using how much data from the past to make prediction?
@@ -46,6 +46,9 @@ loss_fn = nn.MSELoss()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 plot_minutes = [0]
+
+
+np.set_printoptions(precision=6, suppress=True)
 
 # Define the LSTM model
 class LSTM(nn.Module):
@@ -70,6 +73,35 @@ class LSTM(nn.Module):
 # data.shape: (data_num, data_prep_window, feature_num)
 class NvidiaStockDataset(Dataset):
     def __init__(self, data):
+        # self.x = data[:,:-output_size,:] # slicing off the last entry of input
+        # # print("x.shape: ",self.x.shape)
+        # # x.shape: (data_num, window_size, feature_num)
+        # self.y = data[:,window_size:,close_idx] # moving the target entry one block forward
+        # self.y = self.y - self.x[:,-1,close_idx:close_idx+1]
+        # # print("y.shape: ",self.y.shape)
+        # # y.shape: (data_num, output_size)
+        # self.x_mean = np.mean(self.x[:,:,close_idx:close_idx+1], axis=1)
+        # self.x_mean = np.tile(self.x_mean, (1, 17))
+        # self.x_std = np.std(self.x[:,:,close_idx:close_idx+1], axis=1)
+        # self.x_std = np.tile(self.x_std, (1, 17))
+        # self.x_mean[:,-no_norm_num:] = 0
+        # self.x_std[:,-no_norm_num:] = 1 
+        # # print("x_mean.shape: ", self.x_mean.shape)
+        # # print("x_std.shape: ", self.x_std.shape)
+        # # mean/std.shape: (data_num, feature_num)
+
+        # # does this normalization broadcast work properly? 
+        # # desired effect is x[i,:,j] will be normalized using x_mean[i,j] and x_std[i,j],
+        # # and y[i,j] will be normalized using x_mean[i,close_idx] and x_std[i,close_idx]
+        
+        # self.x = (self.x - self.x_mean[:,None,:]) / self.x_std[:,None,:]
+        # self.y = self.y/self.x_std[:,0:1]
+        # print("y.shape: ",self.y.shape)
+        # # print(self.y[0,:])
+        # # print(self.x[0,:,:])
+        
+        ### non-tradingview data ###
+
         self.x = data[:,:-output_size,:] # slicing off the last entry of input
         # print("x.shape: ",self.x.shape)
         # x.shape: (data_num, window_size, feature_num)
@@ -78,21 +110,25 @@ class NvidiaStockDataset(Dataset):
         # print("y.shape: ",self.y.shape)
         # y.shape: (data_num, output_size)
         self.x_mean = np.mean(self.x[:,:,close_idx:close_idx+1], axis=1)
-        self.x_mean = np.tile(self.x_mean, (1, 17))
+        self.x_mean = np.tile(self.x_mean, (1, feature_num))
+        # print(self.x_mean)
         self.x_std = np.std(self.x[:,:,close_idx:close_idx+1], axis=1)
-        self.x_std = np.tile(self.x_std, (1, 17))
-        self.x_mean[:,-no_norm_num:] = 0
-        self.x_std[:,-no_norm_num:] = 1 
-        # print("x_mean.shape: ", self.x_mean.shape)
-        # print("x_std.shape: ", self.x_std.shape)
+        # print(self.x_std)
+        self.x_std = np.tile(self.x_std, (1, feature_num))
+        self.x_mean[:,4:6] = 0
+        self.x_mean[:,13:] = 0
+        self.x_std[:,4:6] = 1
+        self.x_std[:,13:] = 1
+        print("x_mean.shape: ", self.x_mean.shape)
+        print("x_std.shape: ", self.x_std.shape)
         # mean/std.shape: (data_num, feature_num)
 
         # does this normalization broadcast work properly? 
         # desired effect is x[i,:,j] will be normalized using x_mean[i,j] and x_std[i,j],
         # and y[i,j] will be normalized using x_mean[i,close_idx] and x_std[i,close_idx]
         
-        self.x = (self.x - self.x_mean[:,None,:]) / self.x_std[:,None,:]
-        self.y = self.y/self.x_std[:,0:1]
+        self.x = self.x - self.x_mean[:,None,:] # / self.x_std[:,None,:]
+        self.y = self.y - self.x_std[:,0:1]
         print("y.shape: ",self.y.shape)
         # print(self.y[0,:])
         # print(self.x[0,:,:])
@@ -234,22 +270,32 @@ def main():
     # std[2] = std[3] = 10 # rsi fluctuates between 0 and 100
 
     # df_float[:,-4:] = (df_float[:,-4:] - mean) / std
+    # print(data.shape)
+    data_mean = np.mean(data, axis = 0)
+    data_std = np.std(data, axis = 0)
+    # print(data_mean.shape)
+    data_mean[0:3] = data_mean[6:13] = data_mean[3] # use close mean for these columns
+    data_mean[15] = 50 # rsi_mean
+    data_mean[16] = 0 # cci_mean
+    # how should mean for adx,dmp,and dmn be set?
+    # print(data_mean)
+    data_std[0:3] = data_std[6:13] = data_std[3] # use close std for these columns
+    data_std[15] = 10 # rsi_std
+    data_std[16] = 100 # cci_std
+    # how should mean for adx,dmp,and dmn be set?
+    # print(data_std)
 
 
-    print(data)
-    exit()
+    data = (data - data_mean) / data_std
+
     # open	high	low	close	TEMA	DEMA	VWAP	Upper Band #1	Lower Band #1	Upper Band #2	Lower Band #2	Upper Band #3	Lower Band #3	Volume	Volume MA	RSI	RSI-based MA
     
     # change the utftime column to a column of day and a time of tradingday instead?
-
-    # data_num = df_float.shape[0]
-    print("df_float shape:",data.shape)
-    # (data_num, output_size)
     
     # am I doing this correctly? Should LSTM be trained this way?
     # or should it be trained using continuous dataset, and progress by feeding one data after another?
     # at least current method makes it easier to noramlize each window of input independently.
-    data = result = sample_z_continuous(data, data_prep_window)
+    data = sample_z_continuous(data, data_prep_window)
     print(data.shape)
     # (data_num, data_prep_window, output_size)
 
