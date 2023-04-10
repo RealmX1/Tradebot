@@ -1,5 +1,5 @@
 import torch.nn as nn
-from lstm_updown import *
+from AI.lstm_updown_old import *
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 from torch.utils.data import Dataset, DataLoader # PyTorch data utilities
 from torch.optim.lr_scheduler import StepLR # PyTorch learning rate scheduler

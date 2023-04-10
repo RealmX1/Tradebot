@@ -128,3 +128,9 @@ TODO: plot the direction prediction graph.
 
 
 TODO: follow https://machinelearningmastery.com/lstm-for-time-series-prediction-in-pytorch/ and adjust the training process...???
+Maybe predict one step, then put that step in input to predict one down the line? But that requires prediction of all features... (to add a new frame in the time window)
+
+TODO: since I've implemented normalization across different feature set individually, the relative relation between them is partially lost.
+How can this be addressed?
+Shoudl some features be exempt from normalization?
+Should the normalization happen only with respect to the close price?

@@ -1,6 +1,3 @@
-# attempt to predict up or down in 1~10min
-# for now it performs than the one which predicts the price in 1~10min; despit that one isn't trained to predict up & down movement of stock.
-
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import torch # PyTorch
 import torch.nn as nn # PyTorch neural network module
@@ -23,23 +20,32 @@ model_path = cwd+"/lstm_updown.pt"
 
 close_idx = 3 # after removing time column
 
-df = pd.read_csv('nvda_1min_complex_fixed.csv')
+# df = pd.read_csv('nvda_1min_complex_fixed.csv')
+df = pd.read_csv("bar_set_huge_20200101_20230406_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
 
 # Define hyperparameters
-input_size = 32 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size = 32 # Number of neurons in the hidden layer of the LSTM
+feature_num = input_size = 17 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+hidden_size = 20 # Number of neurons in the hidden layer of the LSTM
 
-num_layers = 2 # Number of layers in the LSTM
+num_layers = 8 # Number of layers in the LSTM
 output_size = 10 # Number of output values (closing price 1~10min from now)
-learning_rate = 0.001
-num_epochs = 10000
+learning_rate = 0.003
+num_epochs = 100
 batch_size = 2048
 
-window_size = 50 # using how much data from the past to make prediction?
-data_prep_window = window_size + 10 # +10 becuase we need to keep 10 for calculating loss
+window_size = 32 # using how much data from the past to make prediction?
+data_prep_window = window_size + output_size # +ouput_size becuase we need to keep 10 for calculating loss
 drop_out = 0.1
 
 train_percent = 0.8
+
+no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to normalize them (and normalization might cause 0 division problem)
+
+loss_fn = nn.MSELoss()
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+plot_minutes = [0]
 
 # Define the LSTM model
 class LSTM(nn.Module):
@@ -49,39 +55,53 @@ class LSTM(nn.Module):
         self.num_layers = num_layers
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
         self.fc1 = nn.Linear(hidden_size, output_size)
-        self.fc2 = nn.Softmax(2)
 
     def forward(self, x): # assumes that x is of shape (batch_size,time_steps, features) 
         batch_size = x.shape[0]
-        out, _ = self.lstm(x.float())
-        out = self.fc1(out)
-        predictions = self.fc2(out)
-        # print("predictions shape: ",predictions.shape)
-        # [2048, 32, 10]
-        return predictions[:,-1,:]
+        tmp, _ = self.lstm(x) #.float()
+        output = self.fc1(tmp)
+        # print(output.shape)
+        # output.shape
+        return output[:,-1,:]
+    
         
 
 # Define the dataset class
+# data.shape: (data_num, data_prep_window, feature_num)
 class NvidiaStockDataset(Dataset):
     def __init__(self, data):
-        self.x = data[:,:-10,:] # slicing off the last entry of input
+        self.x = data[:,:-output_size,:] # slicing off the last entry of input
+        # print("x.shape: ",self.x.shape)
+        # x.shape: (data_num, window_size, feature_num)
         self.y = data[:,window_size:,close_idx] # moving the target entry one block forward
         self.y = self.y - self.x[:,-1,close_idx:close_idx+1]
-        # turn negative to 0, positive to 1
-        self.y = np.clip(self.y,0,np.inf) 
-        self.y[self.y != 0] = 1
+        # print("y.shape: ",self.y.shape)
+        # y.shape: (data_num, output_size)
+        self.x_mean = np.mean(self.x[:,:,close_idx:close_idx+1], axis=1)
+        self.x_mean = np.tile(self.x_mean, (1, 17))
+        self.x_std = np.std(self.x[:,:,close_idx:close_idx+1], axis=1)
+        self.x_std = np.tile(self.x_std, (1, 17))
+        self.x_mean[:,-no_norm_num:] = 0
+        self.x_std[:,-no_norm_num:] = 1 
+        # print("x_mean.shape: ", self.x_mean.shape)
+        # print("x_std.shape: ", self.x_std.shape)
+        # mean/std.shape: (data_num, feature_num)
 
-        print(self.x.shape)
-        print(self.y.shape)
-        # (16713, 32, 32)
-        # (16713, 10)
-        assert self.x.shape[0] == self.y.shape[0]
+        # does this normalization broadcast work properly? 
+        # desired effect is x[i,:,j] will be normalized using x_mean[i,j] and x_std[i,j],
+        # and y[i,j] will be normalized using x_mean[i,close_idx] and x_std[i,close_idx]
+        
+        self.x = (self.x - self.x_mean[:,None,:]) / self.x_std[:,None,:]
+        self.y = self.y/self.x_std[:,0:1]
+        print("y.shape: ",self.y.shape)
+        # print(self.y[0,:])
+        # print(self.x[0,:,:])
 
     def __len__(self):
         return self.y.shape[0]
 
     def __getitem__(self, idx):
-        return self.x[idx,:,:], self.y[idx,:]
+        return self.x[idx,:,:], self.y[idx,:], self.x_mean[idx,:], self.x_std[idx,:]
 
 
 # Prepare the data
@@ -93,31 +113,150 @@ def sample_z_continuous(arr, z):
     return result
 
 
+def get_direction_diff(x_batch,y_batch,y_pred):
+    true_direction = y_batch
+    true_direction = np.clip(true_direction.cpu(),0,np.inf) # this turns negative to 0, positive to 1
+    true_direction[true_direction != 0] = 1
+    pred_direction = y_pred
+    pred_direction = np.clip(pred_direction.clone().detach().cpu(),0,np.inf)
+    pred_direction[pred_direction != 0] = 1
+    # print("True: ", true_direction)
+    # print("Pred: ", pred_direction)
 
+    total_cells = true_direction.numpy().size
+    differing_cells = np.count_nonzero(true_direction != pred_direction)
+
+    return total_cells, differing_cells
+
+def get_return_diff(x_batch,y_batch,y_pred):
+    pass
+
+def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # mode 0: train, mode 1: test, mode 2: PLOT
+    if mode == 0:
+        model.train()
+    else:
+        model.eval()
+    start_time = time.time()
+    total_predictions = 0
+    true_prediction = 0
+    
+    predictions = None
+    raw_predictions = None
+    targets = None
+    raw_targets = None
+
+    for epoch in range(num_epochs):
+        total_loss = 0
+        total_predictions *= 0.9
+        true_prediction *= 0.9
+        i=0
+        for i, (x_batch, y_batch, mean, std) in enumerate(train_loader):
+            # x_batch   [N, window_size, feature_num]
+            # y_batch & output  [N, output_size]
+            x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
+            y_batch = y_batch.float().to(device)
+            y_pred = model(x_batch)     
+            loss = loss_fn(y_pred, y_batch) 
+            # normalization method should be more precise than this.
+            
+            
+            if mode == 0:
+                optimizer.zero_grad() # removing zero_grad doesn't improve training speed (unlike some claimed); need more testing
+                loss.backward()
+                optimizer.step()
+
+            total_cells, differing_cells = get_direction_diff(x_batch, y_batch, y_pred)
+            total_predictions += total_cells
+            true_prediction += total_cells - differing_cells
+
+            if mode == 2:
+                mean = mean.float().to(device)
+                std = std.float().to(device)
+                
+                raw_prediction = y_pred[:,plot_minutes]
+                prediction = raw_prediction * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+                raw_target = y_batch[:,plot_minutes]
+                target = raw_target * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+                
+                if predictions is None:
+                    predictions = prediction
+                    raw_predictions = raw_prediction
+                    targets = target
+                    raw_targets = raw_target
+                else:
+                    predictions = torch.cat((predictions, prediction), dim=0)
+                    raw_predictions = torch.cat((raw_predictions, raw_prediction), dim=0)
+                    targets = torch.cat((targets, target), dim=0)
+                    raw_targets = torch.cat((raw_targets, raw_target), dim=0)
+            
+            total_loss += loss.item()
+        total_loss = total_loss / (i+1)
+        correct_direction = true_prediction / total_predictions * 100
+
+        # scheduler.step()
+        print(f'Epoch {epoch+1:3}/{num_epochs:3}, Loss: {total_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Direction: {correct_direction:.2f}%') # Learning Rate: {scheduler.get_last_lr()[0]:9.6f}
+    print(f'completed in {time.time()-start_time:.2f} seconds')
+
+    if mode == 2:
+        return predictions.cpu().numpy(), raw_predictions.cpu().numpy(), targets.cpu().numpy(), raw_targets.cpu().numpy()
+
+def plot(predictions, targets, test_size):
+    # Plot the results
+    print("total entry: ",predictions.shape[0])
+    x = np.arange(len(predictions))
+    # plt.plot(x+1, targets[:,0], label='Actual_1min')
+    # plt.plot(x+5, targets[:,1], label='Actual_5min')
+    # plt.plot(x+10, targets[:,2], label='Actual_10min')
+    # plt.plot(x+5, predictions[:,1], label='5min',linestyle='dotted')
+    # plt.plot(x+1, predictions[:,0], label='1min',linestyle='dotted')
+    # plt.plot(x+10, predictions[:,2], label='10min',linestyle='dotted')
+    plt.plot(targets, label='Actual')
+    plt.plot(predictions, label='Predicted',linestyle='dotted')
+    plt.legend()
+    plt.axvline(x=test_size, color='r')
+    plt.show()
 
 def main():
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
 
-    df_float = df.values.astype(float)
-    df_float = df_float[:,1:] # remove the utftime column.
-    print(df_float.shape)
-    feature_means = np.mean(df_float, axis=0,keepdims = True) # shape (1,6)
-    close_mean = feature_means[0,close_idx]
-    feature_stds = np.std(df_float, axis=0,keepdims = True) # shape (1,6)
-    close_stds = feature_stds[0,close_idx]
-    # print("means: ",feature_means)
-    # print("stds: ",feature_stds)
+    data = df.values #.astype(float)
 
-    df_float = (df_float - feature_means) / feature_stds
-    print(df_float.shape)
-    # (21513, 6)
-    data = result = sample_z_continuous(df_float, data_prep_window)
+    # trading view data normalization
+    # df_float = df_float[:,1:18] # remove the utftime column, and columns after rsi-based-ma.
+    # global_stadardization = df_float[:,:-4]
+    # mean = np.zeros(4)
+    # mean[0] = np.mean(global_stadardization, axis = 0)
+    # mean[1] = mean[0]
+    # mean[2] = mean[3] = 50 # rsi fluctuates between 0 and 100
+    # std = np.ones(4)
+    # std[0] = np.std(global_stadardization, axis = 0)
+    # std[1] = std[0]
+    # std[2] = std[3] = 10 # rsi fluctuates between 0 and 100
+
+    # df_float[:,-4:] = (df_float[:,-4:] - mean) / std
+
+
+    print(data)
+    exit()
+    # open	high	low	close	TEMA	DEMA	VWAP	Upper Band #1	Lower Band #1	Upper Band #2	Lower Band #2	Upper Band #3	Lower Band #3	Volume	Volume MA	RSI	RSI-based MA
+    
+    # change the utftime column to a column of day and a time of tradingday instead?
+
+    # data_num = df_float.shape[0]
+    print("df_float shape:",data.shape)
+    # (data_num, output_size)
+    
+    # am I doing this correctly? Should LSTM be trained this way?
+    # or should it be trained using continuous dataset, and progress by feeding one data after another?
+    # at least current method makes it easier to noramlize each window of input independently.
+    data = result = sample_z_continuous(data, data_prep_window)
     print(data.shape)
-    # (21481, 33, 6)
+    # (data_num, data_prep_window, output_size)
 
     train_size = int(len(data) * train_percent)
     test_size = int(len(data) * (1-train_percent))
-    # note that since we are predicting future stock data, learn on nearer data, and test on a previous data.
+    # learn on nearer data, and test on a previous data; 
+    # not sure which order is better... don't have knowledge of such metric; probably should do experiment and read paper on this
     # train_data = data[:train_size,:,:]
     # test_data = data[train_size:,:,:]
     train_data = data[test_size:,:,:]
@@ -138,7 +277,6 @@ def main():
 
     print("loading model")
     start_time = time.time()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = LSTM(input_size, hidden_size, num_layers, output_size, drop_out).to(device)
     if os.path.exists(model_path):
         print("Loading existing model")
@@ -147,152 +285,35 @@ def main():
         print("No existing model")
     print(model)
     print(f'model loading completed in {time.time()-start_time:.2f} seconds')
-        
-    loss_fn = nn.BCEWithLogitsLoss()
-    optimizer = AdamW(model.parameters(),weight_decay=0.01, lr=learning_rate)
+
+    optimizer = AdamW(model.parameters(),weight_decay=1e-5, lr=learning_rate)
     # Define the StepLR scheduler to decrease the learning rate by a factor of gamma every step_size epochs
     scheduler = StepLR(optimizer, step_size=num_epochs/50, gamma=0.95)
-
 
     try:
         # Train the model
         print("Training model")
-        model.train()
-        start_time = time.time()
-        total_predictions = 0
-        true_prediction = 0
-        avg_loss = 0
-        for epoch in range(num_epochs):
-            total_predictions *= 0.9
-            true_prediction *= 0.9
-            for i, (inputs, targets) in enumerate(train_loader):
-                avg_loss *= 0.95
-                # print(inputs.shape)
-                # print(targets.shape)
-                # inputs   torch.Size([2048, 32, 6])
-                # targets  torch.Size([2048, 32, 10])
-                inputs = inputs.float().to(device)
-                targets = targets.float().to(device)
-                outputs = model(inputs) # pass batch size to LSTM    
-                # print(outputs.shape)
-                # outputs  torch.Size([2048, 10])        
-                loss = loss_fn(outputs, targets) 
-                if avg_loss == 0: 
-                    avg_loss = loss 
-                else: 
-                    avg_loss = avg_loss + loss.item()*0.05
-                optimizer.zero_grad() # when removed, it doesn't improve training speed when not using zero_grad
-                loss.backward()
-                optimizer.step()
-
-                true_direction = targets.cpu()
-                # print(true_direction)
-                pred_direction = outputs.clone().detach().cpu()
-                # print("Pred_pre: ",pred_direction)
-                pred_direction = torch.round(pred_direction)
-                # print("Pred: ",pred_direction)
-
-                total_cells = true_direction.numpy().size
-                differing_cells = np.count_nonzero(true_direction != pred_direction)
-                # print(differing_cells)
-                total_predictions += total_cells
-                true_prediction += (total_cells - differing_cells)
-
-            # percent_diff = differing_cells / total_cells * 100
-
-            # scheduler.step()
-            print(f'Epoch {epoch+1:3}/{num_epochs:3}, Training Loss: {avg_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Prediction: {true_prediction/total_predictions*100:.2f}%') # Learning Rate: {scheduler.get_last_lr()[0]:9.6f}
-        print(f'Training completed in {time.time()-start_time:.2f} seconds')
+        work(model, train_loader, optimizer, num_epochs, mode = 0)
+        print()
 
         # Test the model
-        model.eval() 
-        test_loss = 0
-        start_time = time.time()
-        total_predictions = 0
-        true_prediction = 0
+        print("Testing model")
         with torch.no_grad():
-            i = 0
-            for i, (inputs, targets) in enumerate(test_loader):
-                inputs = inputs.float().to(device)
-                targets = targets.float().to(device)
-                outputs = model(inputs) # pass batch size to LSTM
-                loss = loss_fn(outputs, targets)
-
-                true_direction = targets.cpu()
-                # print(true_direction)
-                pred_direction = outputs.clone().detach().cpu()
-                pred_direction = np.clip(pred_direction,0.5,np.inf)
-                pred_direction[pred_direction != 0] = 1
-                # print("Pred: ",pred_direction)
-
-                total_cells = true_direction.numpy().size
-                differing_cells = np.count_nonzero(true_direction != pred_direction)
-                total_predictions += total_cells
-                true_prediction += (total_cells - differing_cells)
-
-                # percent_diff = differing_cells / total_cells * 100
-
-
-                test_loss += loss.item()
-                if i % 1000 == 0:
-                    print(f"Testing Loss: {loss.item():10.4f}")
-            print("i is ",i)
-            test_loss /= len(test_loader)
-            print(f'Test Loss: {test_loss:.4f}')
-            print(f'True prediction: {true_prediction/total_predictions*100:.2f}%')
-        print(f'Testing completed in {time.time()-start_time:.2f} seconds')
+            work(model, test_loader, optimizer, 1, mode = 1)
+        print()
+        # Direction prediction accuracy is about 0.5... EVEN AFTER USING NEW NORMALIZATION TECHNIQUE.
+        # Why?
+        # theory 1. market condition is different -- there exist other hidden variables that the model has no access to.
+        # theory 2. over fitting; testing it right now: CONFIRMED
             
 
         # Make predictions
-        model.eval() 
-        start_time = time.time()
-
-
-        predictions = None
+        print("Making Prediction")
         with torch.no_grad():
-            correct=[0]*3
-            total=[0]*3
-            
-            # total_predictions = 0
-            # true_prediction = 0
-            # for i, (inputs, targets) in enumerate(total_loader):
-                
-            #     inputs = inputs.float().to(device)
-            #     targets = targets.float().to(device)
-            #     outputs = model(inputs) # pass batch size to LSTM
-            #     if predictions is None:
-            #         predictions = outputs[:,[0,4,9]]
-            #     else:
-            #         predictions = torch.cat((predictions, outputs[:,[0,4,9]]), dim=0)
-
-
-            #     true_direction = targets - inputs[:,-1,close_idx:close_idx+1]
-            #     true_direction = np.clip(true_direction.cpu(),0,1) # this turns negative to 0, positive to 1
-            #     pred_direction = outputs - inputs[:,-1,close_idx:close_idx+1]
-            #     pred_direction = np.clip(pred_direction.cpu(),0,1)
-
-            #     total_cells = true_direction.numpy().size
-            #     differing_cells = np.count_nonzero(true_direction != pred_direction)
-            #     total_predictions += total_cells
-            #     true_prediction += (total_cells - differing_cells)
-
-            # test_loss /= len(test_loader)
-            # predictions = predictions.cpu().numpy()
-            # print(f'True prediction: {true_prediction/total_predictions*100:.2f}%')
-            # print(f'Prediction completed in {time.time()-start_time:.2f} seconds')
-
-                
-            # # Plot the results
-            # predictions = predictions * close_stds + close_mean
-            # print(data.shape[0])
-            # print(len(predictions))
-            # plt.plot(df_float[window_size:,close_idx] * close_stds + close_mean, label='Actual')
-            # plt.plot(predictions[:,0], label='1min')
-            # plt.plot(predictions[:,1], label='5min')
-            # plt.plot(predictions[:,2], label='10min')
-            # plt.legend()
-            # plt.axvline(x=test_size, color='r')
-            # plt.show()
+            predictions, raw_predictions, targets, raw_targets = work(model, total_loader, optimizer, 1, mode = 2)
+            # plot(predictions, targets, test_size)
+            plot(raw_predictions, raw_targets, test_size)
+        print()
                     
 
         torch.save(model.state_dict(), model_path)

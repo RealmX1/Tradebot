@@ -1,0 +1,83 @@
+(tf-wsl) realmx@StationX:~/desktop/Tradebot/data$ python3 alpaca_test.py 
+Start getting bars
+Start request
+Traceback (most recent call last):
+  File "/home/realmx/.local/lib/python3.8/site-packages/urllib3/connectionpool.py", line 703, in urlopen
+    httplib_response = self._make_request(
+  File "/home/realmx/.local/lib/python3.8/site-packages/urllib3/connectionpool.py", line 449, in _make_request
+    six.raise_from(e, None)
+  File "<string>", line 3, in raise_from
+  File "/home/realmx/.local/lib/python3.8/site-packages/urllib3/connectionpool.py", line 444, in _make_request
+    httplib_response = conn.getresponse()
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/http/client.py", line 1348, in getresponse
+    response.begin()
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/http/client.py", line 316, in begin
+    version, status, reason = self._read_status()
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/http/client.py", line 277, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/socket.py", line 669, in readinto
+    return self._sock.recv_into(b)
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/ssl.py", line 1241, in recv_into
+    return self.read(nbytes, buffer)
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/ssl.py", line 1099, in read
+    return self._sslobj.read(len, buffer)
+ConnectionResetError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/realmx/.local/lib/python3.8/site-packages/requests/adapters.py", line 489, in send
+    resp = conn.urlopen(
+  File "/home/realmx/.local/lib/python3.8/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    retries = retries.increment(
+  File "/home/realmx/.local/lib/python3.8/site-packages/urllib3/util/retry.py", line 550, in increment
+    raise six.reraise(type(error), error, _stacktrace)
+  File "/home/realmx/.local/lib/python3.8/site-packages/urllib3/packages/six.py", line 769, in reraise
+    raise value.with_traceback(tb)
+  File "/home/realmx/.local/lib/python3.8/site-packages/urllib3/connectionpool.py", line 703, in urlopen
+    httplib_response = self._make_request(
+  File "/home/realmx/.local/lib/python3.8/site-packages/urllib3/connectionpool.py", line 449, in _make_request
+    six.raise_from(e, None)
+  File "<string>", line 3, in raise_from
+  File "/home/realmx/.local/lib/python3.8/site-packages/urllib3/connectionpool.py", line 444, in _make_request
+    httplib_response = conn.getresponse()
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/http/client.py", line 1348, in getresponse
+    response.begin()
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/http/client.py", line 316, in begin
+    version, status, reason = self._read_status()
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/http/client.py", line 277, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/socket.py", line 669, in readinto
+    return self._sock.recv_into(b)
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/ssl.py", line 1241, in recv_into
+    return self.read(nbytes, buffer)
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/ssl.py", line 1099, in read
+    return self._sslobj.read(len, buffer)
+urllib3.exceptions.ProtocolError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "alpaca_test.py", line 163, in <module>
+    main()
+  File "alpaca_test.py", line 105, in main
+    bar_set = test_get_bars(symbol, timeframe, start, limit)
+  File "alpaca_test.py", line 48, in test_get_bars
+    bar_set = stock_client.get_stock_bars(request_params=request)
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/site-packages/alpaca/data/historical/stock.py", line 92, in get_stock_bars
+    raw_bars = self._data_get(
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/site-packages/alpaca/data/historical/stock.py", line 339, in _data_get
+    response = self.get(path=path, data=params, api_version=api_version)
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/site-packages/alpaca/common/rest.py", line 222, in get
+    return self._request("GET", path, data, **kwargs)
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/site-packages/alpaca/common/rest.py", line 130, in _request
+    return self._one_request(method, url, opts, retry)
+  File "/home/realmx/miniconda3/envs/tf-wsl/lib/python3.8/site-packages/alpaca/common/rest.py", line 194, in _one_request
+    response = self._session.request(method, url, **opts)
+  File "/home/realmx/.local/lib/python3.8/site-packages/requests/sessions.py", line 587, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/home/realmx/.local/lib/python3.8/site-packages/requests/sessions.py", line 701, in send
+    r = adapter.send(request, **kwargs)
+  File "/home/realmx/.local/lib/python3.8/site-packages/requests/adapters.py", line 547, in send
+    raise ConnectionError(err, request=request)
+requests.exceptions.ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))

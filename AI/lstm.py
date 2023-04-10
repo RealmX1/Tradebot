@@ -29,7 +29,7 @@ hidden_size = 32 # Number of neurons in the hidden layer of the LSTM
 num_layers = 4 # Number of layers in the LSTM
 output_size = 10 # Number of output values (closing price 1~10min from now)
 learning_rate = 0.0001
-num_epochs = 100
+num_epochs = 0
 batch_size = 2048
 
 window_size = 64 # using how much data from the past to make prediction?
@@ -75,10 +75,10 @@ class NvidiaStockDataset(Dataset):
         self.y = data[:,window_size:,close_idx] # moving the target entry one block forward
         print("y.shape: ",self.y.shape)
         # y.shape: (data_num, output_size)
-        self.x_mean = np.mean(self.x, axis=1)
+        self.x_mean = np.mean(self.x[:,:,close_idx:close_idx+1], axis=1)
         self.x_std = np.std(self.x, axis=1)
         self.x_mean[:,-no_norm_num:] = 0
-        self.x_std[:,-no_norm_num:] = 1
+        self.x_std[:,-no_norm_num:] = 1 
         # print("x_mean.shape: ", self.x_mean.shape)
         # mean/std.shape: (data_num, feature_num)
 
@@ -145,6 +145,8 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
             y_batch = y_batch.float().to(device)
             y_pred = model(x_batch)     
             loss = loss_fn(y_pred, y_batch) 
+            # normalization method should be more precise than this.
+            
             
             if mode == 0:
                 optimizer.zero_grad() # removing zero_grad doesn't improve training speed (unlike some claimed); need more testing
@@ -208,6 +210,8 @@ def main():
 
     df_float = df.values #.astype(float)
     df_float = df_float[:,1:] # remove the utftime column.
+    # change the utftime column to a column of day and a time of tradingday instead?
+
     # data_num = df_float.shape[0]
     print("df_float shape:",df_float.shape)
     # (data_num, output_size)

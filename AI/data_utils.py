@@ -25,7 +25,7 @@ def sample_z_continuous(arr, z):
     return result
 
 
-def prepare_data(train_percent=0.8, data_prep_window=65):
+def prepare_data_trading_view(train_percent=0.8, data_prep_window=65):
     df = pd.read_csv('nvda_1min.csv')
 
     df_float = df.values.astype(float)
@@ -48,4 +48,29 @@ def prepare_data(train_percent=0.8, data_prep_window=65):
     total_dataset = NvidiaStockDataset(data)
 
     return train_dataset, test_dataset, total_dataset
-    
+
+
+
+
+def prepare_data_alpaca(df, type = "bar"):
+    # assumes that it is of 2 index levels: symbols and timestamps
+    df  
+
+def main():
+    df = pd.read_csv('raw_from_data.csv', index_col = ['symbols', 'timestamps'])
+    # open high low close volume trade_count vwap
+    # all other than trade_count will be normalized according to???
+    single_index_dfs = []
+    for symbol in df.index.levels[0]:
+        single_index_df = df.loc[symbol].reset_index(level=0, drop=True)
+        single_index_dfs.append(single_index_df)
+
+        # self.x_mean = np.mean(self.x[:,:,close_idx:close_idx+1], axis=1)
+        # self.x_std = np.std(self.x, axis=1)
+        # self.x_mean[:,-no_norm_num:] = 0
+        # self.x_std[:,-no_norm_num:] = 1 
+        print(single_index_df.shape)
+    print(single_index_dfs[0])
+
+if __name__ == "__main__":
+    main()

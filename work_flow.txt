@@ -1,0 +1,3 @@
+04/08
+right now stable data source has been obtained, I need to start working on lstm that can take quoates as inputs.
+(and also better normalization technique for the bar input)
