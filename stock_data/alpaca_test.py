@@ -41,7 +41,7 @@ def get_bars(symbol_or_symbols, timeframe, start, end, limit):
     _start_in_url = start.isoformat("T") + "Z"
     
     request = StockBarsRequest(
-        symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit
+        symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit, adjustment="all"
     )
 
     print("Start request")
@@ -186,12 +186,13 @@ def main():
     symbol = ["AAPL","MSFT","TSLA","GOOG"]
     symbol_num = len(symbol)
     timeframe = TimeFrame.Minute
-    start = datetime(2023, 4, 5)
-    end = datetime(2023, 4, 7)
-    time_str = "20230405_20230406_test" # "20200101_20210101" # "20230403_20230404_test" "20210101_20220727" "20220727_20230406" 
+    start = datetime(2023,1,1)
+    end = datetime(2023,4,10)
+    # now we are using adjusted dataset.
+    time_str = "20230101_20230410" # "20200101_20210101" # "20230403_20230404_test" "20210101_20220727" "20220727_20230406" 
     limit = None
 
-    # get_and_process_bars(symbol, timeframe, start, end, limit, time_str, download=True)
+    get_and_process_bars(symbol, timeframe, start, end, limit, time_str, download=True)
     
 
     # combine multiple csv files into one

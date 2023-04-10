@@ -21,23 +21,23 @@ model_path = cwd+"/lstm_updown.pt"
 close_idx = 3 # after removing time column
 
 # df = pd.read_csv('nvda_1min_complex_fixed.csv')
-df = pd.read_csv("data/bar_set_huge_20200101_20230406_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
+df = pd.read_csv("data/bar_set_huge_20200101_20230406_TSLA_indicator.csv", index_col = ['symbols', 'timestamps'])
 
 # Define hyperparameters
 feature_num = input_size = 20 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
 hidden_size = 20 # Number of neurons in the hidden layer of the LSTM
 
-num_layers = 8 # Number of layers in the LSTM
+num_layers = 16 # Number of layers in the LSTM
 output_size = 10 # Number of output values (closing price 1~10min from now)
 learning_rate = 0.0001
-num_epochs = 5
+num_epochs = 0
 batch_size = 2048
 
 window_size = 32 # using how much data from the past to make prediction?
 data_prep_window = window_size + output_size # +ouput_size becuase we need to keep 10 for calculating loss
 drop_out = 0.1
 
-train_percent = 0.8
+train_percent = 0.001
 
 no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to normalize them (and normalization might cause 0 division problem)
 
@@ -48,7 +48,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 plot_minutes = [0]
 
 
-np.set_printoptions(precision=6, suppress=True)
+np.set_printoptions(precision=4, suppress=True)
 
 # Define the LSTM model
 class LSTM(nn.Module):
@@ -105,7 +105,7 @@ class NvidiaStockDataset(Dataset):
         self.x = data[:,:-output_size,:] # slicing off the last entry of input
         # print("x.shape: ",self.x.shape)
         # x.shape: (data_num, window_size, feature_num)
-        self.y = data[:,window_size:,close_idx] # moving the target entry one block forward
+        self.y = data[:,window_size:,close_idx]
         self.y = self.y - self.x[:,-1,close_idx:close_idx+1]
         # print("y.shape: ",self.y.shape)
         # y.shape: (data_num, output_size)
@@ -119,8 +119,8 @@ class NvidiaStockDataset(Dataset):
         self.x_mean[:,13:] = 0
         self.x_std[:,4:6] = 1
         self.x_std[:,13:] = 1
-        print("x_mean.shape: ", self.x_mean.shape)
-        print("x_std.shape: ", self.x_std.shape)
+        # print("x_mean.shape: ", self.x_mean.shape)
+        # print("x_std.shape: ", self.x_std.shape)
         # mean/std.shape: (data_num, feature_num)
 
         # does this normalization broadcast work properly? 
@@ -128,8 +128,8 @@ class NvidiaStockDataset(Dataset):
         # and y[i,j] will be normalized using x_mean[i,close_idx] and x_std[i,close_idx]
         
         self.x = self.x - self.x_mean[:,None,:] # / self.x_std[:,None,:]
-        self.y = self.y - self.x_std[:,0:1]
-        print("y.shape: ",self.y.shape)
+        # self.y = self.y - self.x_mean[:,0:1]
+        # print("y.shape: ",self.y.shape)
         # print(self.y[0,:])
         # print(self.x[0,:,:])
 
@@ -150,19 +150,27 @@ def sample_z_continuous(arr, z):
 
 
 def get_direction_diff(x_batch,y_batch,y_pred):
-    true_direction = y_batch
+    true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
     true_direction = np.clip(true_direction.cpu(),0,np.inf) # this turns negative to 0, positive to 1
     true_direction[true_direction != 0] = 1
-    pred_direction = y_pred
+    pred_direction = y_pred-x_batch[:,-1,close_idx:close_idx+1]
     pred_direction = np.clip(pred_direction.clone().detach().cpu(),0,np.inf)
     pred_direction[pred_direction != 0] = 1
-    # print("True: ", true_direction)
+    # print("True: ", true_direction.shape)
     # print("Pred: ", pred_direction)
 
-    total_cells = true_direction.numpy().size
-    differing_cells = np.count_nonzero(true_direction != pred_direction)
+    instance_num =  true_direction.shape[0]
+    prediction_min = true_direction.shape[1]
 
-    return total_cells, differing_cells
+    total_cells = instance_num * prediction_min
+    same_cells = np.count_nonzero(true_direction == pred_direction)
+
+    total_cells_list = np.full((prediction_min,), instance_num)
+    same_cells_list = np.count_nonzero(true_direction == pred_direction, axis = 0)
+    # print("total_cells: ",total_cells)
+    # print("same_cells.shape: ",same_cells.shape)
+
+    return total_cells, same_cells, total_cells_list, same_cells_list
 
 def get_return_diff(x_batch,y_batch,y_pred):
     pass
@@ -173,18 +181,23 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
     else:
         model.eval()
     start_time = time.time()
-    total_predictions = 0
-    true_prediction = 0
+    same_cells = 0
     
     predictions = None
     raw_predictions = None
     targets = None
     raw_targets = None
 
+    ma_predictions = 0
+    ma_true_predictions = 0
+
+    total_predictions = np.zeros(output_size) # one elemnt for each minute of prediction window
+    total_true_predictions = np.zeros(output_size)
+
     for epoch in range(num_epochs):
         total_loss = 0
-        total_predictions *= 0.9
-        true_prediction *= 0.9
+        ma_predictions *= 0.9
+        ma_true_predictions *= 0.9
         i=0
         for i, (x_batch, y_batch, mean, std) in enumerate(train_loader):
             # x_batch   [N, window_size, feature_num]
@@ -201,9 +214,11 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
                 loss.backward()
                 optimizer.step()
 
-            total_cells, differing_cells = get_direction_diff(x_batch, y_batch, y_pred)
-            total_predictions += total_cells
-            true_prediction += total_cells - differing_cells
+            total_cells, same_cells, total_cells_list,same_cells_list = get_direction_diff(x_batch, y_batch, y_pred)
+            ma_predictions += total_cells
+            ma_true_predictions += same_cells
+            total_predictions += total_cells_list
+            total_true_predictions += same_cells_list
 
             if mode == 2:
                 mean = mean.float().to(device)
@@ -227,11 +242,14 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
             
             total_loss += loss.item()
         total_loss = total_loss / (i+1)
-        correct_direction = true_prediction / total_predictions * 100
+        correct_direction = ma_true_predictions / ma_predictions * 100
 
         # scheduler.step()
         print(f'Epoch {epoch+1:3}/{num_epochs:3}, Loss: {total_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Direction: {correct_direction:.2f}%') # Learning Rate: {scheduler.get_last_lr()[0]:9.6f}
     print(f'completed in {time.time()-start_time:.2f} seconds')
+
+    accuracy_list = total_true_predictions / total_predictions * 100
+    print("Accuracy List: ", accuracy_list)
 
     if mode == 2:
         return predictions.cpu().numpy(), raw_predictions.cpu().numpy(), targets.cpu().numpy(), raw_targets.cpu().numpy()
@@ -256,6 +274,10 @@ def main():
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
 
     data = df.values #.astype(float)
+
+    # plot the DataFrame
+    # plt.plot(data[:,close_idx])
+    # plt.show()
 
     # trading view data normalization
     # df_float = df_float[:,1:18] # remove the utftime column, and columns after rsi-based-ma.
