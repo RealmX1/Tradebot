@@ -1,9 +1,10 @@
+import random
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import torch # PyTorch
 import torch.nn as nn # PyTorch neural network module
 from torch.utils.data import Dataset, DataLoader # PyTorch data utilities
 from torch.optim.lr_scheduler import StepLR # PyTorch learning rate scheduler
-from torch.optim import AdamW
+from torch.optim import AdamW, SGD
 # from apex.optimizers import FusedLAMB
 
 import matplotlib.pyplot as plt
@@ -13,34 +14,34 @@ import time
 import cProfile
 
 cwd = os.getcwd()
-model_path = cwd+"/lstm_updown.pt"
+model_path = cwd+"/lstm_updown_s2s.pt"
 
 # Load the CSV file into a Pandas dataframe
 # time,open,high,low,close,Volume,Volume MA
 
 close_idx = 3 # after removing time column
 
-# df = pd.read_csv('nvda_1min_complex_fixed.csv')
-df = pd.read_csv("data/bar_set_huge_20180101_20230410_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
 
 # Define hyperparameters
 feature_num = input_size = 20 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size = 20 # Number of neurons in the hidden layer of the LSTM
+hidden_size = 20    # Number of neurons in the hidden layer of the LSTM
 
-num_layers = 8 # Number of layers in the LSTM
-output_size = 1 # Number of output values (closing price 1~10min from now)
+num_layers  = 5     # Number of layers in the LSTM
+output_size = 1     # Number of output values (closing price 1~10min from now)
 prediction_window = 10
+window_size = 32 # using how much data from the past to make prediction?
+data_prep_window = window_size + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
+drop_out = 0.05
+
 learning_rate = 0.0001
 num_epochs = 50
 batch_size = 1024
 
-window_size = 32 # using how much data from the past to make prediction?
-data_prep_window = window_size + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
-drop_out = 0.1
+
 
 train_percent = 0.6
 
-no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to normalize them (and normalization might cause 0 division problem)
+# no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to normalize them (and normalization might cause 0 division problem)
 
 loss_fn = nn.MSELoss()
 
@@ -52,20 +53,70 @@ plot_minutes = [0]
 np.set_printoptions(precision=4, suppress=True)
 
 # Define the LSTM model
-class LSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, dropout):
-        super(LSTM, self).__init__()
+
+class Encoder(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, dropout):
+        super(Encoder, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
-        self.fc1 = nn.Linear(hidden_size, output_size)
+        if num_layers == 1:
+            self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        else:
+            self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
 
     def forward(self, x): # assumes that x is of shape (batch_size,time_steps, features) 
-        tmp, _ = self.lstm(x) #.float()
-        output = self.fc1(tmp)
-        return output[:,-10:,0]
+        _, (hidden, cell) = self.lstm(x) #.float()
+        return hidden, cell
+
+class Decoder(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, output_size, dropout):
+        super(Decoder, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+
+        if num_layers == 1:
+            self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        else:
+            self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x, hidden, cell): # assumes that x is of shape (batch_size,1 (time_step), output_features) 
+        output, (hidden, cell) = self.lstm(x, (hidden, cell)) #.float()
+        # output: (N, 1, hidden size)
+        prediction = self.fc(output)
+        return prediction,  hidden, cell
     
+class Seq2Seq(nn.Module):
+    def __init__(self, encoder, decoder, device):
+        super().__init__()
         
+        self.encoder = encoder
+        self.decoder = decoder
+        self.device = device
+        
+        assert encoder.hidden_size == decoder.hidden_size, \
+            "Hidden dimensions of encoder and decoder must be equal!"
+        assert encoder.num_layers == decoder.num_layers, \
+            "Encoder and decoder must have equal number of layers!"
+
+    # use teacher forcing ratio to balance between using predicted result vs. true result in generating next prediction
+    def forward(self, input, target, teacher_forcing_ratio = 0.5):
+        batch_size = input.shape[0]
+
+        hidden, cell = self.encoder(input)
+        # print("hidden.shape: ",hidden.shape)
+        # expected: ?????(batch_size, hidden_size)
+
+        outputs = torch.zeros(batch_size, prediction_window, output_size).to(self.device)
+        x = target[:,0:1,None] # x at timestamp 
+
+        for t in range (prediction_window):
+            output, hidden, cell = self.decoder(x, hidden, cell)
+            outputs[:,t:t+1,:] = output
+            x = target[:,t:t+1,None] if random.random() < teacher_forcing_ratio else output
+        
+        return outputs.squeeze(2) # note that squeeze is used since y_batch is 2d, yet y_pred is 3d. (if output size sin't 1, then y_batch will be 3d.)            
+
 
 # Define the dataset class
 # data.shape: (data_num, data_prep_window, feature_num)
@@ -73,12 +124,14 @@ class LSTM(nn.Module):
 class NvidiaStockDataset(Dataset):
     def __init__(self, data):
 
-        self.x_raw = data[:,:-output_size,:] # slicing off the last entry of input
+        self.x_raw = data[:,:-prediction_window,:] # slicing off the last entry of input
         # print("x.shape: ",self.x.shape)
         # x.shape: (data_num, window_size, feature_num)
-        self.y_raw = data[:,window_size:,close_idx] 
-        self.y = self.y_raw - self.x_raw[:,-1,close_idx:close_idx+1] # don't need to normalize y; this is the best way.
+        self.y_raw = data[:,-prediction_window:,close_idx] 
+        tmp = self.x_raw[:,-1,close_idx:close_idx+1]
+        self.y = (self.y_raw - tmp)/tmp * 100 # don't need to normalize y; this is the best way; present target as the percentage growth with repsect to last close price.
         # print("y.shape: ",self.y.shape)
+        # print("y:" , self.y)
         # y.shape: (data_num, output_size)
         self.x_mean = np.mean(self.x_raw[:,:,close_idx:close_idx+1], axis=1)
         self.x_mean = np.tile(self.x_mean, (1, feature_num))
@@ -88,10 +141,10 @@ class NvidiaStockDataset(Dataset):
         self.x_std = np.tile(self.x_std, (1, feature_num))
         self.x_mean[:,4:6] = 0
         self.x_mean[:,13:] = 0
-        self.x_std[:,4:6] = 1
-        self.x_std[:,13:] = 1
+        # self.x_std[:,4:6] = 1
+        # self.x_std[:,13:] = 1
         # print("x_mean.shape: ", self.x_mean.shape)
-        # print("x_std.shape: ", self.x_std.shape)
+        # print("x.shape: ", self.x_raw.shape)
         # mean/std.shape: (data_num, feature_num)
         
         self.x = self.x_raw - self.x_mean[:,None,:] # / self.x_std[:,None,:]
@@ -145,8 +198,10 @@ def get_return_diff(x_batch,y_batch,y_pred):
 
 def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # mode 0: train, mode 1: test, mode 2: PLOT
     if mode == 0:
+        teacher_forcing_ratio = 0.5
         model.train()
     else:
+        teacher_forcing_ratio = 0
         model.eval()
     start_time = time.time()
     same_cells = 0
@@ -163,6 +218,7 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
     total_true_predictions = np.zeros(prediction_window)
 
     inverse_mask = torch.linspace(1, 11, 10)
+    # print ("inverse_mask.shape: ", inverse_mask.shape)
     mask = torch.ones((prediction_window,))
     mask /= inverse_mask
     mask = mask.float().to(device)
@@ -179,15 +235,16 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
             # x_batch   [N, window_size, feature_num]
             # y_batch & output  [N, prediction_window]
             x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
+            # print("one input: ", x_batch[0:,:,:])
             y_batch = y_batch.float().to(device)
             
-            y_pred = model(x_batch) # [N, prediction_window]
+            y_pred = model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
             # print("y_pred.shape: ", y_pred.shape)
             # print("y_batch.shape: ", y_pred.shape)
-            # print("y_pred.device: ", y_pred.device)
-            y_pred *= mask
-            y_batch *= mask
-            loss = loss_fn(y_pred, y_batch)             
+            # print("y_batch: ", y_batch[0,:])
+            # y_pred *= mask
+            # y_batch *= mask
+            loss = loss_fn(y_pred, y_batch) 
             
             if mode == 0:
                 optimizer.zero_grad() # removing zero_grad doesn't improve training speed (unlike some claimed); need more testing
@@ -246,15 +303,22 @@ def plot(predictions, targets, test_size):
     plt.show()
 
 def main():
+    start_time = time.time()
+    print("loading data")
+    # df = pd.read_csv('nvda_1min_complex_fixed.csv')
+    df = pd.read_csv("data/bar_set_huge_20180101_20230410_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
+    print("data loaded in ", time.time()-start_time, " seconds")
+    
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
-
+    print("processing data")
+    start_time = time.time()
     data = df.values #.astype(float)
-    print("Raw data shape: ", data.shape)
+    # print("Raw data shape: ", data.shape)
 
     data_mean = np.mean(data, axis = 0)
     data_std = np.std(data, axis = 0)
     # print(data_mean.shape)
-    data_mean[0:3] = data_mean[6:13] = data_mean[3] # use close mean for these columns
+    data_mean[0:4] = data_mean[6:13] = 0 # data_mean[3] # use close mean for these columns
     data_mean[15] = 50 # rsi_mean
     data_mean[16] = 0 # cci_mean
     data_mean[17] = 30.171159 # adx_mean
@@ -262,7 +326,7 @@ def main():
     data_mean[19] = 32.276572 # dmn_mean
     # how should mean for adx,dmp,and dmn be set?
     # print(data_mean)
-    data_std[0:3] = data_std[6:13] = data_std[3] # use close std for these columns
+    data_std[0:4] = data_std[6:13] = 1 #data_std[3] # use close std for these columns
     data_std[15] = 10 # rsi_std
     data_std[16] = 100 # cci_std
     data_std[17] = 16.460923 # adx_std
@@ -288,8 +352,6 @@ def main():
     test_dataset = NvidiaStockDataset(test_data)
     total_dataset = NvidiaStockDataset(data_std)
 
-    print("loading data")
-    start_time = time.time()
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=False) 
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False)
     total_loader = DataLoader(total_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False)
@@ -299,7 +361,9 @@ def main():
 
     print("loading model")
     start_time = time.time()
-    model = LSTM(input_size, hidden_size, num_layers, output_size, drop_out).to(device)
+    encoder = Encoder(input_size, hidden_size, num_layers, drop_out).to(device)
+    decoder = Decoder(output_size, hidden_size, num_layers, output_size, drop_out).to(device)
+    model = Seq2Seq(encoder, decoder, device).to(device)
     if os.path.exists(model_path):
         print("Loading existing model")
         model.load_state_dict(torch.load(model_path))
@@ -308,7 +372,10 @@ def main():
     print(model)
     print(f'model loading completed in {time.time()-start_time:.2f} seconds')
 
+    # optimizer = SGD(model.parameters(), lr=learning_rate)
     optimizer = AdamW(model.parameters(),weight_decay=1e-5, lr=learning_rate)
+
+    
 
     try:
         # Train the model

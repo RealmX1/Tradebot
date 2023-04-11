@@ -20,8 +20,11 @@ import threading
 from alpaca.data.live import StockDataStream, CryptoDataStream
 from alpaca.data.enums import DataFeed
 
+new_data_flag = True
+
 async def handler(data):
     print("received data: ", data)
+    global new_data_flag = True
     
 
 def main():
