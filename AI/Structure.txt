@@ -141,3 +141,6 @@ TODO: Build decision model; need to test out how different decision model perfor
 
 TODO: Try a new loss; ask the model to predict an upper and lower limit; 
 the loss will be difference between upper & lower predicted limit and the actual price; in combination with whether the price is within the limit.
+
+
+TODO: Print prediction in a real time simulation

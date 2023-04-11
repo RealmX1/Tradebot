@@ -27,14 +27,15 @@ df = pd.read_csv("data/bar_set_huge_20180101_20230410_AAPL_indicator.csv", index
 feature_num = input_size = 20 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
 hidden_size = 20 # Number of neurons in the hidden layer of the LSTM
 
-num_layers = 16 # Number of layers in the LSTM
-output_size = 10 # Number of output values (closing price 1~10min from now)
+num_layers = 8 # Number of layers in the LSTM
+output_size = 1 # Number of output values (closing price 1~10min from now)
+prediction_window = 10
 learning_rate = 0.0001
 num_epochs = 50
-batch_size = 2048
+batch_size = 1024
 
 window_size = 32 # using how much data from the past to make prediction?
-data_prep_window = window_size + output_size # +ouput_size becuase we need to keep 10 for calculating loss
+data_prep_window = window_size + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
 drop_out = 0.1
 
 train_percent = 0.6
@@ -60,47 +61,17 @@ class LSTM(nn.Module):
         self.fc1 = nn.Linear(hidden_size, output_size)
 
     def forward(self, x): # assumes that x is of shape (batch_size,time_steps, features) 
-        batch_size = x.shape[0]
         tmp, _ = self.lstm(x) #.float()
         output = self.fc1(tmp)
-        # print(output.shape)
-        # output.shape
-        return output[:,-1,:]
+        return output[:,-10:,0]
     
         
 
 # Define the dataset class
 # data.shape: (data_num, data_prep_window, feature_num)
+# SELF.Y IS ALREADY THE TRUE DIRECTION (SINCE LAST OBSERVED CLOSE)!!!
 class NvidiaStockDataset(Dataset):
     def __init__(self, data):
-        # self.x = data[:,:-output_size,:] # slicing off the last entry of input
-        # # print("x.shape: ",self.x.shape)
-        # # x.shape: (data_num, window_size, feature_num)
-        # self.y = data[:,window_size:,close_idx] # moving the target entry one block forward
-        # self.y = self.y - self.x[:,-1,close_idx:close_idx+1]
-        # # print("y.shape: ",self.y.shape)
-        # # y.shape: (data_num, output_size)
-        # self.x_mean = np.mean(self.x[:,:,close_idx:close_idx+1], axis=1)
-        # self.x_mean = np.tile(self.x_mean, (1, 17))
-        # self.x_std = np.std(self.x[:,:,close_idx:close_idx+1], axis=1)
-        # self.x_std = np.tile(self.x_std, (1, 17))
-        # self.x_mean[:,-no_norm_num:] = 0
-        # self.x_std[:,-no_norm_num:] = 1 
-        # # print("x_mean.shape: ", self.x_mean.shape)
-        # # print("x_std.shape: ", self.x_std.shape)
-        # # mean/std.shape: (data_num, feature_num)
-
-        # # does this normalization broadcast work properly? 
-        # # desired effect is x[i,:,j] will be normalized using x_mean[i,j] and x_std[i,j],
-        # # and y[i,j] will be normalized using x_mean[i,close_idx] and x_std[i,close_idx]
-        
-        # self.x = (self.x - self.x_mean[:,None,:]) / self.x_std[:,None,:]
-        # self.y = self.y/self.x_std[:,0:1]
-        # print("y.shape: ",self.y.shape)
-        # # print(self.y[0,:])
-        # # print(self.x[0,:,:])
-        
-        ### non-tradingview data ###
 
         self.x_raw = data[:,:-output_size,:] # slicing off the last entry of input
         # print("x.shape: ",self.x.shape)
@@ -122,26 +93,19 @@ class NvidiaStockDataset(Dataset):
         # print("x_mean.shape: ", self.x_mean.shape)
         # print("x_std.shape: ", self.x_std.shape)
         # mean/std.shape: (data_num, feature_num)
-
-        # does this normalization broadcast work properly? 
-        # desired effect is x[i,:,j] will be normalized using x_mean[i,j] and x_std[i,j],
-        # and y[i,j] will be normalized using x_mean[i,close_idx] and x_std[i,close_idx]
         
         self.x = self.x_raw - self.x_mean[:,None,:] # / self.x_std[:,None,:]
         # self.y = self.y - self.x_mean[:,0:1] # using this instead of self.y = self.y - self.x[:,-1,close_idx:close_idx+1]
         # doesn't make much sense. The target is to predict the the potential difference in value after last observed point.
-        # print("y.shape: ",self.y.shape)
-        # print(self.y[0,:])
-        # print(self.x[0,:,:])
 
     def __len__(self):
         return self.y.shape[0]
 
     def __getitem__(self, idx):
-        return self.x[idx,:,:], self.y[idx,:], self.x_mean[idx,:], self.x_std[idx,:]
+        return self.x[idx,:,:], self.y[idx,:], self.x_raw[idx,-1,close_idx:close_idx+1] #self.x_mean[idx,:], self.x_std[idx,:]
 
-    def get_raw(self, idx):
-        return self.x_raw[idx,:,:], self.y_raw[idx,:], self.x_mean[idx,:], self.x_std[idx,:]
+    # def get_raw(self, idx):
+    #     return self.x_raw[idx,:,:], self.y_raw[idx,:], self.x_mean[idx,:], self.x_std[idx,:]
 
 
 # Prepare the data
@@ -154,11 +118,11 @@ def sample_z_continuous(arr, z):
 
 
 def get_direction_diff(x_batch,y_batch,y_pred):
-    true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
-    true_direction = np.clip(true_direction.cpu(),0,np.inf) # this turns negative to 0, positive to 1
+    # true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
+    true_direction = np.clip(y_batch.cpu(),0,np.inf) # this turns negative to 0, positive to 1
     true_direction[true_direction != 0] = 1
-    pred_direction = y_pred-x_batch[:,-1,close_idx:close_idx+1]
-    pred_direction = np.clip(pred_direction.clone().detach().cpu(),0,np.inf)
+    # pred_direction = y_pred-x_batch[:,-1,close_idx:close_idx+1]
+    pred_direction = np.clip(y_pred.clone().detach().cpu(),0,np.inf)
     pred_direction[pred_direction != 0] = 1
     # print("True: ", true_direction.shape)
     # print("Pred: ", pred_direction)
@@ -195,20 +159,34 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
     ma_predictions = 0
     ma_true_predictions = 0
 
-    total_predictions = np.zeros(output_size) # one elemnt for each minute of prediction window
-    total_true_predictions = np.zeros(output_size)
+    total_predictions = np.zeros(prediction_window) # one elemnt for each minute of prediction window
+    total_true_predictions = np.zeros(prediction_window)
 
+    inverse_mask = torch.linspace(1, 11, 10)
+    mask = torch.ones((prediction_window,))
+    mask /= inverse_mask
+    mask = mask.float().to(device)
+    # print("mask: ", mask.device)
+    # print("mask.shape: ", mask.shape)
+    
     for epoch in range(num_epochs):
         total_loss = 0
         ma_predictions *= 0.9
         ma_true_predictions *= 0.9
         i=0
-        for i, (x_batch, y_batch, mean, std) in enumerate(train_loader):
+        for i, (x_batch, y_batch, x_raw_close) in enumerate(train_loader):
+            # print("x_batch[0,:,:]: ", x_batch[0,:,:])
             # x_batch   [N, window_size, feature_num]
-            # y_batch & output  [N, output_size]
+            # y_batch & output  [N, prediction_window]
             x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
             y_batch = y_batch.float().to(device)
-            y_pred = model(x_batch)     
+            
+            y_pred = model(x_batch) # [N, prediction_window]
+            # print("y_pred.shape: ", y_pred.shape)
+            # print("y_batch.shape: ", y_pred.shape)
+            # print("y_pred.device: ", y_pred.device)
+            y_pred *= mask
+            y_batch *= mask
             loss = loss_fn(y_pred, y_batch)             
             
             if mode == 0:
@@ -230,10 +208,8 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
                 # prediction = raw_prediction * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
                 raw_target = y_batch[:,plot_minutes]
                 # target = raw_target * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
-
-
                 
-                if predictions is None:
+                if raw_predictions is None:
                     # predictions = prediction
                     raw_predictions = raw_prediction
                     # targets = target
@@ -256,7 +232,7 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
     print("Accuracy List: ", accuracy_list)
 
     if mode == 2:
-        return predictions.cpu().numpy(), raw_predictions.cpu().numpy(), targets.cpu().numpy(), raw_targets.cpu().numpy()
+        return None,raw_predictions.cpu().numpy(), None, raw_targets.cpu().numpy()# return predictions.cpu().numpy(), raw_predictions.cpu().numpy(), targets.cpu().numpy(), raw_targets.cpu().numpy()
 
 def plot(predictions, targets, test_size):
     # Plot the results
@@ -298,21 +274,13 @@ def main():
 
     data_std = (data - data_mean) / data_std
 
-    # open	high	low	close	TEMA	DEMA	VWAP	Upper Band #1	Lower Band #1	Upper Band #2	Lower Band #2	Upper Band #3	Lower Band #3	Volume	Volume MA	RSI	RSI-based MA
-    
-    # change the utftime column to a column of day and a time of tradingday instead?
-    
-    # am I doing this correctly? Should LSTM be trained this way?
-    # or should it be trained using continuous dataset, and progress by feeding one data after another?
-    # at least current method makes it easier to noramlize each window of input independently.
     data_std = sample_z_continuous(data_std, data_prep_window)
     print("Windowed data shape: ", data_std.shape)
     # (data_num, data_prep_window, output_size)
 
     train_size = int(len(data_std) * train_percent)
     test_size = int(len(data_std) * (1-train_percent))
-    # learn on nearer data, and test on a previous data; 
-    # not sure which order is better... don't have knowledge of such metric; probably should do experiment and read paper on this
+    # learn on nearer data, and test on a previous data
     train_data = data_std[test_size:,:,:]
     test_data = data_std[:test_size,:,:]
 
@@ -353,7 +321,7 @@ def main():
         with torch.no_grad():
             work(model, test_loader, optimizer, 1, mode = 1)
         print()
-            
+
 
         # Make predictions
         print("Making Prediction")
@@ -366,12 +334,10 @@ def main():
 
         torch.save(model.state_dict(), model_path)
         print('Normal exit. Model saved.')
-    except KeyboardInterrupt or Exception:
+    except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
         torch.save(model.state_dict(), model_path)
         print('Model saved.')
-
-
 
 if __name__ == '__main__':
     main()

@@ -16,17 +16,22 @@ SECRET_KEY =  "yhupKUckY5vAbP7UOrkB26v4X4Gb9cdffo39V4OM"
 # wss_client.run()
 
 import asyncio
-from alpaca.data.live import StockDataStream
+import threading
+from alpaca.data.live import StockDataStream, CryptoDataStream
 from alpaca.data.enums import DataFeed
 
 async def handler(data):
-    print(data)
+    print("received data: ", data)
+    
 
 def main():
-    stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, feed=DataFeed.IEX)
+    stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY)
+    # stream = CryptoDataStream(api_key = API_KEY, secret_key = SECRET_KEY)
 
-    stream.subscribe_bars(handler, "SPY", "1Min")
+    stream.subscribe_bars(handler, "BABA")
+    print("Start streaming")
     stream.run()
+    
 
 if __name__ == "__main__":
     main()
