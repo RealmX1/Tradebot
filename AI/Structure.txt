@@ -133,4 +133,11 @@ Maybe predict one step, then put that step in input to predict one down the line
 TODO: since I've implemented normalization across different feature set individually, the relative relation between them is partially lost.
 How can this be addressed?
 Shoudl some features be exempt from normalization?
-Should the normalization happen only with respect to the close price?
+Should the normalization happen only with respect to the close price?\
+
+
+04/10
+TODO: Build decision model; need to test out how different decision model perform.
+
+TODO: Try a new loss; ask the model to predict an upper and lower limit; 
+the loss will be difference between upper & lower predicted limit and the actual price; in combination with whether the price is within the limit.

@@ -21,7 +21,7 @@ model_path = cwd+"/lstm_updown.pt"
 close_idx = 3 # after removing time column
 
 # df = pd.read_csv('nvda_1min_complex_fixed.csv')
-df = pd.read_csv("data/bar_set_huge_20200101_20230406_TSLA_indicator.csv", index_col = ['symbols', 'timestamps'])
+df = pd.read_csv("data/bar_set_huge_20180101_20230410_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
 
 # Define hyperparameters
 feature_num = input_size = 20 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
@@ -30,14 +30,14 @@ hidden_size = 20 # Number of neurons in the hidden layer of the LSTM
 num_layers = 16 # Number of layers in the LSTM
 output_size = 10 # Number of output values (closing price 1~10min from now)
 learning_rate = 0.0001
-num_epochs = 0
+num_epochs = 50
 batch_size = 2048
 
 window_size = 32 # using how much data from the past to make prediction?
 data_prep_window = window_size + output_size # +ouput_size becuase we need to keep 10 for calculating loss
 drop_out = 0.1
 
-train_percent = 0.001
+train_percent = 0.6
 
 no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to normalize them (and normalization might cause 0 division problem)
 
@@ -102,17 +102,17 @@ class NvidiaStockDataset(Dataset):
         
         ### non-tradingview data ###
 
-        self.x = data[:,:-output_size,:] # slicing off the last entry of input
+        self.x_raw = data[:,:-output_size,:] # slicing off the last entry of input
         # print("x.shape: ",self.x.shape)
         # x.shape: (data_num, window_size, feature_num)
-        self.y = data[:,window_size:,close_idx]
-        self.y = self.y - self.x[:,-1,close_idx:close_idx+1]
+        self.y_raw = data[:,window_size:,close_idx] 
+        self.y = self.y_raw - self.x_raw[:,-1,close_idx:close_idx+1] # don't need to normalize y; this is the best way.
         # print("y.shape: ",self.y.shape)
         # y.shape: (data_num, output_size)
-        self.x_mean = np.mean(self.x[:,:,close_idx:close_idx+1], axis=1)
+        self.x_mean = np.mean(self.x_raw[:,:,close_idx:close_idx+1], axis=1)
         self.x_mean = np.tile(self.x_mean, (1, feature_num))
         # print(self.x_mean)
-        self.x_std = np.std(self.x[:,:,close_idx:close_idx+1], axis=1)
+        self.x_std = np.std(self.x_raw[:,:,close_idx:close_idx+1], axis=1)
         # print(self.x_std)
         self.x_std = np.tile(self.x_std, (1, feature_num))
         self.x_mean[:,4:6] = 0
@@ -127,8 +127,9 @@ class NvidiaStockDataset(Dataset):
         # desired effect is x[i,:,j] will be normalized using x_mean[i,j] and x_std[i,j],
         # and y[i,j] will be normalized using x_mean[i,close_idx] and x_std[i,close_idx]
         
-        self.x = self.x - self.x_mean[:,None,:] # / self.x_std[:,None,:]
-        # self.y = self.y - self.x_mean[:,0:1]
+        self.x = self.x_raw - self.x_mean[:,None,:] # / self.x_std[:,None,:]
+        # self.y = self.y - self.x_mean[:,0:1] # using this instead of self.y = self.y - self.x[:,-1,close_idx:close_idx+1]
+        # doesn't make much sense. The target is to predict the the potential difference in value after last observed point.
         # print("y.shape: ",self.y.shape)
         # print(self.y[0,:])
         # print(self.x[0,:,:])
@@ -138,6 +139,9 @@ class NvidiaStockDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.x[idx,:,:], self.y[idx,:], self.x_mean[idx,:], self.x_std[idx,:]
+
+    def get_raw(self, idx):
+        return self.x_raw[idx,:,:], self.y_raw[idx,:], self.x_mean[idx,:], self.x_std[idx,:]
 
 
 # Prepare the data
@@ -205,9 +209,7 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
             x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
             y_batch = y_batch.float().to(device)
             y_pred = model(x_batch)     
-            loss = loss_fn(y_pred, y_batch) 
-            # normalization method should be more precise than this.
-            
+            loss = loss_fn(y_pred, y_batch)             
             
             if mode == 0:
                 optimizer.zero_grad() # removing zero_grad doesn't improve training speed (unlike some claimed); need more testing
@@ -221,23 +223,25 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
             total_true_predictions += same_cells_list
 
             if mode == 2:
-                mean = mean.float().to(device)
-                std = std.float().to(device)
+                # mean = mean.float().to(device)
+                # std = std.float().to(device)
                 
                 raw_prediction = y_pred[:,plot_minutes]
-                prediction = raw_prediction * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+                # prediction = raw_prediction * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
                 raw_target = y_batch[:,plot_minutes]
-                target = raw_target * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+                # target = raw_target * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+
+
                 
                 if predictions is None:
-                    predictions = prediction
+                    # predictions = prediction
                     raw_predictions = raw_prediction
-                    targets = target
+                    # targets = target
                     raw_targets = raw_target
                 else:
-                    predictions = torch.cat((predictions, prediction), dim=0)
+                    # predictions = torch.cat((predictions, prediction), dim=0)
                     raw_predictions = torch.cat((raw_predictions, raw_prediction), dim=0)
-                    targets = torch.cat((targets, target), dim=0)
+                    # targets = torch.cat((targets, target), dim=0)
                     raw_targets = torch.cat((raw_targets, raw_target), dim=0)
             
             total_loss += loss.item()
@@ -258,12 +262,7 @@ def plot(predictions, targets, test_size):
     # Plot the results
     print("total entry: ",predictions.shape[0])
     x = np.arange(len(predictions))
-    # plt.plot(x+1, targets[:,0], label='Actual_1min')
-    # plt.plot(x+5, targets[:,1], label='Actual_5min')
-    # plt.plot(x+10, targets[:,2], label='Actual_10min')
-    # plt.plot(x+5, predictions[:,1], label='5min',linestyle='dotted')
-    # plt.plot(x+1, predictions[:,0], label='1min',linestyle='dotted')
-    # plt.plot(x+10, predictions[:,2], label='10min',linestyle='dotted')
+    print("predictions.shape: ",predictions.shape)
     plt.plot(targets, label='Actual')
     plt.plot(predictions, label='Predicted',linestyle='dotted')
     plt.legend()
@@ -274,41 +273,30 @@ def main():
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
 
     data = df.values #.astype(float)
+    print("Raw data shape: ", data.shape)
 
-    # plot the DataFrame
-    # plt.plot(data[:,close_idx])
-    # plt.show()
-
-    # trading view data normalization
-    # df_float = df_float[:,1:18] # remove the utftime column, and columns after rsi-based-ma.
-    # global_stadardization = df_float[:,:-4]
-    # mean = np.zeros(4)
-    # mean[0] = np.mean(global_stadardization, axis = 0)
-    # mean[1] = mean[0]
-    # mean[2] = mean[3] = 50 # rsi fluctuates between 0 and 100
-    # std = np.ones(4)
-    # std[0] = np.std(global_stadardization, axis = 0)
-    # std[1] = std[0]
-    # std[2] = std[3] = 10 # rsi fluctuates between 0 and 100
-
-    # df_float[:,-4:] = (df_float[:,-4:] - mean) / std
-    # print(data.shape)
     data_mean = np.mean(data, axis = 0)
     data_std = np.std(data, axis = 0)
     # print(data_mean.shape)
     data_mean[0:3] = data_mean[6:13] = data_mean[3] # use close mean for these columns
     data_mean[15] = 50 # rsi_mean
     data_mean[16] = 0 # cci_mean
+    data_mean[17] = 30.171159 # adx_mean
+    data_mean[18] = 32.843816 # dmp_mean
+    data_mean[19] = 32.276572 # dmn_mean
     # how should mean for adx,dmp,and dmn be set?
     # print(data_mean)
     data_std[0:3] = data_std[6:13] = data_std[3] # use close std for these columns
     data_std[15] = 10 # rsi_std
     data_std[16] = 100 # cci_std
-    # how should mean for adx,dmp,and dmn be set?
+    data_std[17] = 16.460923 # adx_std
+    data_std[18] = 18.971341 # dmp_std
+    data_std[19] = 18.399032 # dmn_std
+    # how should std for adx,dmp,and dmn be set?
     # print(data_std)
 
 
-    data = (data - data_mean) / data_std
+    data_std = (data - data_mean) / data_std
 
     # open	high	low	close	TEMA	DEMA	VWAP	Upper Band #1	Lower Band #1	Upper Band #2	Lower Band #2	Upper Band #3	Lower Band #3	Volume	Volume MA	RSI	RSI-based MA
     
@@ -317,22 +305,20 @@ def main():
     # am I doing this correctly? Should LSTM be trained this way?
     # or should it be trained using continuous dataset, and progress by feeding one data after another?
     # at least current method makes it easier to noramlize each window of input independently.
-    data = sample_z_continuous(data, data_prep_window)
-    print(data.shape)
+    data_std = sample_z_continuous(data_std, data_prep_window)
+    print("Windowed data shape: ", data_std.shape)
     # (data_num, data_prep_window, output_size)
 
-    train_size = int(len(data) * train_percent)
-    test_size = int(len(data) * (1-train_percent))
+    train_size = int(len(data_std) * train_percent)
+    test_size = int(len(data_std) * (1-train_percent))
     # learn on nearer data, and test on a previous data; 
     # not sure which order is better... don't have knowledge of such metric; probably should do experiment and read paper on this
-    # train_data = data[:train_size,:,:]
-    # test_data = data[train_size:,:,:]
-    train_data = data[test_size:,:,:]
-    test_data = data[:test_size,:,:]
+    train_data = data_std[test_size:,:,:]
+    test_data = data_std[:test_size,:,:]
 
     train_dataset = NvidiaStockDataset(train_data)
     test_dataset = NvidiaStockDataset(test_data)
-    total_dataset = NvidiaStockDataset(data)
+    total_dataset = NvidiaStockDataset(data_std)
 
     print("loading data")
     start_time = time.time()
@@ -355,8 +341,6 @@ def main():
     print(f'model loading completed in {time.time()-start_time:.2f} seconds')
 
     optimizer = AdamW(model.parameters(),weight_decay=1e-5, lr=learning_rate)
-    # Define the StepLR scheduler to decrease the learning rate by a factor of gamma every step_size epochs
-    scheduler = StepLR(optimizer, step_size=num_epochs/50, gamma=0.95)
 
     try:
         # Train the model
@@ -369,10 +353,6 @@ def main():
         with torch.no_grad():
             work(model, test_loader, optimizer, 1, mode = 1)
         print()
-        # Direction prediction accuracy is about 0.5... EVEN AFTER USING NEW NORMALIZATION TECHNIQUE.
-        # Why?
-        # theory 1. market condition is different -- there exist other hidden variables that the model has no access to.
-        # theory 2. over fitting; testing it right now: CONFIRMED
             
 
         # Make predictions

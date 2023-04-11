@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 # # sample data
 # df = pd.DataFrame({
@@ -22,7 +23,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 
-# df = pd.read_csv('data/csv/bar_set_20230403_20230404_test.csv', index_col = ['symbols', 'timestamps'])
+df = pd.read_csv('data/csv/bar_set_huge_20180101_20230410.csv', index_col = ['symbols', 'timestamps'])
 # print(df.head(10))
 # df_head = df.head(10)
 
@@ -38,3 +39,29 @@ from sklearn.preprocessing import StandardScaler
 # df_head_standardized2 = pd.DataFrame(scaler.fit_transform(df_head2), columns=df_head2.columns)
 # print(df_head_standardized)
 # print(df_head_standardized2)
+names = ['AAPL','GOOG','MSFT','SPY','TSLA']
+means = np.zeros((6,))
+stds = np.zeros((6,))
+for name in names:
+    df = pd.read_csv(f'data/csv/bar_set_huge_20180101_20230410_{name}_indicator.csv', index_col = ['symbols', 'timestamps'])
+    last_three_cols = df.iloc[:, -6:]
+    last_three_cols_mean = last_three_cols.mean()
+    means += last_three_cols_mean
+    last_three_cols_std = last_three_cols.std()
+    stds += last_three_cols_std
+
+means /= len(names)
+stds /= len(names)
+
+print("means: ", means)
+'''
+ADX_14    30.171159
+DMP_14    32.843816
+DMN_14    32.276572
+'''
+print("stds: ", stds)
+'''
+ADX_14    16.460923
+DMP_14    18.971341
+DMN_14    18.399032
+'''
