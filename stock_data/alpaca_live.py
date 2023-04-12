@@ -24,14 +24,14 @@ new_data_flag = True
 
 async def handler(data):
     print("received data: ", data)
-    global new_data_flag = True
-    
+    print(data.df)
+    new_data_flag = True
 
 def main():
     stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY)
     # stream = CryptoDataStream(api_key = API_KEY, secret_key = SECRET_KEY)
 
-    stream.subscribe_bars(handler, "BABA")
+    stream.subscribe_bars(handler, "AAPL")
     print("Start streaming")
     stream.run()
     

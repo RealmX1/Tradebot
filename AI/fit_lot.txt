@@ -1,0 +1,26 @@
+trying difference between bidirectional vs non-bidirectional LSTM S2S:
+non-~: 
+20 epoch
+Epoch   1/  1, Loss:  0.0286861, Time per epoch: 0.30 seconds, Correct Direction: 59.94%
+completed in 0.30 seconds
+Accuracy List:  [66.0677 57.4795 60.5657 60.4546 60.1611 59.7644 59.2923 59.0345 58.4394
+ 58.1261]
+
+40 epoch
+Epoch   1/  1, Loss:  0.0277483, Time per epoch: 0.31 seconds, Correct Direction: 61.86%
+completed in 0.31 seconds
+Accuracy List:  [67.6346 64.3738 63.8462 62.1722 61.3194 60.6133 60.3951 59.8278 59.4431
+ 59.0226]
+
+60 epoch (start to overfit?)
+Epoch   1/  1, Loss:  0.0276603, Time per epoch: 0.30 seconds, Correct Direction: 59.84%
+completed in 0.30 seconds
+Accuracy List:  [60.4903 61.7637 62.5848 60.7085 59.7287 58.9789 58.8044 58.6695 58.4672
+ 58.1895]
+
+80 epoch (Not overfit)
+Testing model
+Epoch   1/  1, Loss:  0.0268751, Time per epoch: 0.33 seconds, Correct Direction: 63.94%
+completed in 0.33 seconds
+Accuracy List:  [76.556  69.3959 65.9169 63.3385 62.9101 61.6962 60.9901 60.0897 59.6057
+ 58.8758]

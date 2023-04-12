@@ -13,8 +13,12 @@ import numpy as np
 import time
 import cProfile
 
+
+# import custom files
+from S2S import *
+
 cwd = os.getcwd()
-model_path = cwd+"/lstm_updown_s2s.pt"
+model_path = cwd+"/lstm_updown_S2S_bidirectional.pt"
 
 # Load the CSV file into a Pandas dataframe
 # time,open,high,low,close,Volume,Volume MA
@@ -31,15 +35,18 @@ output_size = 1     # Number of output values (closing price 1~10min from now)
 prediction_window = 10
 window_size = 32 # using how much data from the past to make prediction?
 data_prep_window = window_size + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
-drop_out = 0.05
+drop_out = 0.1
 
 learning_rate = 0.0001
-num_epochs = 50
 batch_size = 1024
 
-
-
 train_percent = 0.6
+
+num_epochs = 50
+
+
+
+
 
 # no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to normalize them (and normalization might cause 0 division problem)
 
@@ -54,37 +61,7 @@ np.set_printoptions(precision=4, suppress=True)
 
 # Define the LSTM model
 
-class Encoder(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, dropout):
-        super(Encoder, self).__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        if num_layers == 1:
-            self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        else:
-            self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
 
-    def forward(self, x): # assumes that x is of shape (batch_size,time_steps, features) 
-        _, (hidden, cell) = self.lstm(x) #.float()
-        return hidden, cell
-
-class Decoder(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, dropout):
-        super(Decoder, self).__init__()
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-
-        if num_layers == 1:
-            self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        else:
-            self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
-        self.fc = nn.Linear(hidden_size, output_size)
-
-    def forward(self, x, hidden, cell): # assumes that x is of shape (batch_size,1 (time_step), output_features) 
-        output, (hidden, cell) = self.lstm(x, (hidden, cell)) #.float()
-        # output: (N, 1, hidden size)
-        prediction = self.fc(output)
-        return prediction,  hidden, cell
     
 class Seq2Seq(nn.Module):
     def __init__(self, encoder, decoder, device):
@@ -93,6 +70,7 @@ class Seq2Seq(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
         self.device = device
+        # self.bn1 = nn.BatchNorm1d(1)
         
         assert encoder.hidden_size == decoder.hidden_size, \
             "Hidden dimensions of encoder and decoder must be equal!"
@@ -306,7 +284,9 @@ def main():
     start_time = time.time()
     print("loading data")
     # df = pd.read_csv('nvda_1min_complex_fixed.csv')
-    df = pd.read_csv("data/bar_set_huge_20180101_20230410_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
+    # df = pd.read_csv("data/bar_set_huge_20180101_20230410_GOOG_indicator.csv", index_col = ['symbols', 'timestamps'])
+    df = pd.read_csv("data/bar_set_test_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
+    
     print("data loaded in ", time.time()-start_time, " seconds")
     
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
