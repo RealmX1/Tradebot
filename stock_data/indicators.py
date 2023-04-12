@@ -20,10 +20,9 @@ def func(x):
     return x.sum()
 
 def main():
-    df = pd.read_csv('data/csv/bar_set_huge_20180101_20230410.csv', index_col = ['symbols', 'timestamps'])
-    df = df.drop(df.index[:144])
+    df = pd.read_csv('data/csv/bar_set_huge_20200101_20230412_baba.csv', index_col = ['symbols', 'timestamps'])
+    # df = df.drop(df.index[:144])
     print(df.shape)
-    print(df.head(12))
 
     # create column for new indicators
 
@@ -38,6 +37,7 @@ def main():
     start_time = time.time()
     print("start calculating indicators...")
     for name, df in groups:
+        print(df.head(10))
         # name: the name of the group (in this case, the unique values in 'index_1')
         # group_df: the dataframe containing the group data
         

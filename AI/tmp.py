@@ -80,6 +80,9 @@ import numpy as np
 # Approach 2: 0.00305629 seconds
 # '''
 
-n = 5
-data = np.random.rand(10, n)
-print(data)
+# n = 5
+# data = np.random.rand(10, n)
+# print(data)
+import json
+with open('training_param_log.json', 'w') as f:
+        json.dump({'learning_rate': 0.0000119878, 'best_prediction': 67.53}, f)

@@ -1,5 +1,4 @@
 import random
-import json
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import torch # PyTorch
 import torch.nn as nn # PyTorch neural network module
@@ -38,11 +37,11 @@ window_size = 32 # using how much data from the past to make prediction?
 data_prep_window = window_size + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
 drop_out = 0.1
 
-learning_rate = 0.0001
+learning_rate = 0.001
 batch_size = 2000
 
 train_percent = 0.9
-num_epochs = 50
+num_epochs = 10
 
 
 
@@ -299,22 +298,13 @@ def plot(predictions, targets, test_size):
 def get_current_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
-
-def save_params(best_prediction, optimizer, best_model, model_path):
-    print("saving params...")
-    lr = get_current_lr(optimizer)
-    with open('training_param_log.json', 'w') as f:
-        json.dump({'learning_rate': lr, 'best_prediction': best_prediction}, f)
-    print("saving model...")
-    torch.save(best_model, model_path)
-    print("done.")
     
 def main():
     start_time = time.time()
     print("loading data")
     # df = pd.read_csv('nvda_1min_complex_fixed.csv')
     # df = pd.read_csv("data/bar_set_huge_20180101_20230410_GOOG_indicator.csv", index_col = ['symbols', 'timestamps'])
-    df = pd.read_csv("data/bar_set_huge_20200101_20230412_BABA_indicator.csv", index_col = ['symbols', 'timestamps'])
+    df = pd.read_csv("data/bar_set_huge_20180101_20230410_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
     
     print("data loaded in ", time.time()-start_time, " seconds")
     
@@ -376,22 +366,15 @@ def main():
     if os.path.exists(model_path):
         print("Loading existing model")
         model.load_state_dict(torch.load(model_path))
-        best_model = model.state_dict()
-        with open('training_param_log.json', 'r') as f:
-            saved_data = json.load(f)
-            lr = saved_data['learning_rate']
-            best_prediction = saved_data['best_prediction']
     else:
         print("No existing model")
-        lr = learning_rate
-        best_prediction = 0.0
     print(model)
     print(f'model loading completed in {time.time()-start_time:.2f} seconds')
 
 
     # optimizer = SGD(model.parameters(), lr=learning_rate)
-    optimizer = AdamW(model.parameters(),weight_decay=1e-5, lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.98, patience=50, threshold=0.0001)
+    optimizer = AdamW(model.parameters(),weight_decay=1e-5, lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.98, patience=20, threshold=0.000005)
 
     
 
@@ -401,57 +384,28 @@ def main():
         print("Training model")
         test_every_x_epoch = 1
         test_accuracy_hist = np.zeros((prediction_window,1))
-        weights = np.linspace(1, 0.1, num=prediction_window)
-        weights = weights.reshape(prediction_window,1)
-
         for epoch in range(num_epochs):
             print(f'Epoch {epoch+1}/{num_epochs}')
             if test_every_x_epoch and epoch % test_every_x_epoch == 0:
                 test_accuracy_list, average_loss = work(model, test_loader, optimizer, num_epochs = 1, mode = 1)
-                
-                accuracy = np.mean(test_accuracy_list)
-
                 if epoch == 0:
                     test_accuracy_hist[:,0] = test_accuracy_list
                 else:
                     test_accuracy_hist = np.concatenate((test_accuracy_hist, test_accuracy_list.reshape(prediction_window,1)), axis=1)
-                
-                if accuracy > best_prediction: 
-                    print(f'\nNEW BEST prediction: {accuracy:.2f}\n')
-                    best_prediction = accuracy
-                    best_model = model.state_dict()
-            
-                plt.clf()
-                for i in range(prediction_window):
-                    predictions = test_accuracy_hist[i,:]
-                    plt.plot(predictions, label=f'{i+1} min accuracy', linestyle='solid')
-                plt.plot(test_accuracy_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
-                plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
-                plt.legend()
-                plt.pause(0.1)
-
-                # actually train the model
                 work(model, train_loader, optimizer, test_every_x_epoch, mode = 0, scheduler = scheduler)
         print(f'training completed in {time.time()-start_time:.2f} seconds')
         
         print(test_accuracy_hist.shape)
         # predictions = np.mean(predictions, axis = )
         # plt.ion()
-        # for i in range(prediction_window):
-        #     predictions = test_accuracy_hist[i,:]
-        #     plt.plot(predictions, label=f'{i+1} min prediction', linestyle='solid')
-        # plt.plot(test_accuracy_hist.mean(axis=0), label=f'average prediction', linestyle='dashed')
-        # weights = np.linspace(1, 0.1, num=prediction_window)
-        # weights = weights.reshape(prediction_window,1)
-        # plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted prediction', linestyle='dotted')
-        # plt.legend()
-
+        for i in range(prediction_window):
+            predictions = test_accuracy_hist[i,:]
+            plt.plot(predictions, label=f'{i+1} min prediction', linestyle='solid')
+        plt.legend()
         print("showing?")
         plt.show()
         plt.clf()
         # plt.ioff()
-
-        lr = get_current_lr(optimizer)
 
         # Test the model
         start_time = time.time()
@@ -470,11 +424,14 @@ def main():
         #     plt.ioff()
         #     plot(raw_predictions, raw_targets, test_size)
         # print(f'prediction completed in {time.time()-start_time:.2f} seconds')
-        save_params(best_prediction, optimizer, best_model, model_path) 
+                    
+
+        torch.save(model.state_dict(), model_path)
         print('Normal exit. Model saved.')
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
-        save_params(best_prediction, optimizer, best_model, model_path)
+        torch.save(model.state_dict(), model_path)
+        print('Model saved.')
 
 if __name__ == '__main__':
     main()
