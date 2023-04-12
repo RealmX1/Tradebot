@@ -33,7 +33,7 @@ output_size = 1     # Number of output values (closing price 1~10min from now)
 prediction_window = 10
 window_size = 32 # using how much data from the past to make prediction?
 data_prep_window = window_size + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
-drop_out = 0.1
+dropout = 0.1
 
 learning_rate = 0.0001
 batch_size = 2000
@@ -60,37 +60,6 @@ np.set_printoptions(precision=4, suppress=True)
 
 
     
-class Seq2Seq(nn.Module):
-    def __init__(self, encoder, decoder, device):
-        super().__init__()
-        
-        self.encoder = encoder
-        self.decoder = decoder
-        self.device = device
-        # self.bn1 = nn.BatchNorm1d(1)
-        
-        assert encoder.hidden_size == decoder.hidden_size, \
-            "Hidden dimensions of encoder and decoder must be equal!"
-        assert encoder.num_layers == decoder.num_layers, \
-            "Encoder and decoder must have equal number of layers!"
-
-    # use teacher forcing ratio to balance between using predicted result vs. true result in generating next prediction
-    def forward(self, input, target, teacher_forcing_ratio = 0.5):
-        batch_size = input.shape[0]
-
-        hidden, cell = self.encoder(input)
-        # print("hidden.shape: ",hidden.shape)
-        # expected: ?????(batch_size, hidden_size)
-
-        outputs = torch.zeros(batch_size, prediction_window, output_size).to(self.device)
-        x = target[:,0:1,None] # x at timestamp 
-
-        for t in range (prediction_window):
-            output, hidden, cell = self.decoder(x, hidden, cell)
-            outputs[:,t:t+1,:] = output
-            x = target[:,t:t+1,None] if random.random() < teacher_forcing_ratio else output
-        
-        return outputs.squeeze(2) # note that squeeze is used since y_batch is 2d, yet y_pred is 3d. (if output size sin't 1, then y_batch will be 3d.)            
 
 
 # Define the dataset class
@@ -171,7 +140,7 @@ def get_direction_diff(x_batch,y_batch,y_pred):
 def get_return_diff(x_batch,y_batch,y_pred):
     pass
 
-def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0, scheduler = None): # mode 0: train, mode 1: test, mode 2: PLOT
+def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
     if mode == 0:
         teacher_forcing_ratio = 0.5
         model.train()
@@ -230,11 +199,14 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0, sche
                 ma_loss += 0.2*loss_val
             
             if mode == 0:
-                optimizer.zero_grad() # removing zero_grad doesn't improve training speed (unlike some claimed); need more testing
+                for optimizer in optimizers:
+                    optimizer.zero_grad() # removing zero_grad doesn't improve training speed (unlike some claimed); need more testing
                 final_loss.backward()
-                optimizer.step()
-                if scheduler is not None:
-                    scheduler.step(final_loss)
+                for optimizer in optimizers:
+                    optimizer.step()
+                if schedulers is not None:
+                    for scheduler in schedulers:
+                        scheduler.step(final_loss)
 
             total_cells, same_cells, total_cells_list,same_cells_list = get_direction_diff(x_batch, y_batch, y_pred)
             ma_predictions += total_cells
@@ -267,7 +239,7 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0, sche
         average_loss += epoch_loss
         correct_direction = ma_true_predictions / ma_predictions * 100
             
-        print(f'Epoch {epoch+1:3}/{num_epochs:3}, Loss: {epoch_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Direction: {correct_direction:.2f}%, Learning Rate: {get_current_lr(optimizer):9.10f}') 
+        print(f'Epoch {epoch+1:3}/{num_epochs:3}, Loss: {epoch_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Direction: {correct_direction:.2f}%, Encocder Learning Rate: {get_current_lr(optimizers[0]):9.10f}, Decoder Learning Rate: {get_current_lr(optimizers[1]):9.10f}') 
         
     print(f'completed in {time.time()-start_time:.2f} seconds')
     average_loss /= num_epochs
@@ -297,11 +269,13 @@ def get_current_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def save_params(best_prediction, optimizer, best_model, model_path):
+def save_params(best_prediction, optimizers, best_model, model_path):
     print("saving params...")
-    lr = get_current_lr(optimizer)
+
+    encoder_lr = get_current_lr(optimizers[0])
+    decoder_lr = get_current_lr(optimizers[1])
     with open('training_param_log.json', 'w') as f:
-        json.dump({'learning_rate': lr, 'best_prediction': best_prediction}, f)
+        json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
     print("saving model...")
     torch.save(best_model, model_path)
     print("done.")
@@ -314,7 +288,7 @@ def main():
     # df = pd.read_csv("data/bar_set_huge_20200101_20230412_BABA_indicator.csv", index_col = ['symbols', 'timestamps'])
     df = pd.read_csv("data/baba.csv", index_col = ['symbols', 'timestamps'])
     cwd = os.getcwd()
-    model_path = cwd+"/lstm_updown_S2S_bidirectional.pt"
+    model_path = cwd+"/lstm_updown_S2S_non_bidirectional.pt"
     print("data loaded in ", time.time()-start_time, " seconds")
     
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
@@ -373,20 +347,20 @@ def main():
 
     print("loading model")
     start_time = time.time()
-    encoder = Encoder(input_size, hidden_size, num_layers, drop_out).to(device)
-    decoder = Decoder(output_size, hidden_size, num_layers, output_size, drop_out).to(device)
-    model = Seq2Seq(encoder, decoder, device).to(device)
+    model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
     if os.path.exists(model_path):
         print("Loading existing model")
         model.load_state_dict(torch.load(model_path))
         with open('training_param_log.json', 'r') as f:
             saved_data = json.load(f)
-            lr = saved_data['learning_rate']
+            encoder_lr = saved_data['encoder_learning_rate']
+            decoder_lr = saved_data['decoder_learning_rate']
             best_prediction = saved_data['best_prediction']
             start_best_prediction = best_prediction
     else:
         print("No existing model")
-        lr = learning_rate
+        encoder_lr = learning_rate
+        decoder_lr = learning_rate
         best_prediction = 0.0
         start_best_prediction = best_prediction
     best_model = model.state_dict()
@@ -396,9 +370,13 @@ def main():
 
 
     # optimizer = SGD(model.parameters(), lr=learning_rate)
-    optimizer = AdamW(model.parameters(),weight_decay=1e-5, lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.98, patience=50, threshold=0.0001)
+    encoder_optimizer = AdamW(model.encoder.parameters(),weight_decay=1e-5, lr=encoder_lr)
+    decoder_optimizer = AdamW(model.decoder.parameters(),weight_decay=1e-5, lr=decoder_lr)
+    encoder_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(encoder_optimizer, mode='min', factor=0.98, patience=20, threshold=0.0001)
+    decoder_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.98, patience=20, threshold=0.0001)
 
+    optimizers = [encoder_optimizer, decoder_optimizer]
+    schedulers = [encoder_scheduler, decoder_scheduler]
     
 
     try:
@@ -413,7 +391,7 @@ def main():
         for epoch in range(num_epochs):
             print(f'Epoch {epoch+1}/{num_epochs}')
             if test_every_x_epoch and epoch % test_every_x_epoch == 0:
-                test_accuracy_list, average_loss = work(model, test_loader, optimizer, num_epochs = 1, mode = 1)
+                test_accuracy_list, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
                 
                 accuracy = test_accuracy_list.reshape(prediction_window,1)*weights
                 accuracy = accuracy.sum()/np.sum(weights)
@@ -439,7 +417,7 @@ def main():
                 plt.pause(0.1)
 
                 # actually train the model
-                work(model, train_loader, optimizer, test_every_x_epoch, mode = 0, scheduler = scheduler)
+                work(model, train_loader, optimizers, test_every_x_epoch, mode = 0, schedulers = schedulers)
         print(f'training completed in {time.time()-start_time:.2f} seconds')
         
         print("\n\n")
@@ -466,13 +444,15 @@ def main():
         plt.clf()
         # plt.ioff()
 
-        lr = get_current_lr(optimizer)
+        encoder_lr = get_current_lr(encoder_optimizer)
+        decoder_lr = get_current_lr(decoder_optimizer)
+        lrs = [encoder_lr, decoder_lr]
 
         # Test the model
         start_time = time.time()
         print("Testing model")
         with torch.no_grad():
-            work(model, test_loader, optimizer, 1, mode = 1)
+            work(model, test_loader, optimizers, 1, mode = 1)
         print(f'testing completed in {time.time()-start_time:.2f} seconds')
 
 
@@ -485,11 +465,11 @@ def main():
         #     plt.ioff()
         #     plot(raw_predictions, raw_targets, test_size)
         # print(f'prediction completed in {time.time()-start_time:.2f} seconds')
-        save_params(best_prediction, optimizer, best_model, model_path) 
+        save_params(best_prediction, optimizers, best_model, model_path) 
         print('Normal exit. Model saved.')
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
-        save_params(best_prediction, optimizer, best_model, model_path)
+        save_params(best_prediction, optimizers, best_model, model_path)
 
 if __name__ == '__main__':
     main()

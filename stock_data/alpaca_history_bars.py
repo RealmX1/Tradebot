@@ -29,8 +29,8 @@ from alpaca.data.models import BarSet, QuoteSet, TradeSet
 
 
 pd.set_option('display.max_rows', None)
-API_KEY = "PKGNSI31E7XI9ACCSSVZ"
-SECRET_KEY =  "yhupKUckY5vAbP7UOrkB26v4X4Gb9cdffo39V4OM"
+API_KEY = "AKOZFEX5F94X2SD7HQOQ"
+SECRET_KEY =  "3aNqjtbPlkJv09NicPgYFXC3KUhNOR16JGGdiLet"
 data_source = DataFeed.IEX
 
 stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)

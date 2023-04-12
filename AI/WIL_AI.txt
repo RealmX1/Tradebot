@@ -1,1 +1,0 @@
-This text records What I've learned about constructing AI model during this project.
