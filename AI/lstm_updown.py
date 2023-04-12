@@ -28,9 +28,9 @@ close_idx = 3 # after removing time column
 
 # Define hyperparameters
 feature_num = input_size = 20 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size = 20    # Number of neurons in the hidden layer of the LSTM
+hidden_size = 1000    # Number of neurons in the hidden layer of the LSTM
 
-num_layers  = 5     # Number of layers in the LSTM
+num_layers  = 2     # Number of layers in the LSTM
 output_size = 1     # Number of output values (closing price 1~10min from now)
 prediction_window = 10
 window_size = 32 # using how much data from the past to make prediction?
@@ -42,7 +42,7 @@ batch_size = 1024
 
 train_percent = 0.6
 
-num_epochs = 50
+num_epochs = 10
 
 
 
@@ -195,6 +195,8 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
     total_predictions = np.zeros(prediction_window) # one elemnt for each minute of prediction window
     total_true_predictions = np.zeros(prediction_window)
 
+    average_loss = 0
+
     inverse_mask = torch.linspace(1, 11, 10)
     # print ("inverse_mask.shape: ", inverse_mask.shape)
     mask = torch.ones((prediction_window,))
@@ -204,7 +206,7 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
     # print("mask.shape: ", mask.shape)
     
     for epoch in range(num_epochs):
-        total_loss = 0
+        epoch_loss = 0
         ma_predictions *= 0.9
         ma_true_predictions *= 0.9
         i=0
@@ -255,19 +257,25 @@ def work(model, train_loader, optimizer, num_epochs = num_epochs, mode = 0): # m
                     # targets = torch.cat((targets, target), dim=0)
                     raw_targets = torch.cat((raw_targets, raw_target), dim=0)
             
-            total_loss += loss.item()
-        total_loss = total_loss / (i+1)
+            epoch_loss += loss.item()
+        epoch_loss /= (i+1)
+        average_loss += epoch_loss
         correct_direction = ma_true_predictions / ma_predictions * 100
 
         # scheduler.step()
-        print(f'Epoch {epoch+1:3}/{num_epochs:3}, Loss: {total_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Direction: {correct_direction:.2f}%') # Learning Rate: {scheduler.get_last_lr()[0]:9.6f}
+        print(f'Epoch {epoch+1:3}/{num_epochs:3}, Loss: {epoch_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Direction: {correct_direction:.2f}%') # Learning Rate: {scheduler.get_last_lr()[0]:9.6f}
+        
     print(f'completed in {time.time()-start_time:.2f} seconds')
-
+    average_loss /= num_epochs
     accuracy_list = total_true_predictions / total_predictions * 100
     print("Accuracy List: ", accuracy_list)
 
     if mode == 2:
         return None,raw_predictions.cpu().numpy(), None, raw_targets.cpu().numpy()# return predictions.cpu().numpy(), raw_predictions.cpu().numpy(), targets.cpu().numpy(), raw_targets.cpu().numpy()
+    elif mode == 1:
+        return accuracy_list, average_loss
+    else:
+        return average_loss
 
 def plot(predictions, targets, test_size):
     # Plot the results
@@ -285,7 +293,7 @@ def main():
     print("loading data")
     # df = pd.read_csv('nvda_1min_complex_fixed.csv')
     # df = pd.read_csv("data/bar_set_huge_20180101_20230410_GOOG_indicator.csv", index_col = ['symbols', 'timestamps'])
-    df = pd.read_csv("data/bar_set_test_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
+    df = pd.read_csv("data/bar_set_huge_20180101_20230410_AAPL_indicator.csv", index_col = ['symbols', 'timestamps'])
     
     print("data loaded in ", time.time()-start_time, " seconds")
     
@@ -354,37 +362,65 @@ def main():
 
     # optimizer = SGD(model.parameters(), lr=learning_rate)
     optimizer = AdamW(model.parameters(),weight_decay=1e-5, lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=10, threshold=0.00005)
 
     
 
     try:
         # Train the model
+        start_time = time.time()
         print("Training model")
-        work(model, train_loader, optimizer, num_epochs, mode = 0)
-        print()
+        test_every_x_epoch = 1
+        test_accuracy_hist = np.zeros((prediction_window,1))
+        for epoch in range(num_epochs):
+            print(f'Epoch {epoch+1}/{num_epochs}')
+            if test_every_x_epoch and epoch % test_every_x_epoch == 0:
+                test_accuracy_list, average_loss = work(model, test_loader, optimizer, num_epochs = 1, mode = 1)
+                if epoch == 0:
+                    test_accuracy_hist[:,0] = test_accuracy_list
+                else:
+                    test_accuracy_hist = np.concatenate((test_accuracy_hist, test_accuracy_list.reshape(prediction_window,1)), axis=1)
+                # scheduler.step(average_loss)
+                work(model, train_loader, optimizer, test_every_x_epoch, mode = 0)
+        print(f'training completed in {time.time()-start_time:.2f} seconds')
+        
+        print(test_accuracy_hist.shape)
+        # predictions = np.mean(predictions, axis = )
+        # plt.ion()
+        for i in range(prediction_window):
+            predictions = test_accuracy_hist[i,:]
+            plt.plot(predictions, label=f'{i+1} min prediction', linestyle='solid')
+        plt.legend()
+        print("showing?")
+        plt.show()
+        plt.clf()
+        # plt.ioff()
 
         # Test the model
+        start_time = time.time()
         print("Testing model")
         with torch.no_grad():
             work(model, test_loader, optimizer, 1, mode = 1)
-        print()
+        print(f'testing completed in {time.time()-start_time:.2f} seconds')
 
 
         # Make predictions
+        start_time = time.time()
         print("Making Prediction")
         with torch.no_grad():
             predictions, raw_predictions, targets, raw_targets = work(model, total_loader, optimizer, 1, mode = 2)
             # plot(predictions, targets, test_size)
+            plt.ioff()
             plot(raw_predictions, raw_targets, test_size)
-        print()
+        print(f'prediction completed in {time.time()-start_time:.2f} seconds')
                     
 
         torch.save(model.state_dict(), model_path)
         print('Normal exit. Model saved.')
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
-        torch.save(model.state_dict(), model_path)
-        print('Model saved.')
+        # torch.save(model.state_dict(), model_path)
+        print('Model not saved.')
 
 if __name__ == '__main__':
     main()

@@ -19,8 +19,33 @@ Accuracy List:  [60.4903 61.7637 62.5848 60.7085 59.7287 58.9789 58.8044 58.6695
  58.1895]
 
 80 epoch (Not overfit)
-Testing model
 Epoch   1/  1, Loss:  0.0268751, Time per epoch: 0.33 seconds, Correct Direction: 63.94%
 completed in 0.33 seconds
 Accuracy List:  [76.556  69.3959 65.9169 63.3385 62.9101 61.6962 60.9901 60.0897 59.6057
  58.8758]
+
+100 epoch (Not overfit, but training accuracy at 72%)
+Epoch   1/  1, Loss:  0.0261340, Time per epoch: 0.30 seconds, Correct Direction: 65.13%
+completed in 0.30 seconds
+Accuracy List:  [83.0061 70.3955 66.2144 64.1319 63.2711 62.3309 61.4741 60.5498 60.2285
+ 59.7168]
+
+150 epoch (start to overfit? Training at 76%)
+Epoch   1/  1, Loss:  0.0254122, Time per epoch: 0.32 seconds, Correct Direction: 64.83%
+completed in 0.32 seconds
+Accuracy List:  [80.8878 69.3681 66.504  64.2271 63.4496 62.0453 61.1805 60.5974 60.2444
+ 59.8199]
+
+200 epoch (OVERFIT Confirmed.)
+Epoch   1/  1, Loss:  0.0255120, Time per epoch: 0.31 seconds, Correct Direction: 63.76%
+completed in 0.31 seconds
+Accuracy List:  [78.0793 67.7099 64.8181 63.0053 62.6205 61.5375 60.6728 60.1412 59.7168
+ 59.336 ]
+
+
+
+
+bidirectional:
+it trains much slower
+50 epoch
+Epoch

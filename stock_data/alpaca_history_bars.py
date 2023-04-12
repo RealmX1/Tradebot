@@ -198,22 +198,14 @@ def main():
     symbol = ["AAPL","MSFT","TSLA","GOOG","SPY"]
     symbol_num = len(symbol)
     timeframe = TimeFrame.Minute
-    start = datetime(2023,4,10)
+    start = datetime(2023,1,1)
+    end = None #datetime(2023,4,12)
     limit = None
 
-    request = StockBarsRequest(
-        symbol_or_symbols="BABA", timeframe=timeframe, start=start, limit=limit, adjustment="all", feed = data_source
-    )
-
-    print("Start request")
-    bar_set = stock_client.get_stock_bars(request_params=request)
-    print("End request")
-    print(bar_set.df)
-    # start = datetime(2023,1,1)
-    # end = datetime(2023,4,10)
     # now we are using adjusted dataset.
-    # time_str = "20230101_20230410" # "20200101_20210101" # "20230403_20230404_test" "20210101_20220727" "20220727_20230406" 
-    
+    time_str = "20230101_20230412" # "20200101_20210101" # "20230403_20230404_test" "20210101_20220727" "20220727_20230406" 
+    get_and_process_bars(symbol, timeframe, start, end, limit, time_str, download=True)
+
     # start_time = time.time()
     # print("Start getting multiple bars file")
     # df_strs = []

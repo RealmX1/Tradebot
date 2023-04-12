@@ -56,26 +56,30 @@ import numpy as np
 
 
 
-import torch
-import time
+# import torch
+# import time
 
-# Create some dummy data
-target = torch.randn(100, 10, 5)
+# # Create some dummy data
+# target = torch.randn(100, 10, 5)
 
-# Test approach 1: using slicing and indexing
-start_time = time.time()
-x1 = target[:, 0:1, :]
-end_time = time.time()
-print("Approach 1: %.8f seconds" % (end_time - start_time))
+# # Test approach 1: using slicing and indexing
+# start_time = time.time()
+# x1 = target[:, 0:1, :]
+# end_time = time.time()
+# print("Approach 1: %.8f seconds" % (end_time - start_time))
 
-# Test approach 2: using unsqueeze
-start_time = time.time()
-x2 = target[:, 0, :].unsqueeze(1)
-end_time = time.time()
-print("Approach 2: %.8f seconds" % (end_time - start_time))
+# # Test approach 2: using unsqueeze
+# start_time = time.time()
+# x2 = target[:, 0, :].unsqueeze(1)
+# end_time = time.time()
+# print("Approach 2: %.8f seconds" % (end_time - start_time))
 
-'''
-TEST RESULT: SLICING IS FASTER
-Approach 1: 0.00180817 seconds
-Approach 2: 0.00305629 seconds
-'''
+# '''
+# TEST RESULT: SLICING IS FASTER
+# Approach 1: 0.00180817 seconds
+# Approach 2: 0.00305629 seconds
+# '''
+
+n = 5
+data = np.random.rand(10, n)
+print(data)
