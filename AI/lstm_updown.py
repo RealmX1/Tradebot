@@ -18,9 +18,6 @@ import cProfile
 # import custom files
 from S2S import *
 
-cwd = os.getcwd()
-model_path = cwd+"/lstm_updown_S2S_bidirectional.pt"
-
 # Load the CSV file into a Pandas dataframe
 # time,open,high,low,close,Volume,Volume MA
 
@@ -28,7 +25,7 @@ close_idx = 3 # after removing time column
 
 
 # Define hyperparameters
-feature_num = input_size = 20 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+feature_num = input_size = 22 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
 hidden_size = 50    # Number of neurons in the hidden layer of the LSTM
 
 num_layers  = 2     # Number of layers in the LSTM
@@ -314,8 +311,10 @@ def main():
     print("loading data")
     # df = pd.read_csv('nvda_1min_complex_fixed.csv')
     # df = pd.read_csv("data/bar_set_huge_20180101_20230410_GOOG_indicator.csv", index_col = ['symbols', 'timestamps'])
-    df = pd.read_csv("data/bar_set_huge_20200101_20230412_BABA_indicator.csv", index_col = ['symbols', 'timestamps'])
-    
+    # df = pd.read_csv("data/bar_set_huge_20200101_20230412_BABA_indicator.csv", index_col = ['symbols', 'timestamps'])
+    df = pd.read_csv("data/baba.csv", index_col = ['symbols', 'timestamps'])
+    cwd = os.getcwd()
+    model_path = cwd+"/lstm_updown_S2S_bidirectional.pt"
     print("data loaded in ", time.time()-start_time, " seconds")
     
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
@@ -333,6 +332,8 @@ def main():
     data_mean[17] = 30.171159 # adx_mean
     data_mean[18] = 32.843816 # dmp_mean
     data_mean[19] = 32.276572 # dmn_mean
+    data_mean[20] = 0.5 # edt_scaled
+    data_mean[21] = 0.5 # is_core_time
     # how should mean for adx,dmp,and dmn be set?
     # print(data_mean)
     data_std[0:4] = data_std[6:13] = 1 #data_std[3] # use close std for these columns
@@ -341,6 +342,8 @@ def main():
     data_std[17] = 16.460923 # adx_std
     data_std[18] = 18.971341 # dmp_std
     data_std[19] = 18.399032 # dmn_std
+    data_std[20] = 1.25 # edt_scaled
+    data_std[21] = 1 # is_core_time
     # how should std for adx,dmp,and dmn be set?
     # print(data_std)
 
@@ -376,15 +379,18 @@ def main():
     if os.path.exists(model_path):
         print("Loading existing model")
         model.load_state_dict(torch.load(model_path))
-        best_model = model.state_dict()
         with open('training_param_log.json', 'r') as f:
             saved_data = json.load(f)
             lr = saved_data['learning_rate']
             best_prediction = saved_data['best_prediction']
+            start_best_prediction = best_prediction
     else:
         print("No existing model")
         lr = learning_rate
         best_prediction = 0.0
+        start_best_prediction = best_prediction
+    best_model = model.state_dict()
+
     print(model)
     print(f'model loading completed in {time.time()-start_time:.2f} seconds')
 
@@ -409,7 +415,8 @@ def main():
             if test_every_x_epoch and epoch % test_every_x_epoch == 0:
                 test_accuracy_list, average_loss = work(model, test_loader, optimizer, num_epochs = 1, mode = 1)
                 
-                accuracy = np.mean(test_accuracy_list)
+                accuracy = test_accuracy_list.reshape(prediction_window,1)*weights
+                accuracy = accuracy.sum()/np.sum(weights)
 
                 if epoch == 0:
                     test_accuracy_hist[:,0] = test_accuracy_list
@@ -417,7 +424,7 @@ def main():
                     test_accuracy_hist = np.concatenate((test_accuracy_hist, test_accuracy_list.reshape(prediction_window,1)), axis=1)
                 
                 if accuracy > best_prediction: 
-                    print(f'\nNEW BEST prediction: {accuracy:.2f}\n')
+                    print(f'\nNEW BEST prediction: {accuracy:.2f}%\n')
                     best_prediction = accuracy
                     best_model = model.state_dict()
             
@@ -427,13 +434,21 @@ def main():
                     plt.plot(predictions, label=f'{i+1} min accuracy', linestyle='solid')
                 plt.plot(test_accuracy_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
                 plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
-                plt.legend()
+                if epoch == 0:
+                    plt.legend()
                 plt.pause(0.1)
 
                 # actually train the model
                 work(model, train_loader, optimizer, test_every_x_epoch, mode = 0, scheduler = scheduler)
         print(f'training completed in {time.time()-start_time:.2f} seconds')
         
+        print("\n\n")
+        if best_prediction > start_best_prediction:
+            print(f'improved from {start_best_prediction:.2f}% to {best_prediction:.2f}%')
+        else:
+            print(f'NO IMPROVEMENET from {start_best_prediction:.2f}%')
+        print("\n\n")
+
         print(test_accuracy_hist.shape)
         # predictions = np.mean(predictions, axis = )
         # plt.ion()
