@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 
+
+API_KEY = "AKOZFEX5F94X2SD7HQOQ"
+SECRET_KEY =  "3aNqjtbPlkJv09NicPgYFXC3KUhNOR16JGGdiLet"
 # # sample data
 # df = pd.DataFrame({
 #     'symbol': ['A', 'A', 'B', 'B'],
@@ -23,7 +26,10 @@ from sklearn.preprocessing import StandardScaler
 
 
 
-df = pd.read_csv('data/csv/bar_set_huge_20180101_20230410.csv', index_col = ['symbols', 'timestamps'])
+# df = pd.read_csv('data/csv/bar_set_20230401_20230403_test.csv', index_col = ['symbols'])
+# print(df['timestamps'])
+# print(df['timestamps'][0])
+# print(type(df['timestamps'][0]))
 # print(df.head(10))
 # df_head = df.head(10)
 
@@ -66,31 +72,91 @@ df = pd.read_csv('data/csv/bar_set_huge_20180101_20230410.csv', index_col = ['sy
 # DMN_14    18.399032
 # '''
 
-df = pd.read_csv('data/csv/bar_set_test_AAPL_indicator.csv', index_col = ['symbols', 'timestamps'])
-import pandas as pd
+# df = pd.read_csv('data/csv/bar_set_test_AAPL_indicator.csv', index_col = ['symbols', 'timestamps'])
+# import pandas as pd
+# import pytz
+# from dateutil.parser import parse
+
+# # First, make sure the index is timezone aware (in UTC)
+# df['timestamps_col'] = pd.to_datetime(df.index.get_level_values(1))
+# # df['timestamps_col'] = pd.to_datetime(df['timestamps_col'], utc=True)
+# # print(df.head(5))
+# # print(df.index.get_level_values(1))
+# # Set the timestamps_col column as the index of the DataFrame
+
+# # Convert the index to Eastern timezone
+# df['edt_time'] = df['timestamps_col'].dt.tz_convert('US/Eastern')
+# # print(df.head(5))
+
+# # Extract the time of day (in hours) as a new column
+# df['edt_hour'] = df['edt_time'].dt.hour + df['edt_time'].dt.minute / 60
+# # print(df.head(5))
+
+# # Create a new column with the time of day scaled from 0.0 (9:30 am) to 1.0 (1:00 pm)
+# start_hour, end_hour = 9.5, 16.0
+# df['edt_scaled'] = (df['edt_hour'] - start_hour) / (end_hour - start_hour)
+# df.drop(columns=['timestamps_col', 'edt_time', 'edt_hour'], inplace=True)
+# df['is_core_time'] = ((df['edt_scaled'] >= 0) & (df['edt_scaled'] <= 1)).astype(int)
+# print(df.head(5))
+
+# df.to_csv('data/csv/bar_set_test_AAPL_indicator_edt.csv')
+
+
+##############################################
+import scipy as sp
+import pickle
+import time
+import copy
+
+
+from datetime import datetime, timedelta
+from typing import Dict
+
+from alpaca.data import Trade, Snapshot, Quote, Bar
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import (
+    StockBarsRequest,
+    StockQuotesRequest,
+    StockTradesRequest,
+    StockLatestTradeRequest,
+    StockLatestQuoteRequest,
+    StockSnapshotRequest,
+    StockLatestBarRequest,
+)
+from alpaca.data.timeframe import TimeFrame
+from alpaca.data.enums import Exchange, DataFeed
+from alpaca.data.models import BarSet, QuoteSet, TradeSet
 import pytz
-from dateutil.parser import parse
 
-# First, make sure the index is timezone aware (in UTC)
-df['timestamps_col'] = pd.to_datetime(df.index.get_level_values(1))
-# df['timestamps_col'] = pd.to_datetime(df['timestamps_col'], utc=True)
-# print(df.head(5))
-# print(df.index.get_level_values(1))
-# Set the timestamps_col column as the index of the DataFrame
+stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
 
-# Convert the index to Eastern timezone
-df['edt_time'] = df['timestamps_col'].dt.tz_convert('US/Eastern')
-# print(df.head(5))
+def get_bars(symbol_or_symbols, timeframe, start, end, limit):
+    # Test single symbol request
+    
+    request = StockBarsRequest(
+        symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit, adjustment="all", feed = DataFeed.IEX
+    )
 
-# Extract the time of day (in hours) as a new column
-df['edt_hour'] = df['edt_time'].dt.hour + df['edt_time'].dt.minute / 60
-# print(df.head(5))
+    print("Start request")
+    bar_set = stock_client.get_stock_bars(request_params=request)
+    print("End request")
 
-# Create a new column with the time of day scaled from 0.0 (9:30 am) to 1.0 (1:00 pm)
-start_hour, end_hour = 9.5, 16.0
-df['edt_scaled'] = (df['edt_hour'] - start_hour) / (end_hour - start_hour)
-df.drop(columns=['timestamps_col', 'edt_time', 'edt_hour'], inplace=True)
-df['is_core_time'] = ((df['edt_scaled'] >= 0) & (df['edt_scaled'] <= 1)).astype(int)
-print(df.head(5))
+    return bar_set
 
-df.to_csv('data/csv/bar_set_test_AAPL_indicator_edt.csv')
+symbol = 'BABA'
+timeframe = TimeFrame.Minute
+start = datetime(2022, 4, 13)
+end = None
+limit = None
+
+bar_set = get_bars(symbol, timeframe, start, end, limit)
+df = bar_set.df
+
+print(df.index.levels[1].dtype)
+df.to_csv('data/csv/today.csv')
+df = pd.read_csv('data/csv/today.csv')
+print(df)
+edt = pytz.timezone('US/Eastern')
+now = datetime.now(edt)
+print(type(now))
+print(now)

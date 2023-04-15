@@ -14,9 +14,11 @@ import numpy as np
 import time
 import cProfile
 
+from tst import *
+
 
 # import custom files
-from S2S import *
+# from transformer import *
 
 # Load the CSV file into a Pandas dataframe
 # time,open,high,low,close,Volume,Volume MA
@@ -28,18 +30,16 @@ close_idx = 3 # after removing time column
 feature_num = input_size = 22 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
 hidden_size = 50    # Number of neurons in the hidden layer of the LSTM
 
-num_layers  = 4     # Number of layers in the LSTM
+# num_layers  = 2     # Number of layers in the LSTM
 output_size = 1     # Number of output values (closing price 1~10min from now)
-prediction_window = 5
-window_size = 60 # using how much data from the past to make prediction?
-data_prep_window = window_size + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
-dropout = 0.1
+prediction_window = 1
+hist_window_size = 32 # using how much data from the past to make prediction?
+data_prep_window = hist_window_size + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
 
-learning_rate = 0.0001
-batch_size = 2000
-
+learning_rate = 0.001
+batch_size = 4096
 train_percent = 0.9
-num_epochs = 0
+num_epochs = 50
 
 
 
@@ -47,7 +47,7 @@ num_epochs = 0
 
 # no_norm_num = 4 # the last four column of the data are 0s and 1s, no need to normalize them (and normalization might cause 0 division problem)
 
-loss_fn = nn.MSELoss(reduction = "none")
+loss_fn = nn.MSELoss() #(reduction = "none")
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -70,8 +70,8 @@ class NvidiaStockDataset(Dataset):
 
         self.x_raw = data[:,:-prediction_window,:] # slicing off the last entry of input
         # print("x.shape: ",self.x.shape)
-        # x.shape: (data_num, window_size, feature_num)
-        self.y_raw = data[:,-prediction_window:,close_idx] 
+        # x.shape: (data_num, hist_window_size, feature_num)
+        self.y_raw = data[:,-prediction_window:,close_idx]
         tmp = self.x_raw[:,-1,close_idx:close_idx+1]
         self.y = (self.y_raw - tmp)/tmp * 100 # don't need to normalize y; this is the best way; present target as the percentage growth with repsect to last close price.
         # print("y.shape: ",self.y.shape)
@@ -114,7 +114,7 @@ def sample_z_continuous(arr, z):
     return result
 
 
-def get_direction_diff(x_batch,y_batch,y_pred):
+def get_direction_diff(y_batch,y_pred):
     # true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
     true_direction = np.clip(y_batch.cpu(),0,np.inf) # this turns negative to 0, positive to 1
     true_direction[true_direction != 0] = 1
@@ -175,13 +175,15 @@ def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, sch
         for i, (x_batch, y_batch, x_raw_close) in enumerate(train_loader):
             ma_loss *= 0.8
             # print("x_batch[0,:,:]: ", x_batch[0,:,:])
-            # x_batch   [N, window_size, feature_num]
+            # x_batch   [N, hist_window_size, feature_num]
             # y_batch & output  [N, prediction_window]
             x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
             # print("one input: ", x_batch[0:,:,:])
             y_batch = y_batch.float().to(device)
             
-            y_pred = model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
+            y_pred = model(x_batch.transpose(2,1).contiguous())
+            # if mode == 0: y_pred = model(x_batch)#, teacher_forcing_ratio) # [N, prediction_window]
+            # else: y_pred = model.predict(x_batch,prediction_window)
             # print("y_pred.shape: ", y_pred.shape)
             # print("y_batch.shape: ", y_pred.shape)
             # print("y_batch: ", y_batch[0,:])
@@ -208,7 +210,7 @@ def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, sch
                     for scheduler in schedulers:
                         scheduler.step(final_loss)
 
-            total_cells, same_cells, total_cells_list,same_cells_list = get_direction_diff(x_batch, y_batch, y_pred)
+            total_cells, same_cells, total_cells_list,same_cells_list = get_direction_diff(y_batch, y_pred)
             ma_predictions += total_cells
             ma_true_predictions += same_cells
             total_predictions += total_cells_list
@@ -239,7 +241,7 @@ def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, sch
         average_loss += epoch_loss
         correct_direction = ma_true_predictions / ma_predictions * 100
             
-        print(f'Epoch {epoch+1:3}/{num_epochs:3}, Loss: {epoch_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Direction: {correct_direction:.2f}%, Encocder Learning Rate: {get_current_lr(optimizers[0]):9.10f}, Decoder Learning Rate: {get_current_lr(optimizers[1]):9.10f}') 
+        print(f'Epoch {epoch+1:3}/{num_epochs:3}, Loss: {epoch_loss:10.7f}, Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, Correct Direction: {correct_direction:.2f}%, Encocder Learning Rate: {get_current_lr(optimizers[0]):9.8f}') #, Decoder Learning Rate: {get_current_lr(optimizers[1]):9.8f}') 
         
     print(f'completed in {time.time()-start_time:.2f} seconds')
     average_loss /= num_epochs
@@ -273,9 +275,10 @@ def save_params(best_prediction, optimizers, best_model, model_path):
     print("saving params...")
 
     encoder_lr = get_current_lr(optimizers[0])
-    decoder_lr = get_current_lr(optimizers[1])
-    with open('training_param_log.json', 'w') as f:
-        json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
+    # decoder_lr = get_current_lr(optimizers[1])
+    with open('TST_training_param_log.json', 'w') as f:
+        json.dump({'encoder_learning_rate': encoder_lr, 'best_prediction': best_prediction}, f)
+        # json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
     print("saving model...")
     torch.save(best_model, model_path)
     print("done.")
@@ -286,10 +289,9 @@ def main():
     # df = pd.read_csv('nvda_1min_complex_fixed.csv')
     # df = pd.read_csv("data/bar_set_huge_20180101_20230410_GOOG_indicator.csv", index_col = ['symbols', 'timestamps'])
     # df = pd.read_csv("data/bar_set_huge_20200101_20230412_BABA_indicator.csv", index_col = ['symbols', 'timestamps'])
-    data_path = "data/baba.csv"
-    df = pd.read_csv(data_path, index_col = ['symbols', 'timestamps'])
+    df = pd.read_csv("data/baba.csv", index_col = ['symbols', 'timestamps'])
     cwd = os.getcwd()
-    model_path = 'lstm_updown_S2S_attention.pt'
+    model_path = "TST_updown.pt"
     print("data loaded in ", time.time()-start_time, " seconds")
     
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
@@ -348,20 +350,40 @@ def main():
 
     print("loading model")
     start_time = time.time()
-    model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    if os.path.exists('last'+model_path):
+    max_seq_len = 32
+
+    d_model = 32
+    n_heads = 4
+    d_k = d_v = None # if None --> d_model // n_heads
+    d_ff = 32
+    dropout = 0.1
+    activation = "gelu"
+    n_layers = 3
+    fc_dropout = 0.1
+    kwargs = {}
+
+
+
+    model = TST(c_in=feature_num, c_out=prediction_window, seq_len = hist_window_size, max_seq_len=max_seq_len, d_model=d_model, n_heads=n_heads,
+            d_k=d_k, d_v=d_v, d_ff=d_ff, dropout=dropout, activation=activation, n_layers=n_layers,
+            fc_dropout=fc_dropout, device=device, **kwargs).to(device)
+    # note that for tst we need to test 2 prediction schemes: 
+    # One with one timestep prediction that generates prediction for all input features; 
+    # the other is multi timestep prediction that only geneartes close price prediction.
+    
+    if os.path.exists(model_path):
         print("Loading existing model")
-        model.load_state_dict(torch.load('last'+model_path))
-        with open('training_param_log.json', 'r') as f:
+        model.load_state_dict(torch.load(model_path))
+        with open('TST_training_param_log.json', 'r') as f:
             saved_data = json.load(f)
             encoder_lr = saved_data['encoder_learning_rate']
-            decoder_lr = saved_data['decoder_learning_rate']
+            # decoder_lr = saved_data['decoder_learning_rate']
             best_prediction = saved_data['best_prediction']
             start_best_prediction = best_prediction
     else:
         print("No existing model")
         encoder_lr = learning_rate
-        decoder_lr = learning_rate
+        # decoder_lr = learning_rate
         best_prediction = 0.0
         start_best_prediction = best_prediction
     best_model = model.state_dict()
@@ -372,12 +394,12 @@ def main():
 
     # optimizer = SGD(model.parameters(), lr=learning_rate)
     encoder_optimizer = AdamW(model.encoder.parameters(),weight_decay=1e-5, lr=encoder_lr)
-    decoder_optimizer = AdamW(model.decoder.parameters(),weight_decay=1e-5, lr=decoder_lr)
+    # decoder_optimizer = AdamW(model.decoder.parameters(),weight_decay=1e-5, lr=decoder_lr)
     encoder_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(encoder_optimizer, mode='min', factor=0.98, patience=20, threshold=0.0001)
-    decoder_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.98, patience=20, threshold=0.0001)
+    # decoder_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.98, patience=20, threshold=0.0001)
 
-    optimizers = [encoder_optimizer, decoder_optimizer]
-    schedulers = [encoder_scheduler, decoder_scheduler]
+    optimizers = [encoder_optimizer] #[encoder_optimizer, decoder_optimizer]
+    schedulers = [encoder_scheduler] #[encoder_scheduler, decoder_scheduler]
     
 
     try:
@@ -389,13 +411,14 @@ def main():
         weights = np.linspace(1, 0.1, num=prediction_window)
         weights = weights.reshape(prediction_window,1)
 
+
+        plt.ion()
         for epoch in range(num_epochs):
             print(f'Epoch {epoch+1}/{num_epochs}')
             if test_every_x_epoch and epoch % test_every_x_epoch == 0:
                 test_accuracy_list, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
                 
-                accuracy = test_accuracy_list.reshape(prediction_window,1)*weights
-                accuracy = accuracy.sum()/np.sum(weights)
+                accuracy = test_accuracy_list.mean()
 
                 if epoch == 0:
                     test_accuracy_hist[:,0] = test_accuracy_list
@@ -415,7 +438,7 @@ def main():
                 plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
                 if epoch == 0:
                     plt.legend()
-                plt.pause(0.1)
+                plt.pause(0.15)
 
                 # actually train the model
                 work(model, train_loader, optimizers, test_every_x_epoch, mode = 0, schedulers = schedulers)
@@ -446,8 +469,8 @@ def main():
         # plt.ioff()
 
         encoder_lr = get_current_lr(encoder_optimizer)
-        decoder_lr = get_current_lr(decoder_optimizer)
-        lrs = [encoder_lr, decoder_lr]
+        # decoder_lr = get_current_lr(decoder_optimizer)
+        lrs = [encoder_lr] #[encoder_lr, decoder_lr]
 
         # Test the model
         start_time = time.time()
@@ -472,7 +495,7 @@ def main():
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
         save_params(best_prediction, optimizers, best_model, model_path)
-
+        torch.save(model, 'last'+model_path)
 if __name__ == '__main__':
     main()
     # cProfile.run('main()') # this shows execution time of each function. Might be useful for debugging & accelerating in detail.

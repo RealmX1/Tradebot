@@ -14,46 +14,91 @@ SECRET_KEY =  "3aNqjtbPlkJv09NicPgYFXC3KUhNOR16JGGdiLet"
 # wss_client.subscribe_quotes(quote_data_handler, "SPY")
 
 # wss_client.run()
-
+import pandas as pd
 import asyncio
 import threading
 from alpaca.data.live import StockDataStream, CryptoDataStream
 from alpaca.data.enums import DataFeed
 from alpaca.data import Trade, Snapshot, Quote, Bar, BarSet, QuoteSet, TradeSet
-from alpaca.data.mappings import BAR_MAPPING
+import datetime
+import msgpack
+BAR_MAPPING = {
+    "t": "timestamp",
+    "o": "open",
+    "h": "high",
+    "l": "low",
+    "c": "close",
+    "v": "volume",
+    "n": "trade_count",
+    "vw": "vwap",
+}
 
-from alpaca.common.types import RawData
 
 new_data_flag = True
 bar_list = []
 start_of_stream_flag = True
 start = None
 
+raw_data = True
+columns = ['open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']
 
-async def handler(raw_bar):
-    print("raw_bar: ", raw_bar)
-    if type(raw_bar) != dict:
-        print("raw_bar is not dict!!!", print(type(raw_bar)))
-    else:
-        mapped_bar = {
-                BAR_MAPPING[key]: val for key, val in raw_bar.items() if key in BAR_MAPPING
-        } 
-    raw_data = RawData('BABA', mapped_bar)
-    print("mapped_bar: ", bar_list)
-    global start_of_stream_flag
-    if start_of_stream_flag:
-        start_of_stream_flag = False
-        # start = mapped_bar["start"]
-        print("start_of_stream!")
-    bar_list.append(raw_bar)
-    print("bar_set: ", BarSet(bar_list).df)
-    new_data_flag = True
+# index = pd.MultiIndex.from_product([symbols, timestamps], names=['symbol', 'timestamp'])
+
+# df = pd.DataFrame(columns=columns, index=index)
+
+
+async def bar_handler(bar):
+    print(bar)
+    mapped_bar = {
+        BAR_MAPPING[key]: val for key, val in bar.items() if key in BAR_MAPPING
+    }
+    print(mapped_bar['timestamp'])
+    print(type(mapped_bar['timestamp']))
+    dt = mapped_bar['timestamp'].to_datetime()
+    print(dt)
+    print(type(dt))
+    formatted = dt.strftime('%Y-%m-%d %H:%M:%S+00:00')
+    print(formatted)
+
+    # mock_mapped_bar = {'open': 96.055, 'high': 96.055, 'low': 96.055, 'close': 96.055, 'volume': 100, 'timestamp': Timestamp(seconds=1681411020, nanoseconds=0), 'trade_count': 1, 'vwap': 96.055}
+    
+
+
+    # if type(raw_bar) != dict:
+    #     print("raw_bar is not dict!!!", print(type(raw_bar)))
+    # else:
+    # raw_data = Bar('BABA', mapped_bar)
+    # print("raw_bar: ", raw_bar)
+    # print("timestamp: ", raw_bar['t'])
+    # print("timestamp type: ", type(raw_bar['t']))
+    # bar_list.append(raw_bar)
+
+    # data = {"BABA": bar_list}
+
+    # global start_of_stream_flag
+    # if start_of_stream_flag:
+    #     start_of_stream_flag = False
+    #     # start = mapped_bar["start"]
+    #     print("start_of_stream!")
+
+    # print("bar_set: ", BarSet(data).df)
+    # new_data_flag = True
+    pass
+
+async def trade_handler(raw_trade):
+    pass
+
+async def quote_handler(raw_quote):
+    # print("new quote: ", raw_quote)
+    pass
 
 def main():
-    stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=True,)
+    stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data, feed=DataFeed.IEX)
     # stream = CryptoDataStream(api_key = API_KEY, secret_key = SECRET_KEY)
 
-    stream.subscribe_bars(handler, "AAPL")
+    stream.subscribe_bars(bar_handler, "BABA")
+    stream.subscribe_quotes(quote_handler, "BABA")
+    stream.subscribe_trades(trade_handler, "BABA")
     print("Start streaming")
     stream.run()
     

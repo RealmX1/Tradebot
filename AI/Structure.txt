@@ -146,3 +146,5 @@ DONE!
 TODO: Print prediction in a real time simulation
 
 TODO: DO testing every X epoch, draw a second plot about testing to show when does overfitting happen. Use a folder to save different checkpoints.
+
+TODO: ADD TIME EMBEDDING

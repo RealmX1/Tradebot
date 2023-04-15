@@ -4,6 +4,8 @@ following the paper Attention is all you need with a
 few minor differences. I tried to make it as clear as
 possible to understand and also went through the code
 on my youtube channel!
+
+
 """
 
 import torch
@@ -11,30 +13,30 @@ import torch.nn as nn
 
 
 class SelfAttention(nn.Module):
-    def __init__(self, feature_num, heads):
+    def __init__(self, embed_size, heads):
         super(SelfAttention, self).__init__()
-        self.feature_num = feature_num
+        self.embed_size = embed_size
         self.heads = heads
-        self.head_dim = feature_num // heads
+        self.head_dim = embed_size // heads
 
         assert (
-            self.head_dim * heads == feature_num
+            self.head_dim * heads == embed_size
         ), "Embedding size needs to be divisible by heads"
 
-        self.values = nn.Linear(feature_num, feature_num)
-        self.keys = nn.Linear(feature_num, feature_num)
-        self.queries = nn.Linear(feature_num, feature_num)
-        self.fc_out = nn.Linear(feature_num, feature_num)
+        self.values = nn.Linear(embed_size, embed_size)
+        self.keys = nn.Linear(embed_size, embed_size)
+        self.queries = nn.Linear(embed_size, embed_size)
+        self.fc_out = nn.Linear(embed_size, embed_size)
 
     def forward(self, values, keys, query, mask):
         # Get number of training examples
         N = query.shape[0]
 
         value_len, key_len, query_len = values.shape[1], keys.shape[1], query.shape[1]
-        # print(values.shape, keys.shape, query.shape)
-        values = self.values(values)  # (N, value_len, feature_num)
-        keys = self.keys(keys)  # (N, key_len, feature_num)
-        queries = self.queries(query)  # (N, query_len, feature_num)
+        print(values.shape, keys.shape, query.shape)
+        values = self.values(values)  # (N, value_len, embed_size)
+        keys = self.keys(keys)  # (N, key_len, embed_size)
+        queries = self.queries(query)  # (N, query_len, embed_size)
 
         # Split the embedding into self.heads different pieces
         values = values.reshape(N, value_len, self.heads, self.head_dim)
@@ -52,12 +54,12 @@ class SelfAttention(nn.Module):
 
         # Mask padded indices so their weights become 0
         if mask is not None:
-            energy = energy.masked_fill(mask == 0, float("-1e20")) # set to negative infinity becuase the ensuing softmax will make it 0
+            energy = energy.masked_fill(mask == 0, float("-1e20"))
 
         # Normalize energy values similarly to seq2seq + attention
         # so that they sum to 1. Also divide by scaling factor for
         # better stability
-        attention = torch.softmax(energy / (self.feature_num ** (1 / 2)), dim=3)
+        attention = torch.softmax(energy / (self.embed_size ** (1 / 2)), dim=3)
         # attention shape: (N, heads, query_len, key_len)
 
         out = torch.einsum("nhql,nlhd->nqhd", [attention, values]).reshape(
@@ -70,30 +72,31 @@ class SelfAttention(nn.Module):
 
         out = self.fc_out(out)
         # Linear layer doesn't modify the shape, final shape will be
-        # (N, query_len, feature_num)
+        # (N, query_len, embed_size)
 
         return out
 
+
 class TransformerBlock(nn.Module):
-    def __init__(self, feature_num, heads, dropout, forward_expansion):
+    def __init__(self, embed_size, heads, dropout, forward_expansion):
         super(TransformerBlock, self).__init__()
-        self.attention = SelfAttention(feature_num, heads)
-        self.norm1 = nn.LayerNorm(feature_num)
-        self.norm2 = nn.LayerNorm(feature_num)
+        self.attention = SelfAttention(embed_size, heads)
+        self.norm1 = nn.LayerNorm(embed_size)
+        self.norm2 = nn.LayerNorm(embed_size)
 
         self.feed_forward = nn.Sequential(
-            nn.Linear(feature_num, forward_expansion * feature_num),
+            nn.Linear(embed_size, forward_expansion * embed_size),
             nn.ReLU(),
-            nn.Linear(forward_expansion * feature_num, feature_num),
+            nn.Linear(forward_expansion * embed_size, embed_size),
         )
 
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, value, key, q, mask):
-        attention = self.attention(value, key, q, mask)
+    def forward(self, value, key, query, mask):
+        attention = self.attention(value, key, query, mask)
 
         # Add skip connection, run through normalization and finally dropout
-        x = self.dropout(self.norm1(attention + q))
+        x = self.dropout(self.norm1(attention + query))
         forward = self.feed_forward(x)
         out = self.dropout(self.norm2(forward + x))
         return out
@@ -103,7 +106,7 @@ class Encoder(nn.Module):
     def __init__(
         self,
         src_vocab_size,
-        feature_num,
+        embed_size,
         num_layers,
         heads,
         device,
@@ -113,19 +116,15 @@ class Encoder(nn.Module):
     ):
 
         super(Encoder, self).__init__()
-        self.feature_num = feature_num
+        self.embed_size = embed_size
         self.device = device
-        self.position_embedding = nn.Embedding(max_length, feature_num)
-        '''
-            nn.Embedding(num_embeddings, embedding_dim)
-            input: (?), IntTensor or LongTensor of arbitrary shape containing the indices to extract
-            output: (?, H), H = embedding_dim
-        '''
+        self.word_embedding = nn.Embedding(src_vocab_size, embed_size)
+        self.position_embedding = nn.Embedding(max_length, embed_size)
 
         self.layers = nn.ModuleList(
             [
                 TransformerBlock(
-                    feature_num,
+                    embed_size,
                     heads,
                     dropout=dropout,
                     forward_expansion=forward_expansion,
@@ -137,17 +136,13 @@ class Encoder(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, mask):
-        # x: (N, seq_length)
-        N, seq_length, feature_n = x.shape
-        assert feature_n == self.feature_num
-
+        N, seq_length = x.shape
         positions = torch.arange(0, seq_length).expand(N, seq_length).to(self.device)
         out = self.dropout(
-            (x + self.position_embedding(positions)) # x + self.position_embedding(positions)
+            (self.word_embedding(x) + self.position_embedding(positions))
         )
-        # out: (N, seq_length, feature_num)
 
-        # In the Encoder the q, key, value are all the same, it's in the
+        # In the Encoder the query, key, value are all the same, it's in the
         # decoder this will change. This might look a bit odd in this case.
         for layer in self.layers:
             out = layer(out, out, out, mask)
@@ -156,19 +151,21 @@ class Encoder(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, feature_num, heads, forward_expansion, dropout, device):
+    def __init__(self, embed_size, heads, forward_expansion, dropout, device):
         super(DecoderBlock, self).__init__()
-        self.norm = nn.LayerNorm(feature_num)
-        self.attention = SelfAttention(feature_num, heads=heads)
+        self.norm = nn.LayerNorm(embed_size)
+        self.attention = SelfAttention(embed_size, heads=heads)
         self.transformer_block = TransformerBlock(
-            feature_num, heads, dropout, forward_expansion
+            embed_size, heads, dropout, forward_expansion
         )
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, value, key, src_mask, trg_mask):
         attention = self.attention(x, x, x, trg_mask)
-        q = self.dropout(self.norm(attention + x))
-        out = self.transformer_block(value, key, q, src_mask)
+        query = self.dropout(self.norm(attention + x))
+        # (N, query_len, embed_size)
+        out = self.transformer_block(value, key, query, src_mask)
+        
         return out
 
 
@@ -176,7 +173,7 @@ class Decoder(nn.Module):
     def __init__(
         self,
         trg_vocab_size,
-        feature_num,
+        embed_size,
         num_layers,
         heads,
         forward_expansion,
@@ -186,22 +183,22 @@ class Decoder(nn.Module):
     ):
         super(Decoder, self).__init__()
         self.device = device
-        # self.word_embedding = nn.Embedding(trg_vocab_size, feature_num)
-        self.position_embedding = nn.Embedding(max_length, feature_num)
+        self.word_embedding = nn.Embedding(trg_vocab_size, embed_size)
+        self.position_embedding = nn.Embedding(max_length, embed_size)
 
         self.layers = nn.ModuleList(
             [
-                DecoderBlock(feature_num, heads, forward_expansion, dropout, device)
+                DecoderBlock(embed_size, heads, forward_expansion, dropout, device)
                 for _ in range(num_layers)
             ]
         )
-        self.fc_out = nn.Linear(feature_num, trg_vocab_size)
+        self.fc_out = nn.Linear(embed_size, trg_vocab_size)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, enc_out, src_mask, trg_mask):
-        N, seq_length, _ = x.shape
+        N, seq_length = x.shape
         positions = torch.arange(0, seq_length).expand(N, seq_length).to(self.device)
-        x = self.dropout((x + self.position_embedding(positions)))
+        x = self.dropout((self.word_embedding(x) + self.position_embedding(positions)))
 
         for layer in self.layers:
             x = layer(x, enc_out, enc_out, src_mask, trg_mask)
@@ -218,21 +215,20 @@ class Transformer(nn.Module):
         trg_vocab_size,
         src_pad_idx,
         trg_pad_idx,
-        feature_num=22,
-        num_layers=2,
-        forward_expansion=1, # 4
-        heads=2, # 8
-        dropout=0.1,
-        device="cuda",
+        embed_size=512,
+        num_layers=6,
+        forward_expansion=4,
+        heads=8,
+        dropout=0,
+        device="cpu",
         max_length=100,
     ):
-        self.feature_num = feature_num
 
         super(Transformer, self).__init__()
 
         self.encoder = Encoder(
             src_vocab_size,
-            feature_num,
+            embed_size,
             num_layers,
             heads,
             device,
@@ -243,9 +239,9 @@ class Transformer(nn.Module):
 
         self.decoder = Decoder(
             trg_vocab_size,
-            feature_num, # need to pad to feature_num
+            embed_size,
             num_layers,
-            heads, # 1?
+            heads,
             forward_expansion,
             dropout,
             device,
@@ -256,84 +252,44 @@ class Transformer(nn.Module):
         self.trg_pad_idx = trg_pad_idx
         self.device = device
 
-    # src mask is used to block all positions where the source is padded 
-    # -- even after calcualtion in the transformer (at the end of encoder & decoder forward)
     def make_src_mask(self, src):
-        # 1 if not padded, 0 if padded
         src_mask = (src != self.src_pad_idx).unsqueeze(1).unsqueeze(2)
         # (N, 1, 1, src_len)
         return src_mask.to(self.device)
 
     def make_trg_mask(self, trg):
-        N, trg_len, trg_feature_num = trg.shape
-        assert trg_feature_num == 1
+        N, trg_len = trg.shape
         trg_mask = torch.tril(torch.ones((trg_len, trg_len))).expand(
             N, 1, trg_len, trg_len
         )
-        # print(trg_mask)
 
         return trg_mask.to(self.device)
 
     def forward(self, src, trg):
-        target = torch.unsqueeze(trg,2)
-        # src_mask = self.make_src_mask(src)
-        # (N, 1, 1, src_len)
-        trg_mask = self.make_trg_mask(target)
-
-        padding = torch.zeros((target.shape[0], target.shape[1], self.feature_num-target.shape[2])).to(self.device)
-        padded_target = torch.cat([target, padding], dim=2)
-        # (N, 1, trg_len, trg_len)
-        enc_src = self.encoder(src, None)
-        out = self.decoder(padded_target, enc_src, None, trg_mask)
-        return out.squeeze(2)
-    
-    def predict(self, src, prediction_window):
-        trg = torch.zeros((src.shape[0], prediction_window)).to(self.device)
-        target = torch.unsqueeze(trg,2)
-        trg_mask = self.make_trg_mask(target)
-
-        padding = torch.zeros((target.shape[0], target.shape[1], self.feature_num-target.shape[2])).to(self.device)
-        padded_target = torch.cat([target, padding], dim=2)
-        # (N, 1, trg_len, trg_len)
-        enc_src = self.encoder(src, None)
-        for i in range(prediction_window):
-            out = self.decoder(padded_target, enc_src, None, trg_mask)
-            padded_target[:,i,:] = out[:,i,:] # update the last prediction
-
-        return out.squeeze(2)
+        src_mask = self.make_src_mask(src)
+        trg_mask = self.make_trg_mask(trg)
+        print("/nENCODING!/n")
+        enc_src = self.encoder(src, src_mask)
+        print("/nDECODING!/n")
+        out = self.decoder(trg, enc_src, src_mask, trg_mask)
+        return out
 
 
+if __name__ == "__main__":
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(device)
 
+    x = torch.tensor([[1, 5, 6, 4, 3, 9, 5, 2, 0], [1, 8, 7, 3, 4, 5, 6, 7, 2]]).to(
+        device
+    )
+    trg = torch.tensor([[1, 7, 4, 3, 5, 9, 2, 0], [1, 5, 6, 2, 4, 7, 6, 2]]).to(device)
 
-# if __name__ == "__main__":
-#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#     print(device)
-
-#     N = 100
-#     seq_len = 32
-#     prediction_window = 10
-#     feature_num = 22
-
-#     # Generate random tensor with v between 0 and 1
-#     x = torch.rand((N, seq_len, feature_num)).to(device)
-
-#     trg = torch.ones(N, prediction_window).to(device)
-#     print('x.shape', x.shape)
-#     # x.shape (N, src_len)
-#     # trg.shape (N, trg_len)
-
-#     src_pad_idx = -1e20
-#     trg_pad_idx = -1e20
-#     src_vocab_size = feature_num
-#     trg_vocab_size = 1
-#     model = Transformer(src_vocab_size, trg_vocab_size, src_pad_idx, trg_pad_idx, device=device).to(device)
-#     out = model(x, trg)
-#     # out = model(x, trg[:, :-1])
-#     print(out.shape)
-#     print(out)
-
-#     trg.zero_()
-
-#     out = model.predict(x, trg)
-#     print(out.shape)
-#     print(out)
+    src_pad_idx = 0
+    trg_pad_idx = 0
+    src_vocab_size = 10
+    trg_vocab_size = 10
+    model = Transformer(src_vocab_size, trg_vocab_size, src_pad_idx, trg_pad_idx, device=device).to(
+        device
+    )
+    out = model(x, trg[:, :-1])
+    print(out.shape)

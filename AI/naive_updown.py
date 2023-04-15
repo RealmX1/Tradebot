@@ -28,10 +28,10 @@ close_idx = 3 # after removing time column
 feature_num = input_size = 22 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
 hidden_size = 50    # Number of neurons in the hidden layer of the LSTM
 
-num_layers  = 4     # Number of layers in the LSTM
+num_layers  = 2     # Number of layers in the LSTM
 output_size = 1     # Number of output values (closing price 1~10min from now)
-prediction_window = 5
-window_size = 60 # using how much data from the past to make prediction?
+prediction_window = 10
+window_size = 32 # using how much data from the past to make prediction?
 data_prep_window = window_size + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
 dropout = 0.1
 
@@ -39,7 +39,7 @@ learning_rate = 0.0001
 batch_size = 2000
 
 train_percent = 0.9
-num_epochs = 0
+num_epochs = 50
 
 
 
@@ -65,7 +65,7 @@ np.set_printoptions(precision=4, suppress=True)
 # Define the dataset class
 # data.shape: (data_num, data_prep_window, feature_num)
 # SELF.Y IS ALREADY THE TRUE DIRECTION (SINCE LAST OBSERVED CLOSE)!!!
-class NvidiaStockDataset(Dataset):
+class NvidiaStockDataset(Dataset): # switching to percentage change prediction.
     def __init__(self, data):
 
         self.x_raw = data[:,:-prediction_window,:] # slicing off the last entry of input
@@ -269,12 +269,12 @@ def get_current_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def save_params(best_prediction, optimizers, best_model, model_path):
+def save_params(best_prediction, optimizers, best_model, model_path, log_path):
     print("saving params...")
 
     encoder_lr = get_current_lr(optimizers[0])
     decoder_lr = get_current_lr(optimizers[1])
-    with open('training_param_log.json', 'w') as f:
+    with open(log_path, 'w') as f:
         json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
     print("saving model...")
     torch.save(best_model, model_path)
@@ -286,10 +286,12 @@ def main():
     # df = pd.read_csv('nvda_1min_complex_fixed.csv')
     # df = pd.read_csv("data/bar_set_huge_20180101_20230410_GOOG_indicator.csv", index_col = ['symbols', 'timestamps'])
     # df = pd.read_csv("data/bar_set_huge_20200101_20230412_BABA_indicator.csv", index_col = ['symbols', 'timestamps'])
-    data_path = "data/baba.csv"
-    df = pd.read_csv(data_path, index_col = ['symbols', 'timestamps'])
+    data_pth = "data/baba.csv"
+    model_path = "updown_naive.pt"
+    log_path = "naive_training_param_log.json"
+    df = pd.read_csv(data_pth, index_col = ['symbols', 'timestamps'])
     cwd = os.getcwd()
-    model_path = 'lstm_updown_S2S_attention.pt'
+    
     print("data loaded in ", time.time()-start_time, " seconds")
     
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
@@ -349,10 +351,10 @@ def main():
     print("loading model")
     start_time = time.time()
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    if os.path.exists('last'+model_path):
+    if os.path.exists(model_path):
         print("Loading existing model")
-        model.load_state_dict(torch.load('last'+model_path))
-        with open('training_param_log.json', 'r') as f:
+        model.load_state_dict(torch.load(model_path))
+        with open(log_path, 'r') as f:
             saved_data = json.load(f)
             encoder_lr = saved_data['encoder_learning_rate']
             decoder_lr = saved_data['decoder_learning_rate']
@@ -466,12 +468,12 @@ def main():
         #     plt.ioff()
         #     plot(raw_predictions, raw_targets, test_size)
         # print(f'prediction completed in {time.time()-start_time:.2f} seconds')
-        save_params(best_prediction, optimizers, best_model, model_path) 
+        save_params(best_prediction, optimizers, best_model, model_path, log_path) 
         torch.save(model, 'last'+model_path)
         print('Normal exit. Model saved.')
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
-        save_params(best_prediction, optimizers, best_model, model_path)
+        save_params(best_prediction, optimizers, best_model, model_path, log_path)
 
 if __name__ == '__main__':
     main()
