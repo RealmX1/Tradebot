@@ -87,17 +87,72 @@ import numpy as np
 # with open('training_param_log.json', 'w') as f:
 #         json.dump({'learning_rate': 0.0000119878, 'best_prediction': 67.53}, f)
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
-values = [0, 1, 0, 1, 0, 1, 0, 0, 1]
+# values = [0, 1, 0, 1, 0, 1, 0, 0, 1]
 
-# Filter non-zero values
+# # Filter non-zero values
 
-# Create x-axis positions for non-zero values
-positions = [i for i, x in enumerate(values) if x != 0]
-values = [x for x in values if x != 0]
+# # Create x-axis positions for non-zero values
+# positions = [i for i, x in enumerate(values) if x != 0]
+# values = [x for x in values if x != 0]
 
-# Plot non-zero values at their respective x-positions
-plt.plot(positions, values, 'ro')
+# # Plot non-zero values at their respective x-positions
+# plt.plot(positions, values, 'ro')
 
-plt.show()
+# plt.show()
+
+
+
+'''
+    test whether global noramlization will change target Y -- Y need to represent percentage change of the original X.
+'''
+# import random
+# np.random.seed(42)
+# batch_size = 100
+
+
+
+# data = np.random.rand(batch_size*10, 5, 4)
+# data_mean = np.mean(data, axis = 0)
+# data_std = np.std(data, axis = 0)
+# data_norm = (data-data_mean)/data_std
+
+# batch_data = data_norm[:batch_size,:,:]
+
+# close_idx = 2
+# prediction_window = 2
+# x_raw = batch_data[:,:-prediction_window,:]
+# y_raw = batch_data[:,-prediction_window:,close_idx] 
+# tmp = x_raw[:,-1,close_idx:close_idx+1]
+# print(tmp.shape)
+
+# y = (y_raw - tmp)/tmp * 100
+# print(y.shape)
+
+# print(y[:5,:])
+
+# import gc
+# import torch
+# torch.cuda.empty_cache()
+# gc.collect()
+
+
+# importing libraries
+# import matplotlib.pyplot as plt
+  
+# # creating data
+# xdata = [0, 2, 4, 6, 8, 10, 12, 14]
+# ydata = [4, 2, 8, 6, 10, 5, 12, 6]
+  
+# # plotting data
+# plt.plot(xdata, ydata, ls=None)
+  
+# # Displaying plot
+# plt.show()
+
+import torch
+discount_rate = 0.80
+prediction_window = 10
+discount_factors = torch.pow(torch.tensor(discount_rate), torch.arange(prediction_window).float()) #.to(device)
+print(discount_factors)

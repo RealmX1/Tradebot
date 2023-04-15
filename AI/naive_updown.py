@@ -65,13 +65,13 @@ np.set_printoptions(precision=4, suppress=True)
 # Define the dataset class
 # data.shape: (data_num, data_prep_window, feature_num)
 # SELF.Y IS ALREADY THE TRUE DIRECTION (SINCE LAST OBSERVED CLOSE)!!!
-class NvidiaStockDataset(Dataset): # switching to percentage change prediction.
+class NvidiaStockDataset(Dataset):
     def __init__(self, data):
 
         self.x_raw = data[:,:-prediction_window,:] # slicing off the last entry of input
         # print("x.shape: ",self.x.shape)
         # x.shape: (data_num, window_size, feature_num)
-        self.y_raw = data[:,-prediction_window:,close_idx] 
+        self.y_raw = data[:,-prediction_window:,close_idx]
         tmp = self.x_raw[:,-1,close_idx:close_idx+1]
         self.y = (self.y_raw - tmp)/tmp * 100 # don't need to normalize y; this is the best way; present target as the percentage growth with repsect to last close price.
         # print("y.shape: ",self.y.shape)

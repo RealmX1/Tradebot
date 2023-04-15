@@ -19,14 +19,22 @@ class NaiveLong(Policy):
         mean_prediction = prediction.mean()
         if prediction[0][0] > 0 and mean_prediction > 0:
             purchase_num = account.place_buy_max_order(symbol, price, 0)
-            account.complete_buy_order(symbol, 0)
-            # print(f'bought all! {purchase_num} shares at {price}$')
-            return ('b',purchase_num)
+            if purchase_num > 0:
+                account.complete_buy_order(symbol, 0)
+                # print(f'bought all! {purchase_num} shares at {price}$')
+                return ('b',purchase_num)
+            else:
+                account.cancel_buy_order(symbol, 0)
+                return ('n',0)
         elif prediction[0][0] < 0 and mean_prediction < 0: # (and prediction[0][0] < 0)
             purchase_num = account.place_sell_max_order(symbol, price, 0)
-            account.complete_sell_order(symbol, 0)
-            # print(f'sold all! {purchase_num} shares at {price}$')
-            return ('s',purchase_num)
+            if purchase_num > 0:
+                account.complete_sell_order(symbol, 0)
+                # print(f'bought all! {purchase_num} shares at {price}$')
+                return ('s',purchase_num)
+            else:
+                account.cancel_sell_order(symbol,0)
+                return ('n',0)
         else:
             return ('n',0)
         

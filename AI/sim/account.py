@@ -23,7 +23,7 @@ class Account:
         return shares
     
     def cancel_buy_order(self, symbol, order_id):
-        self.balance += self.orders[symbol][order_id][0] * self.orders[symbol]['order_id'][1]
+        self.balance += self.orders[symbol][order_id][0] * self.orders[symbol][order_id][1]
         del self.orders[symbol][order_id]
     
     def complete_buy_order(self, symbol, order_id):
@@ -50,6 +50,19 @@ class Account:
     def complete_sell_order(self, symbol, order_id):
         self.balance += self.orders[symbol][order_id][0] * self.orders[symbol][order_id][1]
         del self.orders[symbol][order_id]
+    
+    # short order functions
+    def place_short_order(self, symbol, price, shares, order_id):
+        self.orders[symbol][order_id] = (-shares, price)
+        self.holding[symbol][1] = price
+        self.balance += price * shares
+
+    def place_short_max_order(self, symbol, price, order_id):
+        shares = self.balance // price
+        self.orders[symbol][order_id] = (-shares, price)
+        self.holding[symbol][1] = price
+        self.balance += price * shares
+        return shares
     
 
 
