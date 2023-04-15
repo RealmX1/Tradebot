@@ -128,35 +128,42 @@ from alpaca.data.enums import Exchange, DataFeed
 from alpaca.data.models import BarSet, QuoteSet, TradeSet
 import pytz
 
-stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
+# stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
 
-def get_bars(symbol_or_symbols, timeframe, start, end, limit):
-    # Test single symbol request
+# def get_bars(symbol_or_symbols, timeframe, start, end, limit):
+#     # Test single symbol request
     
-    request = StockBarsRequest(
-        symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit, adjustment="all", feed = DataFeed.IEX
-    )
+#     request = StockBarsRequest(
+#         symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit, adjustment="all", feed = DataFeed.IEX
+#     )
 
-    print("Start request")
-    bar_set = stock_client.get_stock_bars(request_params=request)
-    print("End request")
+#     print("Start request")
+#     bar_set = stock_client.get_stock_bars(request_params=request)
+#     print("End request")
 
-    return bar_set
+#     return bar_set
 
-symbol = 'BABA'
-timeframe = TimeFrame.Minute
-start = datetime(2022, 4, 13)
-end = None
-limit = None
+# symbol = 'BABA'
+# timeframe = TimeFrame.Minute
+# start = datetime(2022, 4, 13)
+# end = None
+# limit = None
 
-bar_set = get_bars(symbol, timeframe, start, end, limit)
-df = bar_set.df
+# bar_set = get_bars(symbol, timeframe, start, end, limit)
+# df = bar_set.df
 
-print(df.index.levels[1].dtype)
-df.to_csv('data/csv/today.csv')
-df = pd.read_csv('data/csv/today.csv')
-print(df)
-edt = pytz.timezone('US/Eastern')
-now = datetime.now(edt)
-print(type(now))
-print(now)
+# print(df.index.levels[1].dtype)
+# df.to_csv('data/csv/today.csv')
+# df = pd.read_csv('data/csv/today.csv')
+# print(df)
+# edt = pytz.timezone('US/Eastern')
+# now = datetime.now(edt)
+# print(type(now))
+# print(now)
+
+
+
+
+
+df = pd.read_csv('data/csv/test.csv')
+print(df.columns.tolist())

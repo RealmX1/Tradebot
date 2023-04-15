@@ -83,6 +83,21 @@ import numpy as np
 # n = 5
 # data = np.random.rand(10, n)
 # print(data)
-import json
-with open('training_param_log.json', 'w') as f:
-        json.dump({'learning_rate': 0.0000119878, 'best_prediction': 67.53}, f)
+# import json
+# with open('training_param_log.json', 'w') as f:
+#         json.dump({'learning_rate': 0.0000119878, 'best_prediction': 67.53}, f)
+
+import matplotlib.pyplot as plt
+
+values = [0, 1, 0, 1, 0, 1, 0, 0, 1]
+
+# Filter non-zero values
+
+# Create x-axis positions for non-zero values
+positions = [i for i, x in enumerate(values) if x != 0]
+values = [x for x in values if x != 0]
+
+# Plot non-zero values at their respective x-positions
+plt.plot(positions, values, 'ro')
+
+plt.show()

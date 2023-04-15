@@ -33,6 +33,7 @@ def add_time_embedding(df):
 
     # Extract the time of day (in hours) as a new column
     df['edt_hour'] = df['edt_time'].dt.hour + df['edt_time'].dt.minute / 60
+    df['edt_dayofweek'] = df['edt_time'].dt.dayofweek
     # print(df.head(5))
 
     # Create a new column with the time of day scaled from 0.0 (9:30 am) to 1.0 (1:00 pm)
@@ -43,7 +44,8 @@ def add_time_embedding(df):
     df.drop(columns=['timestamps_col', 'edt_time', 'edt_hour'], inplace=True)
 
 def main():
-    df = pd.read_csv('data/csv/bar_set_huge_20200101_20230412_baba.csv', index_col = ['symbols', 'timestamps'])
+    df = pd.read_csv('data/csv/bar_set_huge_20200101_20230412_baba.csv', index_col = ['symbol', 'timestamp'])
+    # df = pd.read_csv('data/csv/test_ bar_set_20230101_20230412_baba.csv', index_col = ['symbol', 'timestamp'])
     # df = df.drop(df.index[:144])
     print(df.shape)
 
@@ -53,7 +55,7 @@ def main():
     # df['C'] = df.rolling(window=3).apply(func)
 
 
-    groups = df.groupby('symbols')
+    groups = df.groupby('symbol')
     columns = []
 
     # Create a new dataframe for each group
@@ -91,7 +93,8 @@ def main():
         # columns = list(df.columns)
         # print(columns)
         
-        df.to_csv(f'data/csv/bar_set_huge_20200101_20230412_{name}_indicator.csv', index=True, index_label=['symbols', 'timestamps'])
+        df.to_csv(f'data/csv/bar_set_huge_20200101_20230412_{name}_indicator.csv', index=True, index_label=['symbol', 'timestamp'])
+        # df.to_csv(f'data/csv/test.csv', index=True, index_label=['symbol', 'timestamp'])
     print(f"finished calculating indicators in {time.time() - start_time} seconds")
 
     data = df.values

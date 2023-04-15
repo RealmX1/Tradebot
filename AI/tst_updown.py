@@ -287,9 +287,9 @@ def main():
     start_time = time.time()
     print("loading data")
     # df = pd.read_csv('nvda_1min_complex_fixed.csv')
-    # df = pd.read_csv("data/bar_set_huge_20180101_20230410_GOOG_indicator.csv", index_col = ['symbols', 'timestamps'])
-    # df = pd.read_csv("data/bar_set_huge_20200101_20230412_BABA_indicator.csv", index_col = ['symbols', 'timestamps'])
-    df = pd.read_csv("data/baba.csv", index_col = ['symbols', 'timestamps'])
+    # df = pd.read_csv("data/bar_set_huge_20180101_20230410_GOOG_indicator.csv", index_col = ['symbol', 'timestamp'])
+    # df = pd.read_csv("data/bar_set_huge_20200101_20230412_BABA_indicator.csv", index_col = ['symbol', 'timestamp'])
+    df = pd.read_csv("data/baba.csv", index_col = ['symbol', 'timestamp'])
     cwd = os.getcwd()
     model_path = "TST_updown.pt"
     print("data loaded in ", time.time()-start_time, " seconds")

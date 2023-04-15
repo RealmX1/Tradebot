@@ -17,6 +17,11 @@ import cProfile
 
 # import custom files
 from S2S import *
+from sim import *
+
+
+policy = NaiveLong()
+account = Account(100000, ['BABA'])
 
 # Load the CSV file into a Pandas dataframe
 # time,open,high,low,close,Volume,Volume MA
@@ -25,8 +30,8 @@ close_idx = 3 # after removing time column
 
 
 # Define hyperparameters
-feature_num = input_size = 22 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size = 50    # Number of neurons in the hidden layer of the LSTM
+feature_num = input_size = 23 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+hidden_size = 200    # Number of neurons in the hidden layer of the LSTM
 
 num_layers  = 4     # Number of layers in the LSTM
 output_size = 1     # Number of output values (closing price 1~10min from now)
@@ -38,7 +43,7 @@ dropout = 0.1
 learning_rate = 0.0001
 batch_size = 2000
 
-train_percent = 0.9
+train_percent = 0.5
 num_epochs = 0
 
 
@@ -137,7 +142,8 @@ def get_direction_diff(x_batch,y_batch,y_pred):
 
     return total_cells, same_cells, total_cells_list, same_cells_list
 
-def get_return_diff(x_batch,y_batch,y_pred):
+
+def calculate_policy_return(x_batch,y_batch,y_pred):
     pass
 
 def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
@@ -154,6 +160,7 @@ def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, sch
     raw_predictions = None
     targets = None
     raw_targets = None
+    raw_closes = None
 
     ma_predictions = 0
     ma_true_predictions = 0
@@ -167,6 +174,11 @@ def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, sch
     # print ("inverse_mask.shape: ", inverse_mask.shape)
     weights = torch.linspace(1, 0.1, steps=prediction_window).to(device)
     ma_loss = 0
+    decisions = []
+    buy_decisions = []
+    sell_decisions = []
+    account_value_hist = []
+    price_hist = []
     for epoch in range(num_epochs):
         epoch_loss = 0
         ma_predictions *= 0.9
@@ -215,6 +227,18 @@ def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, sch
             total_true_predictions += same_cells_list
 
             if mode == 2:
+                price = x_raw_close.item()
+                decision = policy.decide('BABA', None, price, y_pred, account)
+                decisions.append(decision)
+                if decision[0] == 'b':
+                    buy_decisions.append(1)
+                    sell_decisions.append(0)
+                elif decision[0] == 's':
+                    buy_decisions.append(0)
+                    sell_decisions.append(1)
+                account_value_hist.append(account.evaluate())
+                price_hist.append(price)
+                # print(account.evaluate())
                 # mean = mean.float().to(device)
                 # std = std.float().to(device)
                 
@@ -222,17 +246,20 @@ def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, sch
                 # prediction = raw_prediction * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
                 raw_target = y_batch[:,plot_minutes]
                 # target = raw_target * std[:,close_idx:close_idx+1] + mean[:,close_idx:close_idx+1]
+
                 
                 if raw_predictions is None:
                     # predictions = prediction
                     raw_predictions = raw_prediction
                     # targets = target
                     raw_targets = raw_target
+                    raw_closes = x_raw_close
                 else:
                     # predictions = torch.cat((predictions, prediction), dim=0)
                     raw_predictions = torch.cat((raw_predictions, raw_prediction), dim=0)
                     # targets = torch.cat((targets, target), dim=0)
                     raw_targets = torch.cat((raw_targets, raw_target), dim=0)
+                    raw_closes = torch.cat((raw_closes, x_raw_close), dim=0)
             
             epoch_loss += loss_val
         epoch_loss /= (i+1)
@@ -248,7 +275,8 @@ def work(model, train_loader, optimizers, num_epochs = num_epochs, mode = 0, sch
     print("Accuracy List: ", accuracy_list_print)
 
     if mode == 2:
-        return None,raw_predictions.cpu().numpy(), None, raw_targets.cpu().numpy()# return predictions.cpu().numpy(), raw_predictions.cpu().numpy(), targets.cpu().numpy(), raw_targets.cpu().numpy()
+
+        return buy_decisions, sell_decisions, account_value_hist, raw_predictions.cpu().numpy(), raw_targets.cpu().numpy(), price_hist # return predictions.cpu().numpy(), raw_predictions.cpu().numpy(), targets.cpu().numpy(), raw_targets.cpu().numpy()
     elif mode == 1:
         return accuracy_list, average_loss
     else:
@@ -269,7 +297,7 @@ def get_current_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def save_params(best_prediction, optimizers, best_model, model_path):
+def save_params(best_prediction, optimizers, model_state, best_model_state, model_path):
     print("saving params...")
 
     encoder_lr = get_current_lr(optimizers[0])
@@ -277,17 +305,17 @@ def save_params(best_prediction, optimizers, best_model, model_path):
     with open('training_param_log.json', 'w') as f:
         json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
     print("saving model...")
-    torch.save(best_model, model_path)
+    torch.save(best_model_state, model_path)
+    torch.save(model_state, 'last'+model_path)
     print("done.")
     
 def main():
     start_time = time.time()
     print("loading data")
-    # df = pd.read_csv('nvda_1min_complex_fixed.csv')
-    # df = pd.read_csv("data/bar_set_huge_20180101_20230410_GOOG_indicator.csv", index_col = ['symbols', 'timestamps'])
-    # df = pd.read_csv("data/bar_set_huge_20200101_20230412_BABA_indicator.csv", index_col = ['symbols', 'timestamps'])
-    data_path = "data/baba.csv"
-    df = pd.read_csv(data_path, index_col = ['symbols', 'timestamps'])
+    # "data/bar_set_huge_20180101_20230410_GOOG_indicator.csv"
+    # "data/bar_set_huge_20200101_20230412_BABA_indicator.csv"
+    data_path = "data/baba_test.csv"
+    df = pd.read_csv(data_path, index_col = ['symbol', 'timestamp'])
     cwd = os.getcwd()
     model_path = 'lstm_updown_S2S_attention.pt'
     print("data loaded in ", time.time()-start_time, " seconds")
@@ -302,24 +330,29 @@ def main():
     data_std = np.std(data, axis = 0)
     # print(data_mean.shape)
     data_mean[0:4] = data_mean[6:13] = 0 # data_mean[3] # use close mean for these columns
-    data_mean[15] = 50 # rsi_mean
-    data_mean[16] = 0 # cci_mean
-    data_mean[17] = 30.171159 # adx_mean
-    data_mean[18] = 32.843816 # dmp_mean
-    data_mean[19] = 32.276572 # dmn_mean
-    data_mean[20] = 0.5 # edt_scaled
-    data_mean[21] = 0.5 # is_core_time
-    # how should mean for adx,dmp,and dmn be set?
-    # print(data_mean)
-    data_std[0:4] = data_std[6:13] = 1 #data_std[3] # use close std for these columns
-    data_std[15] = 10 # rsi_std
-    data_std[16] = 100 # cci_std
-    data_std[17] = 16.460923 # adx_std
-    data_std[18] = 18.971341 # dmp_std
-    data_std[19] = 18.399032 # dmn_std
-    data_std[20] = 1.25 # edt_scaled
-    data_std[21] = 1 # is_core_time
-    # how should std for adx,dmp,and dmn be set?
+    # data_mean[15] = 50 # rsi_mean
+    # data_mean[16] = 0 # cci_mean
+    # data_mean[17] = 30.171159 # adx_mean
+    # data_mean[18] = 32.843816 # dmp_mean
+    # data_mean[19] = 32.276572 # dmn_mean
+    # data_mean[20] = 2   # day_of_week mean
+    # data_mean[21] = 0.5 # edt_scaled
+    # data_mean[22] = 0.5 # is_core_time
+    # # how should mean for adx,dmp,and dmn be set?
+    # # print(data_mean)
+    # data_std[0:4] = data_std[6:13] = 1 #data_std[3] # use close std for these columns
+    # data_std[15] = 10 # rsi_std
+    # data_std[16] = 100 # cci_std
+    # data_std[17] = 16.460923 # adx_std
+    # data_std[18] = 18.971341 # dmp_std
+    # data_std[19] = 18.399032 # dmn_std
+    # data_std[20] = 1.414 # day_of_week std
+    # data_std[21] = 1.25 # edt_scaled
+    # data_std[22] = 1 # is_core_time
+    # # how should std for adx,dmp,and dmn be set?
+
+    # As feature num increase, it is becoming tedious to maintain mean&variance for special feature. Will need new structure for updateing this in future.
+    # 
     # print(data_std)
 
 
@@ -341,7 +374,7 @@ def main():
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=False) 
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False)
-    total_loader = DataLoader(total_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False)
+    evaluation_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=False)
     # testing have shown that my gtx1080ti doesn't benefit from changing num_worker; but future hardware might need them.
     print(f'data loading completed in {time.time()-start_time:.2f} seconds')
 
@@ -364,7 +397,7 @@ def main():
         decoder_lr = learning_rate
         best_prediction = 0.0
         start_best_prediction = best_prediction
-    best_model = model.state_dict()
+    best_model_state = model.state_dict()
 
     print(model)
     print(f'model loading completed in {time.time()-start_time:.2f} seconds')
@@ -381,6 +414,7 @@ def main():
     
 
     try:
+        plt.ion
         # Train the model
         start_time = time.time()
         print("Training model")
@@ -405,12 +439,12 @@ def main():
                 if accuracy > best_prediction: 
                     print(f'\nNEW BEST prediction: {accuracy:.2f}%\n')
                     best_prediction = accuracy
-                    best_model = model.state_dict()
+                    best_model_state = model.state_dict()
             
                 plt.clf()
                 for i in range(prediction_window):
-                    predictions = test_accuracy_hist[i,:]
-                    plt.plot(predictions, label=f'{i+1} min accuracy', linestyle='solid')
+                    accuracies = test_accuracy_hist[i,:]
+                    plt.plot(accuracies, label=f'{i+1} min accuracy', linestyle='solid')
                 plt.plot(test_accuracy_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
                 plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
                 if epoch == 0:
@@ -440,7 +474,7 @@ def main():
         # plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted prediction', linestyle='dotted')
         # plt.legend()
 
-        print("showing?")
+        print("Training Complete")
         plt.show()
         plt.clf()
         # plt.ioff()
@@ -450,28 +484,49 @@ def main():
         lrs = [encoder_lr, decoder_lr]
 
         # Test the model
-        start_time = time.time()
-        print("Testing model")
-        with torch.no_grad():
-            work(model, test_loader, optimizers, 1, mode = 1)
-        print(f'testing completed in {time.time()-start_time:.2f} seconds')
+        # start_time = time.time()
+        # print("Testing model")
+        # with torch.no_grad():
+        #     test_accuracy_list, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
+        #     test_accuracy_hist[:,0] = test_accuracy_list
+        #     plt.clf()
+        #     for i in range(prediction_window):
+        #         predictions = test_accuracy_hist[i,:]
+        #         plt.plot(predictions, 0, label=f'{i+1} min accuracy', marker = 'o')
+        #     plt.plot(test_accuracy_hist.mean(axis=0), 0, label=f'average accuracy', marker = 'o')
+        #     plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
+        #     plt.legend()
+        #     plt.ylim(0, 1)
+        #     plt.show()
+        #     plt.pause(1)
+        # print(f'testing completed in {time.time()-start_time:.2f} seconds')
 
 
         # Make predictions
-        # start_time = time.time()
-        # print("Making Prediction")
-        # with torch.no_grad():
-        #     predictions, raw_predictions, targets, raw_targets = work(model, total_loader, optimizer, 1, mode = 2)
-        #     # plot(predictions, targets, test_size)
-        #     plt.ioff()
-        #     plot(raw_predictions, raw_targets, test_size)
-        # print(f'prediction completed in {time.time()-start_time:.2f} seconds')
-        save_params(best_prediction, optimizers, best_model, model_path) 
-        torch.save(model, 'last'+model_path)
+        start_time = time.time()
+        print("Making Prediction")
+        with torch.no_grad():
+            buy_decisions, sell_decisions, account_value_hist, raw_predictions, raw_targets, price_hist = work(model, evaluation_loader, optimizers, num_epochs = 1, mode = 2)
+            print(raw_predictions.shape)
+            buy_time = [i for i, x in enumerate(buy_decisions) if x != 0]
+            buy_price = [p for x, p in zip(buy_decisions,price_hist) if x != 0]
+
+            sell_time = [i for i, x in enumerate(sell_decisions) if x != 0]
+            sell_price = [p for x, p in zip(sell_decisions,price_hist) if x != 0]
+            plt.plot(buy_time, buy_price, marker = '^', label = 'buy')
+            plt.plot(sell_time, sell_price, marker = 'v', label = 'sell')
+
+
+            plt.plot(account_value_hist, label='account value')
+            plt.legend()
+            # plot(predictions, targets, test_size)
+            # plot(raw_predictions, raw_targets, test_size)
+        print(f'prediction completed in {time.time()-start_time:.2f} seconds')
+        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path) 
         print('Normal exit. Model saved.')
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
-        save_params(best_prediction, optimizers, best_model, model_path)
+        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path)
 
 if __name__ == '__main__':
     main()

@@ -83,6 +83,7 @@ class Decoder(nn.Module):
         # context_vector: (batch_size, 1, hidden_size)
         # print("context_vector: ", context_vector.shape)
 
+        # v*tanh(hencoder*w1+hdecoder*w2)
 
         lstm_input = torch.cat([context_vector, x], dim=2)
         # lstm_input: (batch_size, 1, embedding_size + hidden_size)

@@ -101,7 +101,7 @@ def infer_missing_data(full,symbol_num):
 def concat_symbols(df):
     start_time = time.time()
     print("Concatenating each row for symbols")
-    df_concat = pd.pivot_table(df, index='timestamps', columns='symbols')
+    df_concat = pd.pivot_table(df, index='timestamp', columns='symbol')
     print(df_concat.head(10))
     df_concat.columns = [f"{col[1]}_{col[0]}" for col in df_concat.columns.values] # Flatten multi-level column names
     print(f'completed in {time.time()-start_time:.2f} seconds')
@@ -138,7 +138,7 @@ def get_and_process_bars(symbol, timeframe, start, end, limit, time_str, downloa
 
     start_time = time.time()
     print("start saving to csv...")
-    df.to_csv(csv_path, index=True, index_label=['symbols', 'timestamps']) 
+    df.to_csv(csv_path, index=True, index_label=['symbol', 'timestamp']) 
     # note that the index_label is necessary; if not specified, the index name will not be saved
     print(f'completed in {time.time()-start_time:.2f} seconds')
 
@@ -146,7 +146,7 @@ def get_and_process_bars(symbol, timeframe, start, end, limit, time_str, downloa
     # These rows are removed to clean "TIME VOID" that is generated at start of the dataset during the filling of absent time.
     # start_time = time.time()
     # print("start concatinating symbols...")
-    # df = pd.read_csv(csv_path, index_col = ['symbols', 'timestamps'])
+    # df = pd.read_csv(csv_path, index_col = ['symbol', 'timestamp'])
     # print(df.head(1000))
     # print(f'completed in {time.time()-start_time:.2f} seconds')
 
@@ -154,12 +154,12 @@ def get_and_process_bars(symbol, timeframe, start, end, limit, time_str, downloa
     # !!! noramlization probably should be done here as well
 
     # turn 2-level index into 1 level index -- keep timestamp index, and concatenate each row for symbols
-    # df = pd.read_csv('df_done.csv', index_col = ['symbols', 'timestamps'])
+    # df = pd.read_csv('df_done.csv', index_col = ['symbol', 'timestamp'])
     # df_concat = concat_symbols(df)
 
     # print(df_concat.head(10))
     
-    # df_concat.to_csv('concatinated_APPL_4symbol_20220201.csv', index=True, index_label=['timestamps'])
+    # df_concat.to_csv('concatinated_APPL_4symbol_20220201.csv', index=True, index_label=['timestamp'])
 
 # assumes taht df_bars is in the order of timestamp, symbol
 def combine_bars(df_bars):
@@ -227,7 +227,7 @@ def main():
     dfs = []
     for str in df_strs:
         csv_path = f'data/csv/bar_set_{str}_baba.csv'
-        df = pd.read_csv(csv_path, index_col = ['symbols', 'timestamps'])
+        df = pd.read_csv(csv_path, index_col = ['symbol', 'timestamp'])
         dfs.append(df)
     print(f'completed in {time.time()-start_time:.2f} seconds')
     df = combine_bars(dfs)
@@ -236,10 +236,10 @@ def main():
 
     start_time = time.time()
     print("start saving to csv...")
-    df.to_csv('data/csv/bar_set_huge_20180101_20230412.csv', index=True, index_label=['symbols', 'timestamps'])
+    df.to_csv('data/csv/bar_set_huge_20180101_20230412.csv', index=True, index_label=['symbol', 'timestamp'])
     print(f'completed in {time.time()-start_time:.2f} seconds')
 
-    # df = pd.read_csv('data/csv/bar_set_huge_20180101_20230410.csv', index_col = ['symbols', 'timestamps'])
+    # df = pd.read_csv('data/csv/bar_set_huge_20180101_20230410.csv', index_col = ['symbol', 'timestamp'])
     # df = df.drop(df.index[:144])
     # print(df.head(12))
 
