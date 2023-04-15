@@ -513,12 +513,16 @@ def main():
 
             sell_time = [i for i, x in enumerate(sell_decisions) if x != 0]
             sell_price = [p for x, p in zip(sell_decisions,price_hist) if x != 0]
-            plt.plot(buy_time, buy_price, marker = '^', label = 'buy')
-            plt.plot(sell_time, sell_price, marker = 'v', label = 'sell')
+            fig, ax1 = plt.subplots()
 
+            ax1.plot(buy_time, buy_price, marker = '^', label = 'buy')
+            ax1.plot(sell_time, sell_price, marker = 'v', label = 'sell')
+            ax1.plot(price_hist, label = 'price')
 
+            ax2 = ax1.twinx()
             plt.plot(account_value_hist, label='account value')
             plt.legend()
+            plt.show()
             # plot(predictions, targets, test_size)
             # plot(raw_predictions, raw_targets, test_size)
         print(f'prediction completed in {time.time()-start_time:.2f} seconds')
