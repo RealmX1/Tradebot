@@ -183,9 +183,9 @@ if __name__ == "__main__":
     # Make predictions
     start_time = time.time()
     print("Making Prediction")
-    data_path = 'data/baba_test_test.csv'
+    data_path = 'data/aapl_test.csv'
     test_loader = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio = 0, global_normalization_list = None)
-    model_pth = 'lastlstm_updown_S2S_attention.pt'
+    model_pth = 'lstm_updown_S2S_attention.pt'
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
     model.load_state_dict(torch.load(model_pth))
     with torch.no_grad():

@@ -52,6 +52,40 @@ def sample_z_continuous(arr, z):
         result[i] = arr[i:i+z]
     return result
 
+def normalize_data(df):
+    data = df.values
+    data_mean = np.mean(data, axis = 0)
+    data_std = np.std(data, axis = 0)
+    # print(data_mean.shape)
+    data_mean[0:4] = data_mean[6:13] = 0 # data_mean[3] # use close mean for these columns
+    # data_mean[15] = 50 # rsi_mean
+    # data_mean[16] = 0 # cci_mean
+    # data_mean[17] = 30.171159 # adx_mean
+    # data_mean[18] = 32.843816 # dmp_mean
+    # data_mean[19] = 32.276572 # dmn_mean
+    # data_mean[20] = 2   # day_of_week mean
+    # data_mean[21] = 0.5 # edt_scaled
+    # data_mean[22] = 0.5 # is_core_time
+    # how should mean for adx,dmp,and dmn be set?
+    # print(data_mean)
+    data_std[0:4] = data_std[6:13] = 1 #data_std[3] # use close std for these columns
+    # data_std[15] = 10 # rsi_std
+    # data_std[16] = 100 # cci_std
+    # data_std[17] = 16.460923 # adx_std
+    # data_std[18] = 18.971341 # dmp_std
+    # data_std[19] = 18.399032 # dmn_std
+    # data_std[20] = 1.414 # day_of_week std
+    # data_std[21] = 1.25 # edt_scaled
+    # data_std[22] = 1 # is_core_time
+    # # how should std for adx,dmp,and dmn be set?
+
+    # As feature num increase, it is becoming tedious to maintain mean&variance for special feature. Will need new structure for updateing this in future.
+
+    # print("data_mean shape: ", data_mean.shape)
+    data_norm = (data - data_mean) / data_std
+    print("normalized data: ", data_norm)
+    return data_norm
+
 def load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio, global_normalization_list = None):
     
     df = pd.read_csv(data_path, index_col = ['symbol', 'timestamp'])
@@ -61,37 +95,8 @@ def load_n_split_data(data_path, hist_window, prediction_window, batch_size, tra
     start_time = time.time()
     data_prep_window = hist_window + prediction_window
 
-    data = df.values
-    data_mean = np.mean(data, axis = 0)
-    data_std = np.std(data, axis = 0)
-    # print(data_mean.shape)
-    data_mean[0:4] = data_mean[6:13] = 0 # data_mean[3] # use close mean for these columns
-    data_mean[15] = 50 # rsi_mean
-    data_mean[16] = 0 # cci_mean
-    data_mean[17] = 30.171159 # adx_mean
-    data_mean[18] = 32.843816 # dmp_mean
-    data_mean[19] = 32.276572 # dmn_mean
-    data_mean[20] = 2   # day_of_week mean
-    data_mean[21] = 0.5 # edt_scaled
-    data_mean[22] = 0.5 # is_core_time
-    # how should mean for adx,dmp,and dmn be set?
-    # print(data_mean)
-    data_std[0:4] = data_std[6:13] = 1 #data_std[3] # use close std for these columns
-    data_std[15] = 10 # rsi_std
-    data_std[16] = 100 # cci_std
-    data_std[17] = 16.460923 # adx_std
-    data_std[18] = 18.971341 # dmp_std
-    data_std[19] = 18.399032 # dmn_std
-    data_std[20] = 1.414 # day_of_week std
-    data_std[21] = 1.25 # edt_scaled
-    data_std[22] = 1 # is_core_time
-    # # how should std for adx,dmp,and dmn be set?
-
-    # As feature num increase, it is becoming tedious to maintain mean&variance for special feature. Will need new structure for updateing this in future.
-
-    # print("data_mean shape: ", data_mean.shape)
-    data_norm = (data - data_mean) / data_std
-    print("data_norm: ", data_norm)
+    data_norm = normalize_data(df)
+    
     data_norm = sample_z_continuous(data_norm, data_prep_window)
 
     train_size = int(train_ratio * len(df))

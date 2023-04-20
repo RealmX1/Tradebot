@@ -46,20 +46,25 @@ columns = ['open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']
 
 # df = pd.DataFrame(columns=columns, index=index)
 
+def get_bars(symbol_or_symbols, timeframe, start, end, limit):
+    pass
 
 async def bar_handler(bar):
-    print(bar)
     mapped_bar = {
         BAR_MAPPING[key]: val for key, val in bar.items() if key in BAR_MAPPING
     }
-    print(mapped_bar['timestamp'])
-    print(type(mapped_bar['timestamp']))
+    print(mapped_bar)
     dt = mapped_bar['timestamp'].to_datetime()
     print(dt)
     print(type(dt))
     formatted = dt.strftime('%Y-%m-%d %H:%M:%S+00:00')
     print(formatted)
 
+
+
+    # TODO: add new row to df_raw (including last week data till now); calculate using indicator function.
+
+    
     # mock_mapped_bar = {'open': 96.055, 'high': 96.055, 'low': 96.055, 'close': 96.055, 'volume': 100, 'timestamp': Timestamp(seconds=1681411020, nanoseconds=0), 'trade_count': 1, 'vwap': 96.055}
     
 
@@ -85,7 +90,8 @@ async def bar_handler(bar):
     # new_data_flag = True
     pass
 
-async def trade_handler(raw_trade):
+async def trade_handler(raw_trade, Timeframe):
+    # calcualte customized aggregate according to timeframe.
     pass
 
 async def quote_handler(raw_quote):
@@ -93,12 +99,15 @@ async def quote_handler(raw_quote):
     pass
 
 def main():
-    stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data, feed=DataFeed.IEX)
+    stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data)  # , data_feed=DataFeed.IEX)
     # stream = CryptoDataStream(api_key = API_KEY, secret_key = SECRET_KEY)
 
-    stream.subscribe_bars(bar_handler, "BABA")
-    stream.subscribe_quotes(quote_handler, "BABA")
-    stream.subscribe_trades(trade_handler, "BABA")
+    symbols = ['AAPL']
+
+    for symbol in symbols:
+        stream.subscribe_bars(bar_handler, symbol)
+    # stream.subscribe_quotes(quote_handler, "BABA")
+    # stream.subscribe_trades(trade_handler, "BABA")
     print("Start streaming")
     stream.run()
     

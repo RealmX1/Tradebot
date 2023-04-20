@@ -43,8 +43,34 @@ def add_time_embedding(df):
 
     df.drop(columns=['timestamps_col', 'edt_time', 'edt_hour'], inplace=True)
 
+def append_indicators(df_raw):
+    # Add EMA
+    df_raw.ta.ema(append=True)
+    # Add DEMA
+    df_raw.ta.dema(append=True)
+    # Add TEMA
+    df_raw.ta.tema(append=True)
+    # Add Bollinger Bands
+    df_raw.ta.bbands(append=True)
+    # Add RSI
+    df_raw.ta.rsi(append=True)
+    # Add CCI
+    df_raw.ta.cci(append=True)
+    # # Add DI+ and DI-
+    # df.ta.dmi(append=True) # not working
+    # Add ADX
+    df_raw.ta.adx(append=True)
+
+    add_time_embedding(df_raw) # very inefficient compared to pandas_ta indicators;
+    # the previous indicators in total used 0.025 seconds on a week's data, this one took 0.065 seconds
+
+    df = df_raw.dropna()
+
+    return df
+
 def main():
-    df = pd.read_csv('data/csv/bar_set_huge_20200101_20230412_baba.csv', index_col = ['symbol', 'timestamp'])
+    time_str = '20200101_20230417'
+    df = pd.read_csv(f'data/csv/bar_set_huge_{time_str}_raw.csv', index_col = ['symbol', 'timestamp'])
     # df = pd.read_csv('data/csv/test_ bar_set_20230101_20230412_baba.csv', index_col = ['symbol', 'timestamp'])
     # df = df.drop(df.index[:144])
     print(df.shape)
@@ -58,44 +84,36 @@ def main():
     groups = df.groupby('symbol')
     columns = []
 
+    total_calculation_time = 0
+    total_csv_saving_time = 0
     # Create a new dataframe for each group
     start_time = time.time()
     print("start calculating indicators...")
     for name, df in groups:
+        start_time2 = time.time()
         print(df.head(5))
         # name: the name of the group (in this case, the unique values in 'index_1')
         # group_df: the dataframe containing the group data
         
         # Do something with the group dataframe, for example:
         print(f"Group {name}:")
-        # Add EMA
-        df.ta.ema(append=True)
-        # Add DEMA
-        df.ta.dema(append=True)
-        # Add TEMA
-        df.ta.tema(append=True)
-        # Add Bollinger Bands
-        df.ta.bbands(append=True)
-        # Add RSI
-        df.ta.rsi(append=True)
-        # Add CCI
-        df.ta.cci(append=True)
-        # # Add DI+ and DI-
-        # df.ta.dmi(append=True) # not working
-        # Add ADX
-        df.ta.adx(append=True)
-
-        add_time_embedding(df)
-
-        df = df.dropna()
+        
+        df = append_indicators(df)
 
         print(df.head(5))
         # columns = list(df.columns)
         # print(columns)
-        
-        df.to_csv(f'data/csv/bar_set_huge_20200101_20230412_{name}_indicator.csv', index=True, index_label=['symbol', 'timestamp'])
+        calculation_time = time.time() - start_time2
+        total_calculation_time += calculation_time
+        print(f"finished calculating indicators for {name} in {calculation_time} seconds")
+        start_time2 = time.time()
+        print("start saving csv...")
+        df.to_csv(f'data/csv/bar_set_huge_{time_str}_{name}_indicator.csv', index=True, index_label=['symbol', 'timestamp'])
+        csv_saving_time = time.time() - start_time2
+        total_csv_saving_time += csv_saving_time
+        print(f"finished calculating indicators for {name} in {csv_saving_time} seconds")
         # df.to_csv(f'data/csv/test.csv', index=True, index_label=['symbol', 'timestamp'])
-    print(f"finished calculating indicators in {time.time() - start_time} seconds")
+    print(f"finished calculating indicators for all symbols in {time.time() - start_time} seconds")
 
     data = df.values
     # plot close_price

@@ -19,27 +19,26 @@ np.set_printoptions(precision=4, suppress=True)
 # import custom files
 from S2S import *
 from sim import *
-from data_utils import *
+from data_utils import * 
 
 
 policy = NaiveLong()
-account = Account(100000, ['BABA'])
+account = Account(100000, ['AAPL'])
 
 close_idx = 3 # after removing time column
 
-
 # Define hyperparameters
 feature_num         = input_size = 23 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size         = 200    # Number of neurons in the hidden layer of the LSTM
-num_layers          = 4     # Number of layers in the LSTM
+hidden_size         = 50    # Number of neurons in the hidden layer of the LSTM
+num_layers          = 1    # Number of layers in the LSTM
 output_size         = 1     # Number of output values (closing price 1~10min from now)
 prediction_window   = 5
-hist_window         = 60 # using how much data from the past to make prediction?
+hist_window         = 30 # using how much data from the past to make prediction?
 data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
 
 
 learning_rate   = 0.0001
-batch_size      = 2000
+batch_size      = 10000
 train_ratio     = 0.9
 num_epochs      = 50
 dropout         = 0.1
@@ -51,7 +50,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 plot_minutes = [0]
 
 
-   
+torch.autograd.set_detect_anomaly(True)
 
 
 def get_direction_diff(y_batch,y_pred):
@@ -81,15 +80,29 @@ def get_direction_diff(y_batch,y_pred):
 def calculate_policy_return(x_batch,y_batch,y_pred):
     pass
 
+def count_tensor_num():
+    num = 0
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                num += 1
+                # print(type(obj), obj.size())
+        except:
+            pass
+    print("num of tensors: ", num)
+
 def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
     if mode == 0:
-        teacher_forcing_ratio = 0.5
+        teacher_forcing_ratio = 0.1
         model.train()
     else:
         teacher_forcing_ratio = 0
         model.eval()
     start_time = time.time()
     same_cells = 0
+
+    # count_tensor_num()
+
 
     total_predictions = np.zeros(prediction_window) # one elemnt for each minute of prediction window
     total_true_predictions = np.zeros(prediction_window)
@@ -98,17 +111,18 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
 
     inverse_mask = torch.linspace(1, 11, 10)
     # print ("inverse_mask.shape: ", inverse_mask.shape)
-    discount_rate = 0.8
+    discount_rate = 0.6
     weights = torch.pow(torch.tensor(discount_rate), torch.arange(prediction_window).float()).to(device)
     # ([1.0000, 0.8000, 0.6400, 0.5120, 0.4096, 0.3277, 0.2621, 0.2097, 0.1678,0.1342])
     # weights = torch.linspace(1, 0.1, steps=prediction_window)
-    ma_loss = None
+    # ma_loss = None
     for epoch in range(num_epochs):
         epoch_loss = 0
         epoch_predictions = 0
         epoch_true_predictions = 0
         i=0
         for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
+            
             # print("x_batch[0,:,:]: ", x_batch[0,:,:])
             # x_batch   [N, hist_window, feature_num]
             # y_batch & output  [N, prediction_window]
@@ -127,12 +141,6 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
 
             weighted_loss = loss * weights
             final_loss = weighted_loss.mean()
-
-            if ma_loss is None:
-                ma_loss = weighted_loss
-            else:
-                ma_loss *= 0.8
-                ma_loss += 0.2 * weighted_loss
             
             if mode == 0:
                 for optimizer in optimizers:
@@ -140,16 +148,23 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
                 final_loss.backward()
                 for optimizer in optimizers:
                     optimizer.step()
-
                 if schedulers is not None:
                     for scheduler in schedulers:
                         scheduler.step(final_loss)
+
+            # tmp = weighted_loss.detach()
+            # if ma_loss is None:
+            #     ma_loss = tmp.sum(axis = 0)
+            # else:
+            #     ma_loss *= 0.8
+            #     ma_loss += 0.2*tmp.sum(axis = 0)
 
             total_cells, same_cells, total_cells_list,same_cells_list = get_direction_diff(y_batch, y_pred)
             epoch_predictions += total_cells
             epoch_true_predictions += same_cells
             total_predictions += total_cells_list
             total_true_predictions += same_cells_list
+
             
             epoch_loss += loss_val
         epoch_loss /= (i+1)
@@ -160,18 +175,18 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
               f'Loss: {epoch_loss:10.7f}, ' +
               f'Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ' +
               f'Correct Direction: {correct_direction:.2f}%, ' +
-              f'Encocder LR: {get_current_lr(optimizers[0]):9.10f}, Decoder LR: {get_current_lr(optimizers[1]):9.10f}' +
-              f'Weighted Loss: {final_loss.item():10.7f}, MA Loss: {ma_loss.mean().item():10.7f}') 
-        
+              f'Encocder LR: {get_current_lr(optimizers[0]):9.10f}, Decoder LR: {get_current_lr(optimizers[1]):9.10f}') # +
+              # f'Weighted Loss: {final_loss.item():10.7f}, MA Loss: {ma_loss.mean().item():10.7f}') 
+            
     print(f'completed in {time.time()-start_time:.2f} seconds')
     average_loss /= num_epochs
     accuracy_list = total_true_predictions / total_predictions * 100
     accuracy_list_print = [round(x, 2) for x in accuracy_list]
     print("Accuracy List: ", accuracy_list_print)
 
-    if mode == 1: #test mode
+    if mode == 1:
         return accuracy_list, average_loss
-    elif mode == 0: #train mode
+    else:
         return average_loss
 
 def plot(predictions, targets, test_size):
@@ -202,13 +217,15 @@ def save_params(best_prediction, optimizers, model_state, best_model_state, mode
     print("done.")
     
 def main():
+    # torch.cuda.empty_cache()
+    # gc.collect()
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
     
     start_time = time.time()
     print("loading data & model")
     # "data/bar_set_huge_20180101_20230410_GOOG_indicator.csv"
     # "data/bar_set_huge_20200101_20230412_BABA_indicator.csv"
-    data_path = "data/bar_set_huge_20200101_20230412_BABA_indicator.csv"
+    data_path = "data/bar_set_huge_20200101_20230417_AAPL_indicator.csv"
     model_path = 'lstm_updown_S2S_attention.pt'
     print("loaded in ", time.time()-start_time, " seconds")
     
@@ -218,7 +235,7 @@ def main():
 
     print("loading model")
     start_time = time.time()
-    model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
+    model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device, attention = True).to(device)
     if os.path.exists('last'+model_path):
         print("Loading existing model")
         model.load_state_dict(torch.load('last'+model_path))
@@ -243,8 +260,8 @@ def main():
     # optimizer = SGD(model.parameters(), lr=learning_rate)
     encoder_optimizer = AdamW(model.encoder.parameters(),weight_decay=1e-5, lr=encoder_lr)
     decoder_optimizer = AdamW(model.decoder.parameters(),weight_decay=1e-5, lr=decoder_lr)
-    encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, mode='min', factor=0.98, patience=20, threshold=0.0001)
-    decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.98, patience=20, threshold=0.0001)
+    encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, mode='min', factor=0.98, patience=10, threshold=0.0001)
+    decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.98, patience=10, threshold=0.0001)
 
     optimizers = [encoder_optimizer, decoder_optimizer]
     schedulers = [encoder_scheduler, decoder_scheduler]
@@ -257,8 +274,12 @@ def main():
         print("Training model")
         test_every_x_epoch = 1
         test_accuracy_hist = np.zeros((prediction_window,1))
-        weights = np.linspace(1, 0.1, num=prediction_window)
-        weights = weights.reshape(prediction_window,1)
+
+        weight_decay = 0.6
+        arr = np.ones(prediction_window)
+        for i in range(1, prediction_window):
+            arr[i] = arr[i-1] * weight_decay
+        weights = arr.reshape(prediction_window,1)
 
         for epoch in range(num_epochs):
             print(f'Epoch {epoch+1}/{num_epochs}')
@@ -286,6 +307,7 @@ def main():
                 plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
                 if epoch == 0:
                     plt.legend()
+                    plt.pause(0.1)
                 plt.pause(0.1)
 
                 # actually train the model
@@ -340,6 +362,8 @@ def main():
 
         save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path) 
         print('Normal exit. Model saved.')
+        torch.cuda.empty_cache()
+        gc.collect()
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
         save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path)

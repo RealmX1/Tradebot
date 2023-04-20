@@ -34,13 +34,16 @@ SECRET_KEY =  "3aNqjtbPlkJv09NicPgYFXC3KUhNOR16JGGdiLet"
 data_source = DataFeed.IEX
 
 stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
+
+pre = "bar_set"
+post = "raw"
     
 
 def get_bars(symbol_or_symbols, timeframe, start, end, limit):
     # Test single symbol request
     
     request = StockBarsRequest(
-        symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit, adjustment="all", feed = data_source
+        symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit, adjustment="all" #, feed = data_source
     )
 
     print("Start request")
@@ -61,6 +64,7 @@ def complete_timestamp_with_all_symbols(df):
     unique_symbols = df.index.get_level_values(0).unique().tolist()     # unique symbols
     unique_timestamps = df.index.get_level_values(1).unique().tolist()  # unique timestamps
     idx = pd.MultiIndex.from_product([unique_symbols, unique_timestamps])
+    print(idx)
     full = df.reindex(index=idx, fill_value=-1)
     print("missing rows added: ", full.shape[0] - df.shape[0])
     print(f'completed in {time.time()-start_time:.2f} seconds')
@@ -90,9 +94,9 @@ def infer_missing_data(full,symbol_num):
             new_row += [prev_row[6]]   # vwap = prev_vwap
             # new_row += [1]                  # is_new_row = 1
             df_inferred.loc[i] = new_row
-        if (a+1) % 10000 == 0:
+        if (a+1) % 100000 == 0:
             print(f"processed {a+1} rows")
-    print(f'completed in {time.time()-start_time:.2f} seconds')
+    print(f'missing data filled in {time.time()-start_time:.2f} seconds')
 
     # df_inferred = df_inferred.drop(columns=df.columns[-1]) # drop the last column (is_new_row)
 
@@ -104,43 +108,48 @@ def concat_symbols(df):
     df_concat = pd.pivot_table(df, index='timestamp', columns='symbol')
     print(df_concat.head(10))
     df_concat.columns = [f"{col[1]}_{col[0]}" for col in df_concat.columns.values] # Flatten multi-level column names
-    print(f'completed in {time.time()-start_time:.2f} seconds')
+    print(f'concatination completed in {time.time()-start_time:.2f} seconds')
 
     return df_concat
 
 # saves pkl to 
-def get_and_process_bars(symbol, timeframe, start, end, limit, time_str, download=False):
-    symbol_num = len(symbol)
+def get_and_process_bars(symbols, timeframe, start, end, limit = None, download=False, pre = pre, post = post):
+    symbol_num = len(symbols)
     start_time = time.time()
-    pkl_path = f'data/pkl/bar_set_{time_str}_baba.pkl'
-    csv_path = f'data/csv/bar_set_{time_str}_baba.csv'
+    start_str = start.strftime("%Y%m%d")
+    end_str = end.strftime("%Y%m%d")
+    time_str = f'{start_str}_{end_str}'
+    pkl_path = f'data/pkl/{pre}_{time_str}_{post}.pkl'
+    csv_path = f'data/csv/{pre}_{time_str}_{post}.csv'
 
     if download:
         print("Start getting bars")
-        bar_set = get_bars(symbol, timeframe, start, end, limit)
+        bar_set = get_bars(symbols, timeframe, start, end, limit)
 
         with open(pkl_path, 'wb') as f:
             pickle.dump(bar_set, f)
-        print(f'completed in {time.time()-start_time:.2f} seconds')
+        print(f'pkl download completed in {time.time()-start_time:.2f} seconds')
+
+        df = bar_set.df
+    
+        print("raw data shape: ", df.shape)
+
+        start_time = time.time()
+        print("start saving to csv...")
+        df.to_csv(csv_path, index=True, index_label=['symbol', 'timestamp']) 
+        # note that the index_label is necessary; if not specified, the index name will not be saved
+        print(f'csv saving completed in {time.time()-start_time:.2f} seconds')
     else:
         start_time = time.time()
-        print("Start loading bars")
-        with open(pkl_path, 'rb') as f:
-            bar_set = pickle.load(f)
-        print(f'completed in {time.time()-start_time:.2f} seconds')
+        print("reading from csv...")
+        df = pd.read_csv(csv_path, index_col = ['symbol', 'timestamp'])
+        # note that the index_label is necessary; if not specified, the index name will not be saved
+        print(f'csv reading completed in {time.time()-start_time:.2f} seconds')
         
-    df = bar_set.df
     
-    print("raw data shape: ", df.shape)
-    df = complete_timestamp_with_all_symbols(df)
-    df = infer_missing_data(df,symbol_num)
-    # print(df)
+    
 
-    start_time = time.time()
-    print("start saving to csv...")
-    df.to_csv(csv_path, index=True, index_label=['symbol', 'timestamp']) 
-    # note that the index_label is necessary; if not specified, the index name will not be saved
-    print(f'completed in {time.time()-start_time:.2f} seconds')
+    return df
 
     # Remove some rows from the beginning of the dataframe;
     # These rows are removed to clean "TIME VOID" that is generated at start of the dataset during the filling of absent time.
@@ -161,16 +170,36 @@ def get_and_process_bars(symbol, timeframe, start, end, limit, time_str, downloa
     
     # df_concat.to_csv('concatinated_APPL_4symbol_20220201.csv', index=True, index_label=['timestamp'])
 
-# assumes taht df_bars is in the order of timestamp, symbol
-def combine_bars(df_bars):
+# XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXassumes that df_bars is in the order of timestamp, symbol
+# UNTESTED
+def read_raw_bars(time_strs):
+    start_time = time.time()
+    print("Reading multiple processed csv...")
+    dfs = []
+    for time_str in time_strs:
+        csv_path = f'data/csv/bar_set_{time_str}_raw.csv'
+        df = pd.read_csv(csv_path, index_col = ['symbol', 'timestamp'])
+        dfs.append(df)
+    print(f'multiple csv reading completed in {time.time()-start_time:.2f} seconds')
+    return dfs
+# UNTESTED
+def combine_bars(df_bars, symbol_num):
     start_time = time.time()
     print("Combining multiple df...")
-    concatenated_df = pd.concat(df_bars)
+    combined_df = pd.concat(df_bars)
     # Remove rows where both indices are the same
-    filtered_df = concatenated_df[~(concatenated_df.index.get_level_values(0) == concatenated_df.index.get_level_values(1))]
+    duplicated = combined_df.index.duplicated()
+
+    combined_df = combined_df[~duplicated]
+    # print (combined_df)
+
+    # combined_df.drop_duplicates(subset, keep='last', inplace=True)
+    combined_df = complete_timestamp_with_all_symbols(combined_df)
+    symbol_num = combined_df.index.get_level_values(0).nunique() # number of unique first index
+    combined_df = infer_missing_data(combined_df,symbol_num)
     # the "==" operation creates a boolean mask that selects redundent rows, and 
-    print(f'completed in {time.time()-start_time:.2f} seconds')
-    return filtered_df
+    print(f'multiple df combined in {time.time()-start_time:.2f} seconds')
+    return combined_df
 
 def get_and_process_quotes(symbol, timeframe, start, limit):
     pass
@@ -192,56 +221,75 @@ def get_latest_bars(symbol_or_symbols):
 
     return bar_set
 
-def main():
-    # barset = get_latest_bars("BABA")
-    # print(barset)
-    symbol = ["BABA"] #["AAPL","MSFT","TSLA","GOOG","SPY"]
-    symbol_num = len(symbol)
-    timeframe = TimeFrame.Minute
-    start = datetime(2023,1,1)
-    end = None #datetime(2023,4,12)
-    limit = None
+def last_week_bars(symbols, timeframe = TimeFrame.Minute):
+    # get the last week of data
+    end = datetime.now()
+    start = (end - timedelta(days=end.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    df = get_and_process_bars(symbols, timeframe, start, end, download = True, pre = 'last_week_' + pre)
+    return df
+    # return get_and_process_bars(symbols, timeframe, start, end, None)
 
-    # now we are using adjusted dataset.
-    time_str = "20230101_20230412" # "20200101_20210101" # "20230403_20230404_test" "20210101_20220727" "20220727_20230406" 
-    get_and_process_bars(symbol, timeframe, start, end, limit, time_str, download=False)
+# UNTESTED
+def get_load_of_bars(symbols, timeframe, start, end, limit = None, download = False):
+    raw_start = start
+    raw_end = end
+    
+    limit = None
+    time_strs = []
 
     start_time = time.time()
     print("Start getting multiple bars file")
-    df_strs = []
-    for i in range(20, 23):
-        start = datetime(2000+i,1,1)
-        end = datetime(2000+i+1,1,1)
-        time_str = f"20{i}0101_20{i+1}0101"
-        df_strs.append(time_str)
-        get_and_process_bars(symbol, timeframe, start, end, limit, time_str, download=False)
+    
+    for i in range(raw_start.year, raw_end.year + 1):
+        if (i == raw_start.year):
+            start = raw_start
+        else:
+            start = datetime(i,1,1)
+        if (i == raw_end.year):
+            end = raw_end
+        else:
+            end = datetime(i+1,1,1)
+
+        start_str = start.strftime("%Y%m%d")
+        end_str = end.strftime("%Y%m%d")
+        time_str = f"{start_str}_{end_str}"
+        print('getting data with time_str: ', time_str)
+        time_strs.append(time_str)
+        get_and_process_bars(symbols, timeframe, start, end, limit, download=download)
     print(f'All files downloaded and processed in {time.time()-start_time:.2f} seconds')
 
-    df_strs.append("20230101_20230412")
-    print(df_strs)
-    
+    print("time_strs: ", time_strs)
 
     # combine multiple csv files into one
-    start_time = time.time()
-    print("Reading multiple processed csv...")
-    dfs = []
-    for str in df_strs:
-        csv_path = f'data/csv/bar_set_{str}_baba.csv'
-        df = pd.read_csv(csv_path, index_col = ['symbol', 'timestamp'])
-        dfs.append(df)
-    print(f'completed in {time.time()-start_time:.2f} seconds')
-    df = combine_bars(dfs)
+    dfs = read_raw_bars(time_strs)
 
-    df = infer_missing_data(df,symbol_num)
+    df = combine_bars(dfs, len(symbols))
 
     start_time = time.time()
     print("start saving to csv...")
-    df.to_csv('data/csv/bar_set_huge_20180101_20230412.csv', index=True, index_label=['symbol', 'timestamp'])
+    start_str = raw_start.strftime("%Y%m%d")
+    end_str = raw_end.strftime("%Y%m%d")
+    df.to_csv(f'data/csv/bar_set_huge_{start_str}_{end_str}_raw.csv', index=True, index_label=['symbol', 'timestamp'])
     print(f'completed in {time.time()-start_time:.2f} seconds')
 
-    # df = pd.read_csv('data/csv/bar_set_huge_20180101_20230410.csv', index_col = ['symbol', 'timestamp'])
-    # df = df.drop(df.index[:144])
-    # print(df.head(12))
+
+def main():
+    # barset = get_latest_bars("BABA")
+    # print(barset)
+    symbols = ["AAPL"] #["AAPL","MSFT","TSLA","GOOG","SPY"]
+    timeframe = TimeFrame.Minute
+    start = datetime(2020,1,1)
+    end = datetime.now() 
+
+    get_load_of_bars(symbols, timeframe, start, end, limit = None, download=False)
+
+    # last_week_bars(symbols, timeframe = TimeFrame.Minute)
+
+    # df = get_bars(symbols, timeframe, start, end, limit = None).df
+    # print(df)
+    
+    
 
 
     # need to re-download prices adjusted for splits; experimetn with the parameter
