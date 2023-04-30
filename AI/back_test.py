@@ -44,7 +44,7 @@ def get_direction_diff(y_batch,y_pred):
     return total_cells, same_cells, total_cells_list, same_cells_list
 
 
-def back_test(model, data_loader, num_epochs = 1):    
+def back_test(model, data_loader, col_names, num_epochs = 1):    
     teacher_forcing_ratio = 0
     model.eval()
     start_time = time.time()
@@ -70,10 +70,17 @@ def back_test(model, data_loader, num_epochs = 1):
     sell_decisions = []
     account_value_hist = []
     price_hist = []
+    start_price = 0
+    start_balance = 0
+    end_price = 0
+    
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
     for epoch in range(num_epochs):
         epoch_predictions = 0
         epoch_true_predictions = 0
         i=0
+        
         for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
             ma_loss *= 0.8
             # print("x_batch[0,:,:]: ", x_batch[0,:,:])
@@ -81,21 +88,30 @@ def back_test(model, data_loader, num_epochs = 1):
             # y_batch & output  [N, prediction_window]
             x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
             # print("one input: ", x_batch[0:,:,:])
-            y_batch = y_batch.float().to(device)
+            # y_batch = y_batch.float().to(device)
             
-            y_pred = model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
+            # y_pred = model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
             # print("y_pred.shape: ", y_pred.shape)
             # print("y_batch.shape: ", y_pred.shape)
             # print("y_batch: ", y_batch[0,:])
             
-            total_cells, same_cells, total_cells_list,same_cells_list = get_direction_diff(y_batch, y_pred)
-            epoch_predictions += total_cells
-            epoch_true_predictions += same_cells
-            total_predictions += total_cells_list
-            total_true_predictions += same_cells_list
+            # total_cells, same_cells, total_cells_list,same_cells_list = get_direction_diff(y_batch, y_pred)
+            # epoch_predictions += total_cells
+            # epoch_true_predictions += same_cells
+            # total_predictions += total_cells_list
+            # total_true_predictions += same_cells_list
+
 
             price = x_raw_close.item()
-            decision = policy.decide('BABA', None, price, y_pred, account)
+            if (epoch == 0 and i == 0):
+                start_price = price
+                start_balance = account.evaluate()
+            if (epoch == num_epochs-1 and i == len(data_loader)-1):
+                end_price = price
+
+            decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
+            # decision = policy.decide('AAPL', None, price, y_pred, account)
+            #policy.decide('BABA', None, price, y_pred, account)
             decisions.append(decision)
             if decision[0] == 'b':
                 buy_decisions.append(1)
@@ -106,8 +122,68 @@ def back_test(model, data_loader, num_epochs = 1):
             else:
                 buy_decisions.append(0)
                 sell_decisions.append(0)
-            account_value_hist.append(account.evaluate())
+
+            account_value = account.evaluate()
+            if decision[0] != 'n':
+                print(decision, price)
+                account_growth = account_value/start_balance*100-100
+                stock_growth = price/start_price*100-100
+                print(f"Account Value: {account_value:>10.2f}, accont growth: {account_growth:>6.2f}%, stock growth: {stock_growth:>6.2f}%, account vs. stock: {account_growth-stock_growth:>6.2f}%")
+            account_value_hist.append(account_value)
             price_hist.append(price)
+
+            if (i%1000 == 0):
+                start_time = time.time()
+                ax1.clear()
+                ax2.clear()
+
+                price_hist_start = price_hist[0]
+                account_value_start = account_value_hist[0]
+
+
+                # calculate percentage change for both lines
+                y1_pct_change = [(i-price_hist_start)/price_hist_start for i in price_hist]
+                y1_pct_change_min = min(y1_pct_change)
+                y1_pct_change_max = max(y1_pct_change)
+                y2_pct_change = [(i-account_value_start)/account_value_start for i in account_value_hist]
+                y2_pct_change_min = min(y2_pct_change)
+                y2_pct_change_max = max(y2_pct_change)
+
+                pct_change_min = min(y1_pct_change_min, y2_pct_change_min)
+                pct_change_max = max(y1_pct_change_max, y2_pct_change_max)
+
+                ax1_y_min = price_hist_start*(1+pct_change_min) - 0.05
+                ax1_y_max = price_hist_start*(1+pct_change_max) + 0.05
+
+                ax2_y_min = account_value_start*(1+pct_change_min)
+                ax2_y_max = account_value_start*(1+pct_change_max)
+
+                # set limits of both y-axes to begin at the same height
+                ax1.set_ylim([ax1_y_min, ax1_y_max])
+                ax2.set_ylim([ax2_y_min, ax2_y_max])
+
+                
+                buy_time = [i for i, x in enumerate(buy_decisions) if x != 0]
+                buy_price = [p for x, p in zip(buy_decisions,price_hist) if x != 0]
+
+                sell_time = [i for i, x in enumerate(sell_decisions) if x != 0]
+                sell_price = [p for x, p in zip(sell_decisions,price_hist) if x != 0]
+
+                
+                ax1.plot(price_hist, label = 'price')
+                ax1.scatter(buy_time, buy_price, marker = '^', label = 'buy', )
+                ax1.scatter(sell_time, sell_price, marker = 'v', label = 'sell')
+                ax2.plot(account_value_hist, label='account value', color = 'r')
+
+                ax1.annotate(f"{stock_growth:.2f}%", xy=(len(account_value_hist), price_hist[-1]), xytext=(10, -20), textcoords="offset points",
+                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-0.2"))
+                ax2.annotate(f"{account_growth:.2f}%", xy=(len(account_value_hist), account_value_hist[-1]), xytext=(10, -20), textcoords="offset points",
+                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-0.2"))
+
+                plt.legend()
+                plt.pause(0.1)
+                
+                print(f'plotting completed in {time.time()-start_time:.2f} seconds')
             # print(account.evaluate())
             # mean = mean.float().to(device)
             # std = std.float().to(device)
@@ -131,13 +207,16 @@ def back_test(model, data_loader, num_epochs = 1):
                 # raw_targets = torch.cat((raw_targets, raw_target), dim=0)
                 raw_closes = torch.cat((raw_closes, x_raw_close), dim=0)
             
-        correct_direction = epoch_true_predictions / epoch_predictions * 100
+        # correct_direction = epoch_true_predictions / epoch_predictions * 100
             
         print(f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
-              f'Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ' +
-              f'Correct Direction: {correct_direction:.2f}%, ')
+              f'Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ') # +
+            #   f'Correct Direction: {correct_direction:.2f}%, ')
             #   + f'Encocder LR: {get_current_lr(optimizers[0]):9.10f}, Decoder LR: {get_current_lr(optimizers[1]):9.10f}') 
         
+        
+
+
     print(f'completed in {time.time()-start_time:.2f} seconds')
     average_loss /= num_epochs
     accuracy_list = total_true_predictions / total_predictions * 100
@@ -147,35 +226,49 @@ def back_test(model, data_loader, num_epochs = 1):
     return  buy_decisions, \
             sell_decisions, \
             account_value_hist, \
-            price_hist
+            price_hist, \
+            start_price, \
+            end_price
             # raw_predictions.cpu().numpy(), \
             # raw_targets.cpu().numpy(), \
 
+def locate_cols(strings_list, substring):
+    return [i for i, string in enumerate(strings_list) if substring in string]
+
 if __name__ == "__main__":
-    policy = NaiveLong()
+    # policy = NaiveLong()
+    policy = NaiveMACD()
+    '''
+    Epoch   1/  1, Time per epoch: 801.75 seconds, Correct Direction: 54.46%, 
+    completed in 801.75 seconds
+    Accuracy List:  [56.07, 54.1, 53.21]
+    account value: 306575.69
+    account growth: 206.58%
+    stock value change: 102.93%
+    prediction completed in 808.78 seconds
+    '''
     initial_capital = 100000
-    account = Account(initial_capital, ['BABA'])
+    account = Account(initial_capital, ['AAPL'])
 
 
     close_idx = 3 # after removing time column
 
 
     # Define hyperparameters
-    feature_num         = input_size = 23 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-    hidden_size         = 200    # Number of neurons in the hidden layer of the LSTM
-    num_layers          = 4     # Number of layers in the LSTM
+    feature_num         = input_size = 10 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+    hidden_size         = 100    # Number of neurons in the hidden layer of the LSTM
+    num_layers          = 1    # Number of layers in the LSTM
     output_size         = 1     # Number of output values (closing price 1~10min from now)
-    prediction_window   = 5
-    hist_window         = 100 # using how much data from the past to make prediction?
+    prediction_window   = 3
+    hist_window         = 20 # using how much data from the past to make prediction?
     data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
 
 
     learning_rate   = 0.0001
-    batch_size      = 1
-    train_percent   = 0
-    num_epochs      = 0
+    batch_size      = 10000
+    train_ratio     = 0.9
+    num_epochs      = 50
     dropout         = 0.1
-    teacher_forcing_ratio = 0
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('account value: ', account.evaluate())
@@ -183,16 +276,17 @@ if __name__ == "__main__":
     # Make predictions
     start_time = time.time()
     print("Making Prediction")
-    data_path = 'data/aapl_test.csv'
-    test_loader = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio = 0, global_normalization_list = None)
-    model_pth = 'lstm_updown_S2S_attention.pt'
+    data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
+    test_loader, col_names = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio = 0, global_normalization_list = None, normalize = None)
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    model.load_state_dict(torch.load(model_pth))
+    # model_pth = 'model/legacy_model/lstm_updown_S2S_attention_88feature.pt'
+    # model.load_state_dict(torch.load(model_pth))
     with torch.no_grad():
-        buy_decisions, sell_decisions, account_value_hist, price_hist = \
-            back_test(model, test_loader, num_epochs = 1)
+        buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price = \
+            back_test(model, test_loader, col_names, num_epochs = 1)
         print(f'account value: {account_value_hist[-1]:.2f}')
-        print(f'account growth: {account_value_hist[-1]/initial_capital*100:.2f}%')
+        print(f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
+        print(f'stock value change: {end_price/start_price*100 - 100:.2f}%')
         print(f'prediction completed in {time.time()-start_time:.2f} seconds')
 
         assert len(buy_decisions) == len(sell_decisions) == len(account_value_hist) == len(price_hist)
@@ -212,7 +306,7 @@ if __name__ == "__main__":
         ax1.scatter(sell_time, sell_price, marker = 'v', label = 'sell')
 
         ax2 = ax1.twinx()
-        plt.plot(account_value_hist, label='account value')
+        plt.plot(account_value_hist, label='account value', color = 'r')
         plt.legend()
         print(f'plotting completed in {time.time()-start_time:.2f} seconds')
         plt.show()

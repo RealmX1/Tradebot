@@ -113,6 +113,7 @@ class Seq2Seq(nn.Module):
         
         self.encoder = Encoder(input_size, hidden_size, num_layers, dropout).to(device)
         self.decoder = Decoder(output_size, hidden_size, num_layers, output_size, dropout, attention).to(device)
+        self.softmax = nn.Softmax(dim=1)
         self.device = device
 
         self.input_size = input_size
@@ -141,19 +142,40 @@ class Seq2Seq(nn.Module):
         x = torch.zeros(batch_size, 1,1).to(self.device) # note that since Y predicts difference from X, don't need to initialize each decodign process with X value.
 
         for t in range (self.prediction_window):
-            if t == 0:
-                pass
-            else:
-                x = target[:,t-1:t,None] if random.random() < teacher_forcing_ratio else x
+            # if t == 0:
+            #     pass
+            # else:
+            x = target[:,t:t+1,None] if random.random() < teacher_forcing_ratio else x
             x, hidden, cell = self.decoder(x, encoder_output, hidden, cell)
             outputs[:,t:t+1,:] = x
-            
         
+        # softmax_outputs = self.softmax(outputs.squeeze(2))
+        # print("softmax_outputs: ", softmax_outputs[0])
+
         return outputs.squeeze(2) # note that squeeze is used since y_batch is 2d, yet y_pred is 3d. (if output size sin't 1, then y_batch will be 3d.)            
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class SimpleNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, hist_window, prediction_window, dropout, device):
+    def __init__(self, input_size, hidden_size, num_layers, output_size, hist_window, prediction_window, dropout, device, attention = True):
         super().__init__()
         self.device = device
 
@@ -164,8 +186,10 @@ class SimpleNN(nn.Module):
         self.bn2 = nn.BatchNorm1d(hidden_size)
         self.dropout2 = nn.Dropout(dropout)
         self.fc3 = nn.Linear(hidden_size, output_size*prediction_window)
+        # self.softmax = nn.Softmax(dim=1)
     
     def forward(self, x):
+        # print("x.shape: ", x.shape)
         x = x.view(x.size(0), -1)
         x = self.fc1(x)
         x = self.bn1(x)
@@ -174,4 +198,5 @@ class SimpleNN(nn.Module):
         x = self.bn2(x)
         x = self.dropout2(x)
         x = self.fc3(x)
+        # x = self.softmax(x)
         return x

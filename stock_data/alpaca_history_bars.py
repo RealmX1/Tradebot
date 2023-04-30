@@ -119,8 +119,8 @@ def get_and_process_bars(symbols, timeframe, start, end, limit = None, download=
     start_str = start.strftime("%Y%m%d")
     end_str = end.strftime("%Y%m%d")
     time_str = f'{start_str}_{end_str}'
-    pkl_path = f'data/pkl/{pre}_{time_str}_{post}.pkl'
-    csv_path = f'data/csv/{pre}_{time_str}_{post}.csv'
+    pkl_path = f'../data/pkl/{pre}_{time_str}_{post}.pkl'
+    csv_path = f'../data/csv/{pre}_{time_str}_{post}.csv'
 
     if download:
         print("Start getting bars")
@@ -177,7 +177,7 @@ def read_raw_bars(time_strs):
     print("Reading multiple processed csv...")
     dfs = []
     for time_str in time_strs:
-        csv_path = f'data/csv/bar_set_{time_str}_raw.csv'
+        csv_path = f'../data/csv/bar_set_{time_str}_raw.csv'
         df = pd.read_csv(csv_path, index_col = ['symbol', 'timestamp'])
         dfs.append(df)
     print(f'multiple csv reading completed in {time.time()-start_time:.2f} seconds')
@@ -270,7 +270,7 @@ def get_load_of_bars(symbols, timeframe, start, end, limit = None, download = Fa
     print("start saving to csv...")
     start_str = raw_start.strftime("%Y%m%d")
     end_str = raw_end.strftime("%Y%m%d")
-    df.to_csv(f'data/csv/bar_set_huge_{start_str}_{end_str}_raw.csv', index=True, index_label=['symbol', 'timestamp'])
+    df.to_csv(f'../data/csv/bar_set_huge_{start_str}_{end_str}_raw.csv', index=True, index_label=['symbol', 'timestamp'])
     print(f'completed in {time.time()-start_time:.2f} seconds')
 
 

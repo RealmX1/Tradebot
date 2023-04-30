@@ -163,7 +163,11 @@ import pytz
 
 
 
-
+import pandas_ta as ta
 
 df = pd.read_csv('data/csv/test.csv')
+df.ta.macd(append = True)
+df = df.dropna()
 print(df.columns.tolist())
+print(df.index.names)
+print(df.head(20))

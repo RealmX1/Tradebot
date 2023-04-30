@@ -1,0 +1,16 @@
+Up Precision: 45.4263%,Background Up percent: 43.9507%Down Precision: 58.0437%,Background Down percent: 56.0493%
+with attention
+
+¡ü Precision: 45.5940%,Background ¡ü: 43.9507%¡ý Precision: 57.6412%,Background ¡ý: 56.0493%
+Accuracy List:  [51.836, 51.591]
+without attention
+
+
+
+
+Epoch 161/1000
+Epoch   1/  1, Loss:  0.2853414, Time//epoch: 0.24 seconds, Encocder LR: 0.00115982,
+Epoch   1/  1, Loss:  0.2737945, Time//epoch: 0.27 seconds, Encocder LR: 0.00115982,
+Epoch 162/1000
+Epoch   1/  1, Loss:  0.2838344, Time//epoch: 0.24 seconds, Encocder LR: 0.00115982,
+Epoch   1/  1, Loss:  0.2727483, Time//epoch: 0.26 seconds, Encocder LR: 0.00110183,
