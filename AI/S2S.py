@@ -145,7 +145,9 @@ class Seq2Seq(nn.Module):
             # if t == 0:
             #     pass
             # else:
-            x = target[:,t:t+1,None] if random.random() < teacher_forcing_ratio else x
+            if teacher_forcing_ratio:
+                if random.random() < teacher_forcing_ratio:
+                    x = target[:,t:t+1,None] 
             x, hidden, cell = self.decoder(x, encoder_output, hidden, cell)
             outputs[:,t:t+1,:] = x
         

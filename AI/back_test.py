@@ -91,7 +91,9 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
             # print("x_batch[0,:,:]: ", x_batch[0,:,:])
             # x_batch   [N, hist_window, feature_num]
             # y_batch & output  [N, prediction_window]
-            x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
+            x_batch = x_batch.float().to(device) 
+            # probably need to do numpy to pt tensor in the dataset; need testing on efficiency 
+            # !!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
             # print("one input: ", x_batch[0:,:,:])
             y_batch = y_batch.float().to(device)
         
@@ -130,7 +132,9 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
 
             account_value = account.evaluate()
             if decision[0] != 'n' or i == 0:
-                long_count, profitable_long_count, short_count, profitable_short_count, mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
+                long_count, profitable_long_count, \
+                short_count, profitable_short_count, \
+                mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
                 print(decision, 
                         f'price: {price:>6.2f}, ' +
                         f'long: {long_count:>4}, ' +
@@ -290,7 +294,14 @@ if __name__ == "__main__":
     data_type = '23feature'
     data_path = f'../data/csv/bar_set_huge_{time_str}_{name}_{data_type}.csv'
 
-    test_loader, col_names = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio = 0, global_normalization_list = None, normalize = True)
+    test_loader, col_names = \
+        load_n_split_data(  data_path, 
+                          hist_window, 
+                          prediction_window, 
+                          batch_size, 
+                          train_ratio = 0, 
+                          global_normalization_list = None, 
+                          normalize = True)
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
     config_name = 'lstm_updown_S2S_attention'
     model_pth = f'../model/last_model_{config_name}.pt'
