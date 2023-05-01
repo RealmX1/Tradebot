@@ -13,7 +13,10 @@ indicators to calculate:
     - rsi
 '''
 
-window_size = 10
+# window_size = 10
+
+pre = "bar_set"
+post = "raw"
 
 # Define function to apply to rolling window
 def func(x):
@@ -74,8 +77,8 @@ def main():
     
     # time_str = '20200101_20230417'
     # input_path = f'../data/csv/bar_set_huge_{time_str}_raw.csv'
-    time_str = '20230418_20230501'
-    input_path = f'../data/csv/bar_set_{time_str}_raw.csv'
+    time_str = '20220101_20230501'
+    input_path = f'../data/csv/{pre}_{time_str}_{post}.csv'
     
     data_type = '23feature' # later used to construct save_path
     df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
@@ -116,7 +119,7 @@ def main():
         print(f'finished calculating indicators for {name} in {calculation_time} seconds')
         start_time2 = time.time()
         print('start saving csv...')
-        save_path = f'../data/csv/bar_set_huge_{time_str}_{name}_{data_type}.csv'
+        save_path = f'../data/csv/bar_set_{time_str}_{name}_{data_type}.csv'
         df.to_csv(save_path, index=True, index_label=['symbol', 'timestamp'])
         csv_saving_time = time.time() - start_time2
         total_csv_saving_time += csv_saving_time

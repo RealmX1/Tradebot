@@ -1,0 +1,1 @@
+{"feature_num": 23, "hidden_size": 100, "num_layers": 1, "output_size": 1, "prediction_window": 5, "hist_window": 30, "data_prep_window": 35, "dropout": 0.1, "learning_rate": 5e-05, "batch_size": 10000, "train_ratio": 0.9}

@@ -13,13 +13,16 @@ import os
 import numpy as np
 import time
 import gc
+import atexit
+
 np.set_printoptions(precision=4, suppress=True) 
 
 
 # import custom files
 from S2S import *
-from sim import *
+# from sim import *
 from data_utils import * 
+from model_structure_param import *
 
 
 # policy = NaiveLong()
@@ -28,20 +31,38 @@ from data_utils import *
 close_idx = 3 # after removing time column
 
 # Define hyperparameters
-feature_num         = input_size = 23  # candel  # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size         = 200    # Number of neurons in the hidden layer of the LSTM
-num_layers          = 1    # Number of layers in the LSTM
-output_size         = 1     # Number of output values (closing price 1~10min from now)
-prediction_window   = 2
-hist_window         = 30 # using how much data from the past to make prediction?
-data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
+model_structure_param_path = '../model_structure_param.json'
+# with open(model_structure_param_path, 'r') as f:
+#     saved_data = json.load(f)
+
+#     feature_num = saved_data['feature_num']
+#     hidden_size = saved_data['hidden_size']
+#     num_layers = saved_data['num_layers']
+#     output_size = saved_data['output_size']
+#     prediction_window = saved_data['prediction_window']
+#     hist_window = saved_data['hist_window']
+#     data_prep_window = saved_data['data_prep_window']
+#     dropout = saved_data['dropout']
+
+#     learning_rate = saved_data['learning_rate']
+#     batch_size = saved_data['batch_size']
 
 
-learning_rate   = 0.0001
-batch_size      = 10000
+
+# feature_num         = input_size = 23  # candel  # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+# hidden_size         = 100    # Number of neurons in the hidden layer of the LSTM
+# num_layers          = 1    # Number of layers in the LSTM
+# output_size         = 1     # Number of output values (closing price 1~10min from now)
+# prediction_window   = 5
+# hist_window         = 30 # using how much data from the past to make prediction?
+# data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
+# dropout         = 0.1
+
+
+# learning_rate   = 0.00005
+# batch_size      = 10000
 train_ratio     = 0.9
-num_epochs      = 20
-dropout         = 0.1
+num_epochs      = 100
 
 loss_fn = nn.MSELoss(reduction = 'none')
 
@@ -86,11 +107,14 @@ def get_direction_diff(y_batch,y_pred):
     tp = np.sum((true_direction == 1) & (pred_direction == 1))
     fp = np.sum((true_direction == 0) & (pred_direction == 1))
 
+    tn = np.sum((true_direction == 0) & (pred_direction == 0))
+    fn = np.sum((true_direction == 1) & (pred_direction == 0))
+
     total_up = np.sum(true_direction == 1)
     total_down = np.sum(true_direction == 0)
 
     # print('get_direction_diff time: ', time.time()-start_time)
-    return total_cells, same_cells, total_cells_list, same_cells_list, tp, fp, total_up, total_down
+    return total_cells, same_cells, total_cells_list, same_cells_list, tp, fp, tn, fn, total_up, total_down
 
 
 def calculate_policy_return(x_batch,y_batch,y_pred):
@@ -109,7 +133,7 @@ def count_tensor_num():
 
 def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
     if mode == 0:
-        teacher_forcing_ratio = 0.1
+        teacher_forcing_ratio = 0.0
         model.train()
     else:
         teacher_forcing_ratio = 0
@@ -138,6 +162,9 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
         epoch_true_predictions = 0
         epoch_tp = 0
         epoch_fp = 0
+        epoch_tn = 0
+        epoch_fn = 0
+
         epoch_up = 0
         epoch_down = 0
         i=0
@@ -181,11 +208,14 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
             #     ma_loss *= 0.8
             #     ma_loss += 0.2*tmp.sum(axis = 0)
 
-            total_cells, same_cells, total_cells_list,same_cells_list, tp, fp, up, down = get_direction_diff(y_batch, y_pred)
+            total_cells, same_cells, total_cells_list,same_cells_list, tp, fp, tn, fn, up, down = get_direction_diff(y_batch, y_pred)
             epoch_predictions += total_cells
             epoch_true_predictions += same_cells
             epoch_tp += tp
             epoch_fp += fp
+            epoch_tn += tn
+            epoch_fn += fn
+
             epoch_up += up
             epoch_down += down
             total_predictions += total_cells_list
@@ -193,24 +223,28 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
 
             
             epoch_loss += loss_val
+            
         epoch_loss /= (i+1)
         average_loss += epoch_loss
         accuracy = epoch_true_predictions / epoch_predictions * 100
             
         print(f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
               f'Loss: {epoch_loss:10.7f}, ' +
-              f'Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ' +
-              f'Correct Direction: {accuracy:.2f}%, ' +
-              f'Encocder LR: {get_current_lr(optimizers[0]):9.6f}, Decoder LR: {get_current_lr(optimizers[1]):9.6f}, ' +
-              f'Precision: {epoch_tp/(epoch_tp+epoch_fp)*100:7.4f}%,' +
-              f'\nBackground down percent: {epoch_up/(epoch_up+epoch_down)*100:7.4f}%')
+              f'Time/epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ' +
+              f'\u2713 Direction: {accuracy:.2f}%, ' +
+              f'Encocder LR: {get_current_lr(optimizers[0]):9.8f},' + # Decoder LR: {get_current_lr(optimizers[1]):9.8f}, ' +
+              f'\n\u2191 Precision: {epoch_tp/(epoch_tp+epoch_fp)*100:7.4f}%, ' +
+              f'Background \u2191: {epoch_up/(epoch_up+epoch_down)*100:7.4f}%, ' +
+              f'\u2193 Precision: {epoch_tn/(epoch_tn+epoch_fn)*100:7.4f}%, ' +
+              f'Background \u2193: {epoch_down/(epoch_up+epoch_down)*100:7.4f}% ')
               # f'Weighted Loss: {final_loss.item():10.7f}, MA Loss: {ma_loss.mean().item():10.7f}') 
             
-    print(f'completed in {time.time()-start_time:.2f} seconds')
+    
     average_loss /= num_epochs
     accuracy_list = total_true_predictions / total_predictions * 100
     accuracy_list_print = [round(x, 3) for x in accuracy_list]
     print('Accuracy List: ', accuracy_list_print)
+    # print(f'completed in {time.time()-start_time:.2f} seconds')
 
     if mode == 1:
         return accuracy_list, average_loss
@@ -232,34 +266,36 @@ def get_current_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def save_params(best_prediction, optimizers, model_state, best_model_state, model_path, last_model_path, model_param_path):
+def save_params(best_prediction, optimizers, model_state, best_model_state, model_path, last_model_path, model_training_param_path):
     print('saving params...')
 
     encoder_lr = get_current_lr(optimizers[0])
     decoder_lr = get_current_lr(optimizers[1])
-    with open(model_param_path, 'w') as f:
+    with open(model_training_param_path, 'w') as f:
         json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
     print('saving model...')
     torch.save(best_model_state, model_path)
     torch.save(model_state, last_model_path)
     print('done.')
     
+def moving_average(data, window_size = 5):
+    weights = np.repeat(1.0, window_size) / window_size
+    return np.convolve(data, weights, mode='valid')
+
 def main():
     # CHANGE CONFIG NAME to save a new model
-    config_name = 'lstm_updown_S2S_attention_23feature'
+    config_name = 'lstm_updown_S2S_attention'
     # torch.cuda.empty_cache()
     # gc.collect()
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
     
     start_time = time.time()
     print('loading data & model')
-    # 'data/bar_set_huge_20180101_20230410_GOOG_indicator.csv'
-    # 'data/bar_set_huge_20200101_20230412_BABA_indicator.csv'
     # data_path = 'data/cdl_test_2.csv'
     data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
     model_path = f'../model/model_{config_name}.pt'
     last_model_path = f'../model/last_model_{config_name}.pt'
-    model_param_path = f'../model/training_param_{config_name}.json'
+    model_training_param_path = f'../model/training_param_{config_name}.json'
     print('loaded in ', time.time()-start_time, ' seconds')
     
     train_loader, test_loader = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio, global_normalization_list = None)
@@ -272,7 +308,7 @@ def main():
     if os.path.exists(last_model_path):
         print('Loading existing model')
         model.load_state_dict(torch.load(last_model_path))
-        with open(model_param_path, 'r') as f:
+        with open(model_training_param_path, 'r') as f:
             saved_data = json.load(f)
             encoder_lr = saved_data['encoder_learning_rate']
             decoder_lr = saved_data['decoder_learning_rate']
@@ -293,8 +329,8 @@ def main():
     # optimizer = SGD(model.parameters(), lr=learning_rate)
     encoder_optimizer = AdamW(model.encoder.parameters(),weight_decay=1e-5, lr=encoder_lr)
     decoder_optimizer = AdamW(model.decoder.parameters(),weight_decay=1e-5, lr=decoder_lr)
-    encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, mode='min', factor=0.95, patience=10, threshold=0.0001)
-    decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.95, patience=10, threshold=0.0001)
+    encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, mode='min', factor=0.95, patience=10, threshold=0.00001)
+    decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.95, patience=10, threshold=0.00001)
 
     optimizers = [encoder_optimizer, decoder_optimizer]
     schedulers = [encoder_scheduler, decoder_scheduler]
@@ -307,18 +343,21 @@ def main():
         print('Training model')
         test_every_x_epoch = 1
         test_accuracy_hist = np.zeros((prediction_window,1))
+        eval_loss_hist = []
+        train_loss_hist = []
 
         weight_decay = 0.2
         arr = np.ones(prediction_window)
         for i in range(1, prediction_window):
             arr[i] = arr[i-1] * weight_decay
         weights = arr.reshape(prediction_window,1)
-
+        
         for epoch in range(num_epochs):
             print(f'Epoch {epoch+1}/{num_epochs}')
             if test_every_x_epoch and epoch % test_every_x_epoch == 0:
                 test_accuracy_list, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
                 
+                # print(test_accuracy_list.shape)
                 accuracy = test_accuracy_list.reshape(prediction_window,1)*weights
                 accuracy = accuracy.sum()/np.sum(weights)
 
@@ -326,7 +365,7 @@ def main():
                     test_accuracy_hist[:,0] = test_accuracy_list
                 else:
                     test_accuracy_hist = np.concatenate((test_accuracy_hist, test_accuracy_list.reshape(prediction_window,1)), axis=1)
-                
+                eval_loss_hist.append(average_loss)
                 if accuracy > best_prediction: 
                     print(f'\nNEW BEST prediction: {accuracy:.4f}%\n')
                     best_prediction = accuracy
@@ -334,19 +373,23 @@ def main():
                 else:
                     print(f'\ncurrent prediction: {accuracy:.4f}%\n')
             
-                # plt.clf()
+                plt.clf()
                 for i in range(prediction_window):
                     accuracies = test_accuracy_hist[i,:]
                     plt.plot(accuracies, label=f'{i+1} min accuracy', linestyle='solid')
                 plt.plot(test_accuracy_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
                 plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
+                # plt.clf()
+                # plt.plot(moving_average(eval_loss_hist, 3), label=f'loss', linestyle='solid')
+
+                # actually train the model
+                average_loss = work(model, train_loader, optimizers, test_every_x_epoch, mode = 0, schedulers = schedulers)
+                # train_loss_hist.append(average_loss)
+                # plt.plot(train_loss_hist, label=f'train loss', linestyle='dotted')
                 if epoch == 0:
                     plt.legend() 
                     plt.pause(0.5)
                 plt.pause(0.1)
-
-                # actually train the model
-                work(model, train_loader, optimizers, test_every_x_epoch, mode = 0, schedulers = schedulers)
         print(f'training completed in {time.time()-start_time:.2f} seconds')
         
         print('\n\n')
@@ -395,16 +438,24 @@ def main():
         #     plt.pause(1)
         # print(f'testing completed in {time.time()-start_time:.2f} seconds')
 
-        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_param_path) 
+        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_training_param_path) 
         print('Normal exit. Model saved.')
         torch.cuda.empty_cache()
         gc.collect()
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
-        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_param_path)
+        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_training_param_path)
         torch.cuda.empty_cache()
         gc.collect()
 
 if __name__ == '__main__':
     main()
     # cProfile.run('main()') # this shows execution time of each function. Might be useful for debugging & accelerating in detail.
+
+
+def on_exit():
+    # close all open figures
+    plt.close('all')
+    
+    # destroy the Tkinter application
+    root.destroy()

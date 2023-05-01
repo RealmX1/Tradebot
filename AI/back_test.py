@@ -19,6 +19,7 @@ np.set_printoptions(precision=4, suppress=True)
 from S2S import *
 from sim import *
 from data_utils import *
+from model_structure_param import *
 
 def get_direction_diff(y_batch,y_pred):
     # true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
@@ -134,16 +135,20 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
                         f'price: {price:>6.2f}, ' +
                         f'long: {long_count:>4}, ' +
                         f'\u2713 long: {profitable_long_count:>4}, ' +
-                        f'\u2713 long pct: {profitable_long_count/long_count*100:>5.1f}%, ' +
+                        f'\u2713 long pct: {profitable_long_count/long_count*100:>5.2f}%, ' +
                         f'long profit pct: {mean_long_profit_pct:>5.3f}%, ' +
-                        f'short: {short_count:>4}, ' + 
-                        f'\u2713 short: {profitable_short_count:>4}, ' + 
-                        f'\u2713 short pct: {profitable_short_count/short_count*100:>5.1f}%, ' +
+                        f'short: {short_count:>3}, ' + 
+                        f'\u2713 short: {profitable_short_count:>3}, ' + 
+                        f'\u2713 short pct: {profitable_short_count/short_count*100:>5.2f}%, ' +
                         f'short profit pct: {mean_short_profit_pct:>5.3f}%'
                       )
                 account_growth = account_value/start_balance*100-100
                 stock_growth = price/start_price*100-100
-                print(f"Account Value: {account_value:>10.2f}, accont growth: {account_growth:>6.2f}%, stock growth: {stock_growth:>6.2f}%, account vs. stock: {account_growth-stock_growth:>6.2f}%")
+                print(f'Account Value: {account_value:>10.2f}, ' +
+                      f'accont growth: {account_growth:>6.2f}%, ' +
+                      f'stock growth: {stock_growth:>6.2f}%, ' + 
+                      f'growth diff: {account_growth-stock_growth:>6.2f}%, ' +
+                      f'past 1000 interval growth: ')
             account_value_hist.append(account_value)
             price_hist.append(price)
 
@@ -198,7 +203,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
                 plt.legend()
                 plt.pause(0.1)
                 
-                print(f'plotting completed in {time.time()-start_time:.2f} seconds')
+                # print(f'plotting completed in {time.time()-start_time:.2f} seconds')
             # print(account.evaluate())
             # mean = mean.float().to(device)
             # std = std.float().to(device)
@@ -269,21 +274,7 @@ if __name__ == "__main__":
     close_idx = 3 # after removing time column
 
 
-    # Define hyperparameters
-    feature_num         = input_size = 23 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-    hidden_size         = 100    # Number of neurons in the hidden layer of the LSTM
-    num_layers          = 1    # Number of layers in the LSTM
-    output_size         = 1     # Number of output values (closing price 1~10min from now)
-    prediction_window   = 5
-    hist_window         = 30 # using how much data from the past to make prediction?
-    data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
-
-
-    learning_rate   = 0.0001
-    batch_size      = 10000
-    train_ratio     = 0.9
-    num_epochs      = 50
-    dropout         = 0.1
+    
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('account value: ', account.evaluate())
@@ -293,11 +284,16 @@ if __name__ == "__main__":
     print("Making Prediction")
     # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
     # data_path = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
-    data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
+    # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
+    time_str = '20220101_20230501'
+    name = 'MSFT'
+    data_type = '23feature'
+    data_path = f'../data/csv/bar_set_huge_{time_str}_{name}_{data_type}.csv'
 
     test_loader, col_names = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio = 0, global_normalization_list = None, normalize = True)
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    model_pth = '../model/last_model_lstm_updown_S2S_attention.pt'
+    config_name = 'lstm_updown_S2S_attention'
+    model_pth = f'../model/last_model_{config_name}.pt'
     model.load_state_dict(torch.load(model_pth))
     with torch.no_grad():
         buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price = \
