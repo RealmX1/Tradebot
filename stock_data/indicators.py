@@ -44,36 +44,40 @@ def add_time_embedding(df):
     df.drop(columns=['timestamps_col', 'edt_time', 'edt_hour'], inplace=True)
 
 def append_indicators(df_raw):
-    # # Add EMA
-    # df_raw.ta.ema(append=True)
-    # # Add DEMA
-    # df_raw.ta.dema(append=True)
-    # # Add TEMA
-    # df_raw.ta.tema(append=True)
-    # # Add Bollinger Bands
-    # df_raw.ta.bbands(append=True)
-    # # Add RSI
-    # df_raw.ta.rsi(append=True)
-    # # Add CCI
-    # df_raw.ta.cci(append=True)
-    # # # Add DI+ and DI-
-    # # df.ta.dmi(append=True) # not working
-    # # Add ADX
-    # df_raw.ta.adx(append=True)
+    # Add EMA
+    df_raw.ta.ema(append=True)
+    # Add DEMA
+    df_raw.ta.dema(append=True)
+    # Add TEMA
+    df_raw.ta.tema(append=True)
+    # Add Bollinger Bands
+    df_raw.ta.bbands(append=True)
+    # Add RSI
+    df_raw.ta.rsi(append=True)
+    # Add CCI
+    df_raw.ta.cci(append=True)
+    # # Add DI+ and DI-
+    # df.ta.dmi(append=True) # not working
+    # Add ADX
+    df_raw.ta.adx(append=True)
 
     add_time_embedding(df_raw) # very inefficient compared to pandas_ta indicators;
     # # the previous indicators in total used 0.025 seconds on a week's data, this one took 0.065 seconds
 
-    df_raw.ta.macd(append=True)
+    # df_raw.ta.macd(append=True)
 
     df = df_raw.dropna()
 
     return df
 
 def main():
-    time_str = '20200101_20230417'
-    input_path = f'../data/csv/bar_set_huge_{time_str}_raw.csv'
-    data_type = '?' # later used to construct save_path
+    
+    # time_str = '20200101_20230417'
+    # input_path = f'../data/csv/bar_set_huge_{time_str}_raw.csv'
+    time_str = '20230418_20230501'
+    input_path = f'../data/csv/bar_set_{time_str}_raw.csv'
+    
+    data_type = '23feature' # later used to construct save_path
     df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
     # df = pd.read_csv('data/csv/test_ bar_set_20230101_20230412_baba.csv', index_col = ['symbol', 'timestamp'])
     # df = df.drop(df.index[:144])

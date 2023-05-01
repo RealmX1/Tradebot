@@ -16,7 +16,9 @@ class StockDataset(Dataset):
         self.x_raw = data[:,:-prediction_window,:] # slicing off the last entry of input
         # print("x.shape: ",self.x.shape)
         # x.shape: (data_num, window_size, feature_num)
-        self.y = data[:,-prediction_window:,close_idx]  # don't need to normalize y; this is the best way; present target as the percentage growth with repsect to last close price.
+        y_raw = data[:,-prediction_window:,close_idx] 
+        tmp = self.x_raw[:,-1,close_idx:close_idx+1]
+        self.y = (y_raw - tmp)/tmp * 100 # don't need to normalize y; this is the best way; present target as the percentage growth with repsect to last close price.
         # print("y.shape: ",self.y.shape)
         # print("y:" , self.y)
         # y.shape: (data_num, output_size)

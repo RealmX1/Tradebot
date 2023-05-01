@@ -277,12 +277,23 @@ def get_load_of_bars(symbols, timeframe, start, end, limit = None, download = Fa
 def main():
     # barset = get_latest_bars("BABA")
     # print(barset)
+    # symbols = ["AAPL"] #["AAPL","MSFT","TSLA","GOOG","SPY"]
+    # timeframe = TimeFrame.Minute
+    # start = datetime(2020,1,1)
+    # end = datetime.now() 
+
+    # get_load_of_bars(symbols, timeframe, start, end, limit = None, download=False)
+
+
+
     symbols = ["AAPL"] #["AAPL","MSFT","TSLA","GOOG","SPY"]
     timeframe = TimeFrame.Minute
-    start = datetime(2020,1,1)
+    start = datetime(2023,4,18)
     end = datetime.now() 
 
-    get_load_of_bars(symbols, timeframe, start, end, limit = None, download=False)
+    get_and_process_bars(symbols, timeframe, start, end, limit = None, download=True, pre = pre, post = post)
+
+
 
     # last_week_bars(symbols, timeframe = TimeFrame.Minute)
 

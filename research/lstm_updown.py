@@ -30,19 +30,19 @@ from data_utils import *
 close_idx = 3 # after removing time column
 
 # Define hyperparameters
-feature_num         = input_size = 1  # candel  # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size         = 10    # Number of neurons in the hidden layer of the LSTM
+feature_num         = input_size = 23  # candel  # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+hidden_size         = 100    # Number of neurons in the hidden layer of the LSTM
 num_layers          = 1    # Number of layers in the LSTM
 output_size         = 1     # Number of output values (closing price 1~10min from now)
-prediction_window   = 10
-hist_window         = 60 # using how much data from the past to make prediction?
+prediction_window   = 5
+hist_window         = 30 # using how much data from the past to make prediction?
 data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
 
 
-learning_rate   = 0.001
-batch_size      = 20000
+learning_rate   = 0.00005
+batch_size      = 10000
 train_ratio     = 0.9
-num_epochs      = 1000
+num_epochs      = 100
 dropout         = 0.1
 
 loss_fn = nn.MSELoss(reduction = 'none')
@@ -114,7 +114,7 @@ def count_tensor_num():
 
 def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
     if mode == 0:
-        teacher_forcing_ratio = 0.1
+        teacher_forcing_ratio = 0.0
         model.train()
     else:
         teacher_forcing_ratio = 0
@@ -204,26 +204,27 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
 
             
             epoch_loss += loss_val
+            
         epoch_loss /= (i+1)
         average_loss += epoch_loss
         accuracy = epoch_true_predictions / epoch_predictions * 100
             
         print(f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
               f'Loss: {epoch_loss:10.7f}, ' +
-              f'Time//epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ' +
-            #   f'\u2713 Direction: {accuracy:.2f}%, ' +
-              f'Encocder LR: {get_current_lr(optimizers[0]):9.8f},') # + # Decoder LR: {get_current_lr(optimizers[1]):9.8f}, ' +
-            #   f'\n\u2191 Precision: {epoch_tp/(epoch_tp+epoch_fp)*100:7.4f}%, ' +
-            #   f'Background \u2191: {epoch_up/(epoch_up+epoch_down)*100:7.4f}%, ' +
-            #   f'\u2193 Precision: {epoch_tn/(epoch_tn+epoch_fn)*100:7.4f}%, ' +
-            #   f'Background \u2193: {epoch_down/(epoch_up+epoch_down)*100:7.4f}% ')
+              f'Time/epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ' +
+              f'\u2713 Direction: {accuracy:.2f}%, ' +
+              f'Encocder LR: {get_current_lr(optimizers[0]):9.8f},' + # Decoder LR: {get_current_lr(optimizers[1]):9.8f}, ' +
+              f'\n\u2191 Precision: {epoch_tp/(epoch_tp+epoch_fp)*100:7.4f}%, ' +
+              f'Background \u2191: {epoch_up/(epoch_up+epoch_down)*100:7.4f}%, ' +
+              f'\u2193 Precision: {epoch_tn/(epoch_tn+epoch_fn)*100:7.4f}%, ' +
+              f'Background \u2193: {epoch_down/(epoch_up+epoch_down)*100:7.4f}% ')
               # f'Weighted Loss: {final_loss.item():10.7f}, MA Loss: {ma_loss.mean().item():10.7f}') 
             
     
     average_loss /= num_epochs
     accuracy_list = total_true_predictions / total_predictions * 100
     accuracy_list_print = [round(x, 3) for x in accuracy_list]
-    # print('Accuracy List: ', accuracy_list_print)
+    print('Accuracy List: ', accuracy_list_print)
     # print(f'completed in {time.time()-start_time:.2f} seconds')
 
     if mode == 1:
@@ -264,15 +265,13 @@ def moving_average(data, window_size = 5):
 
 def main():
     # CHANGE CONFIG NAME to save a new model
-    config_name = 'lstm_updown_S2S_attention_tsai'
+    config_name = 'lstm_updown_S2S_attention'
     # torch.cuda.empty_cache()
     # gc.collect()
     # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
     
     start_time = time.time()
     print('loading data & model')
-    # 'data/bar_set_huge_20180101_20230410_GOOG_indicator.csv'
-    # 'data/bar_set_huge_20200101_20230412_BABA_indicator.csv'
     # data_path = 'data/cdl_test_2.csv'
     data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
     model_path = f'../model/model_{config_name}.pt'
@@ -280,7 +279,7 @@ def main():
     model_param_path = f'../model/training_param_{config_name}.json'
     print('loaded in ', time.time()-start_time, ' seconds')
     
-    train_loader, test_loader = load_n_split_tsai_data(data_path, hist_window, prediction_window, batch_size, train_ratio, global_normalization_list = None)
+    train_loader, test_loader = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio, global_normalization_list = None)
     
 
 
@@ -311,8 +310,8 @@ def main():
     # optimizer = SGD(model.parameters(), lr=learning_rate)
     encoder_optimizer = AdamW(model.encoder.parameters(),weight_decay=1e-5, lr=encoder_lr)
     decoder_optimizer = AdamW(model.decoder.parameters(),weight_decay=1e-5, lr=decoder_lr)
-    encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, mode='min', factor=0.95, patience=5, threshold=0.0001)
-    decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.95, patience=5, threshold=0.0001)
+    encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, mode='min', factor=0.95, patience=10, threshold=0.00001)
+    decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.95, patience=10, threshold=0.00001)
 
     optimizers = [encoder_optimizer, decoder_optimizer]
     schedulers = [encoder_scheduler, decoder_scheduler]
@@ -348,26 +347,26 @@ def main():
                 else:
                     test_accuracy_hist = np.concatenate((test_accuracy_hist, test_accuracy_list.reshape(prediction_window,1)), axis=1)
                 eval_loss_hist.append(average_loss)
-                # if accuracy > best_prediction: 
-                #     print(f'\nNEW BEST prediction: {accuracy:.4f}%\n')
-                #     best_prediction = accuracy
-                #     best_model_state = model.state_dict()
-                # else:
-                #     print(f'\ncurrent prediction: {accuracy:.4f}%\n')
+                if accuracy > best_prediction: 
+                    print(f'\nNEW BEST prediction: {accuracy:.4f}%\n')
+                    best_prediction = accuracy
+                    best_model_state = model.state_dict()
+                else:
+                    print(f'\ncurrent prediction: {accuracy:.4f}%\n')
             
-                # plt.clf()
-                # for i in range(prediction_window):
-                #     accuracies = test_accuracy_hist[i,:]
-                #     plt.plot(accuracies, label=f'{i+1} min accuracy', linestyle='solid')
-                # plt.plot(test_accuracy_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
-                # plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
                 plt.clf()
-                plt.plot(moving_average(eval_loss_hist, 3), label=f'loss', linestyle='solid')
+                for i in range(prediction_window):
+                    accuracies = test_accuracy_hist[i,:]
+                    plt.plot(accuracies, label=f'{i+1} min accuracy', linestyle='solid')
+                plt.plot(test_accuracy_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
+                plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
+                # plt.clf()
+                # plt.plot(moving_average(eval_loss_hist, 3), label=f'loss', linestyle='solid')
 
                 # actually train the model
                 average_loss = work(model, train_loader, optimizers, test_every_x_epoch, mode = 0, schedulers = schedulers)
-                train_loss_hist.append(average_loss)
-                plt.plot(train_loss_hist, label=f'train loss', linestyle='dotted')
+                # train_loss_hist.append(average_loss)
+                # plt.plot(train_loss_hist, label=f'train loss', linestyle='dotted')
                 if epoch == 0:
                     plt.legend() 
                     plt.pause(0.5)

@@ -30,13 +30,15 @@ class Account:
         if optimal:
             current_holding = self.holding[symbol][0]
             if current_holding >= 0:
-                shares *= just_one_more_constant
+                shares = int(shares*just_one_more_constant)
             else: # fill short position, then purchase as much asneeded
-                shares = -current_holding + (shares+current_holding) * just_one_more_constant
+                shares = -current_holding + int((shares+current_holding) * just_one_more_constant)
+
         if shares <= 0:
             return 0
         else:
             self.place_buy_order(symbol, price, shares, order_id)
+        
         return shares
     
     def cancel_buy_order(self, symbol, order_id):
@@ -73,27 +75,40 @@ class Account:
     
     # short order functions
     def place_short_order(self, symbol, price, shares, order_id):
-        self.orders[symbol][order_id] = (-shares, price)
-        self.holding[symbol][1] = price
-        self.balance -= price * shares
-        self.frozen_balance += 2 * price * shares
+        affordable_shares = self.balance // price
+        if affordable_shares < shares:
+            return 0
+        else:
+            self.orders[symbol][order_id] = (-shares, price)
+            self.holding[symbol][1] = price
+            cost = price * shares
+            self.balance -= cost
+            self.frozen_balance += 2 * cost
+            return 1
 
-    def place_short_max_order(self, symbol, price, order_id):
+    def place_short_max_order(self, symbol, price, order_id, optimal = True):
         shares = self.balance // price
-        self.orders[symbol][order_id] = (-shares, price)
-        self.holding[symbol][1] = price
-        self.balance -= price * shares
-        self.frozen_balance += 2 * price * shares
+
+        if optimal:
+            shares = int(shares*just_one_more_constant)
+        
+        self.place_short_order(symbol, price, shares, order_id)
+
+        if shares <= 0:
+            return 0
+
         return shares
     
     def cancel_short_order(self, symbol, order_id):
-        self.balance -= self.orders[symbol][order_id][0] * self.orders[symbol][order_id][1]
-        self.frozen_balance += 2 * self.orders[symbol][order_id][0] * self.orders[symbol][order_id][1]
+        cost = self.orders[symbol][order_id][0] * self.orders[symbol][order_id][1]
+        self.balance -= cost
+        self.frozen_balance += 2 * cost
         del self.orders[symbol][order_id]
     
     def complete_short_order(self, symbol, order_id):
         self.holding[symbol][0] += self.orders[symbol][order_id][0]
         del self.orders[symbol][order_id]
+
 
 
     def place_reverse_short_order(self, symbol, price, order_id):

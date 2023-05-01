@@ -62,7 +62,8 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
     average_loss = 0
 
     inverse_mask = torch.linspace(1, 11, 10)
-    weights = torch.linspace(1, 0.1, steps=prediction_window).to(device)
+    weight_decay = 0.2
+    weights = torch.pow(torch.tensor(weight_decay), torch.arange(prediction_window).float()).to(device)
 
     ma_loss = 0
     decisions = []
@@ -82,15 +83,18 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
         i=0
         
         for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
+            # print('x_batch.shape: ', x_batch.shape)
+            # print('y_batch.shape: ', y_batch.shape)
+
             ma_loss *= 0.8
             # print("x_batch[0,:,:]: ", x_batch[0,:,:])
             # x_batch   [N, hist_window, feature_num]
             # y_batch & output  [N, prediction_window]
             x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
             # print("one input: ", x_batch[0:,:,:])
-            # y_batch = y_batch.float().to(device)
-            
-            # y_pred = model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
+            y_batch = y_batch.float().to(device)
+        
+            y_pred = model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
             # print("y_pred.shape: ", y_pred.shape)
             # print("y_batch.shape: ", y_pred.shape)
             # print("y_batch: ", y_batch[0,:])
@@ -109,8 +113,8 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
             if (epoch == num_epochs-1 and i == len(data_loader)-1):
                 end_price = price
 
-            decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
-            # decision = policy.decide('AAPL', None, price, y_pred, account)
+            # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
+            decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, y_pred.clone().detach().cpu(), account, col_names)
             #policy.decide('BABA', None, price, y_pred, account)
             decisions.append(decision)
             if decision[0] == 'b':
@@ -124,8 +128,19 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
                 sell_decisions.append(0)
 
             account_value = account.evaluate()
-            if decision[0] != 'n':
-                print(decision, price)
+            if decision[0] != 'n' or i == 0:
+                long_count, profitable_long_count, short_count, profitable_short_count, mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
+                print(decision, 
+                        f'price: {price:>6.2f}, ' +
+                        f'long: {long_count:>4}, ' +
+                        f'\u2713 long: {profitable_long_count:>4}, ' +
+                        f'\u2713 long pct: {profitable_long_count/long_count*100:>5.1f}%, ' +
+                        f'long profit pct: {mean_long_profit_pct:>5.3f}%, ' +
+                        f'short: {short_count:>4}, ' + 
+                        f'\u2713 short: {profitable_short_count:>4}, ' + 
+                        f'\u2713 short pct: {profitable_short_count/short_count*100:>5.1f}%, ' +
+                        f'short profit pct: {mean_short_profit_pct:>5.3f}%'
+                      )
                 account_growth = account_value/start_balance*100-100
                 stock_growth = price/start_price*100-100
                 print(f"Account Value: {account_value:>10.2f}, accont growth: {account_growth:>6.2f}%, stock growth: {stock_growth:>6.2f}%, account vs. stock: {account_growth-stock_growth:>6.2f}%")
@@ -236,8 +251,8 @@ def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
 
 if __name__ == "__main__":
-    # policy = NaiveLong()
-    policy = NaiveMACD()
+    policy = NaiveLong()
+    # policy = NaiveMACD()
     '''
     Epoch   1/  1, Time per epoch: 801.75 seconds, Correct Direction: 54.46%, 
     completed in 801.75 seconds
@@ -255,12 +270,12 @@ if __name__ == "__main__":
 
 
     # Define hyperparameters
-    feature_num         = input_size = 10 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+    feature_num         = input_size = 23 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
     hidden_size         = 100    # Number of neurons in the hidden layer of the LSTM
     num_layers          = 1    # Number of layers in the LSTM
     output_size         = 1     # Number of output values (closing price 1~10min from now)
-    prediction_window   = 3
-    hist_window         = 20 # using how much data from the past to make prediction?
+    prediction_window   = 5
+    hist_window         = 30 # using how much data from the past to make prediction?
     data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
 
 
@@ -276,11 +291,14 @@ if __name__ == "__main__":
     # Make predictions
     start_time = time.time()
     print("Making Prediction")
-    data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
-    test_loader, col_names = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio = 0, global_normalization_list = None, normalize = None)
+    # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
+    # data_path = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
+    data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
+
+    test_loader, col_names = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio = 0, global_normalization_list = None, normalize = True)
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    # model_pth = 'model/legacy_model/lstm_updown_S2S_attention_88feature.pt'
-    # model.load_state_dict(torch.load(model_pth))
+    model_pth = '../model/last_model_lstm_updown_S2S_attention.pt'
+    model.load_state_dict(torch.load(model_pth))
     with torch.no_grad():
         buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price = \
             back_test(model, test_loader, col_names, num_epochs = 1)
