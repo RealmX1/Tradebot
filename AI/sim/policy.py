@@ -29,17 +29,17 @@ class SimpleLongShort(Policy):
         self.long_profit_pct_list = [0]
         self.short_profit_pct_list = [0]
     
-    def decide(self, symbol:str, hist, price, prediction, account, col_names):
+    def decide(self, symbol:str, hist, price, weighted_prediction, account, col_names):
         # print(prediction.shape)
-        prediction_window = prediction.shape[0]
+        # prediction_window = prediction.shape[0]
 
-        weight_decay = 0.2
-        arr = np.ones(prediction_window)
-        for i in range(1, prediction_window):
-            arr[i] = arr[i-1] * weight_decay
-        weights = arr.reshape(prediction_window,1)
+        # weight_decay = 0.2
+        # arr = np.ones(prediction_window)
+        # for i in range(1, prediction_window):
+        #     arr[i] = arr[i-1] * weight_decay
+        # weights = arr.reshape(prediction_window,1)
         
-        weighted_prediction = (prediction * weights).sum() / weights.sum()
+        # weighted_prediction = (prediction * weights).sum() / weights.sum()
 
         # print(f'prediction: {prediction}, weighted_prediction: {weighted_prediction}')
         
@@ -115,18 +115,18 @@ class SimpleLongShort(Policy):
                 result = ('n',0)
 
 
-            if weighted_prediction < -0.05: # start short condition
-                if self.short == True:
-                    return result
-                purchase_num = account.place_short_max_order(symbol, price, 0)
-                if purchase_num != 0:
-                    account.complete_short_order(symbol, 0)
-                    # print(f'sold all! {purchase_num} shares at {price}$')
-                    result = ('s', result[1] + purchase_num)
-                    self.short = True
-                else:
-                    account.cancel_short_order(symbol,0)
-                    # result not changed
+            # if weighted_prediction < -0.05: # start short condition
+            #     if self.short == True:
+            #         return result
+            #     purchase_num = account.place_short_max_order(symbol, price, 0)
+            #     if purchase_num != 0:
+            #         account.complete_short_order(symbol, 0)
+            #         # print(f'sold all! {purchase_num} shares at {price}$')
+            #         result = ('s', result[1] + purchase_num)
+            #         self.short = True
+            #     else:
+            #         account.cancel_short_order(symbol,0)
+            #         # result not changed
         elif pred == -2: # end all short position/sell all long position at the end of day.
             purchase_num = account.place_reverse_short_order(symbol, price,0)
             if purchase_num > 0:

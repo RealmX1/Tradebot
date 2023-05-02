@@ -2,3 +2,21 @@ Account Value:   39071.25, accont growth: -60.93%, stock growth: -27.53%, growth
 ('s', 221) price: 241.94, long: 22197, ? long: 10286, ? long pct: 46.34%, long profit pct: -0.001%, short: 24635, ? short: 11763, ? short pct: 47.75%, short profit pct: 0.000%
 
 simple actor critic not performing very well.
+
+
+
+MSFT, High sensitivity (0.005), with short
+('b', 799) price: 308.04, long: 6136, ? long: 4147, ? long pct: 67.58%, long profit pct: 0.018%, short: 153, ? short:  95, ? short pct: 62.09%, short profit pct: 0.000%
+Account Value:  246334.25, accont growth: 146.33%, stock growth:  -7.75%, growth diff: 154.08%
+
+MSFT, High sensitivity (0.005), without short
+('b', 782) price: 308.04, long: 6136, ? long: 4147, ? long pct: 67.58%, long profit pct: 0.018%, short:   1, ? short:   0, ? short pct:  0.00%, short profit pct: 0.000%
+Account Value:  241087.47, accont growth: 141.09%, stock growth:  -7.75%, growth diff: 148.83%, past 1000 interval growth: 
+
+MSFT_small, High sensitivity (0.005), without short
+('b', 441) price: 308.04, long: 1581, ? long: 1087, ? long pct: 68.75%, long profit pct: 0.023%,
+Account Value:  136020.58, accont growth:  36.02%, stock growth:  27.21%, growth diff:   8.82%
+
+MSFT_small, Low sensitivity (0.01), without short
+('b', 432) price: 308.04, long:  927, ? long:  616, ? long pct: 66.45%, long profit pct: 0.035%, 
+Account Value:  133114.13, accont growth:  33.11%, stock growth:  27.21%, growth diff:   5.91%
