@@ -1,4 +1,12 @@
+import math
 just_one_more_constant = 0.375 # https://www.youtube.com/watch?v=_FuuYSM7yOo&list=TLPQMjkwNDIwMjOTFJtp1wN2Pg&index=3
+
+SEC = 22.90 / 1000000 # SEC regulation fee is applied at 22.90 dollars per million dollars in sale.
+# IT NEED TO BE ROUNDED TO NEAREST CENT
+
+FINRA = 0.000119 # FINRA Trading Activity Fee (TAF) is applied at 0.000119 dollars per share.
+# IT NEED TO BE ROUNDED TO NEAREST CENT
+# It can be no greater than $5.95
 
 
 class Account:
@@ -70,7 +78,13 @@ class Account:
         del self.orders[symbol][order_id]
 
     def complete_sell_order(self, symbol, order_id):
-        self.balance += self.orders[symbol][order_id][0] * self.orders[symbol][order_id][1]
+        shares = self.orders[symbol][order_id][0]
+        price = self.orders[symbol][order_id][1]
+        value = shares * price
+        FINRA_FEE = math.ceil(shares * FINRA * 100) / 100
+        FINRA_FEE = min (5.95, FINRA_FEE)
+        SEC_FEE = math.ceil(value * SEC * 100) / 100
+        self.balance += value - FINRA_FEE - SEC_FEE
         del self.orders[symbol][order_id]
     
     # short order functions
@@ -107,6 +121,14 @@ class Account:
     
     def complete_short_order(self, symbol, order_id):
         self.holding[symbol][0] += self.orders[symbol][order_id][0]
+        
+        shares = -self.orders[symbol][order_id][0]
+        price = self.orders[symbol][order_id][1]
+        value = shares * price
+        FINRA_FEE = math.ceil(shares * FINRA * 100) / 100
+        FINRA_FEE = min (5.95, FINRA_FEE)
+        SEC_FEE = math.ceil(value * SEC * 100) / 100
+        self.balance = self.balance - FINRA_FEE - SEC_FEE
         del self.orders[symbol][order_id]
 
 

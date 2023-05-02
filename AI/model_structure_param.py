@@ -12,3 +12,8 @@ dropout             = 0.1
 
 learning_rate       = 0.00005
 batch_size          = 10000
+
+
+
+decision_hidden_size    = 100
+action_num              = 4

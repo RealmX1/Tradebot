@@ -1,25 +1,27 @@
-import random
-import json
+# created from back_test.py
+
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import torch # PyTorch
-import torch.nn as nn # PyTorch neural netback_test module
-from torch.utils.data import Dataset, DataLoader # PyTorch data utilities
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.optim import AdamW, SGD
-# from apex.optimizers import FusedLAMB
-
-import matplotlib.pyplot as plt
+from torch.optim import AdamW
 import os
+import sys
+import json
+import matplotlib.pyplot as plt
 import numpy as np
 import time
+import gc
 np.set_printoptions(precision=4, suppress=True) 
 
-
+sys.path.append('decision/')
 # import custom files
 from S2S import *
 from sim import *
 from data_utils import *
 from model_structure_param import *
+from actor_critic import *
+
+trade_per_min = 3610 / 213558
+growth_constant = 0.02 / 100 * trade_per_min# 0.02% growth each trade, and 3610 trade done in 213558 minutes.
 
 def get_direction_diff(y_batch,y_pred):
     # true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
@@ -44,10 +46,12 @@ def get_direction_diff(y_batch,y_pred):
 
     return total_cells, same_cells, total_cells_list, same_cells_list
 
+# back_test(pred_model, decision_model, data_loader, col_names, num_epochs = 1, optimizer = optimizer)
 
-def back_test(model, data_loader, col_names, num_epochs = 1):    
+def back_test(pred_model, decision_model, data_loader, col_names, num_epochs = 1, optimizer = None):    
     teacher_forcing_ratio = 0
-    model.eval()
+    pred_model.eval()
+    decision_model.train()
     start_time = time.time()
     same_cells = 0
     
@@ -82,6 +86,10 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
         epoch_predictions = 0
         epoch_true_predictions = 0
         i=0
+
+        account_value = account.evaluate()
+        prev_account_value = account_value
+        account_value_change_pct = -growth_constant
         
         for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
             # print('x_batch.shape: ', x_batch.shape)
@@ -97,7 +105,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
             # print("one input: ", x_batch[0:,:,:])
             y_batch = y_batch.float().to(device)
         
-            y_pred = model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
+            y_pred = pred_model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
             
             # total_cells, same_cells, total_cells_list,same_cells_list = get_direction_diff(y_batch, y_pred)
             # epoch_predictions += total_cells
@@ -113,9 +121,21 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
             if (epoch == num_epochs-1 and i == len(data_loader)-1):
                 end_price = price
 
-            # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
-            decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, y_pred.clone().detach().cpu(), account, col_names)
-            #policy.decide('BABA', None, price, y_pred, account)
+
+            # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, y_pred.clone().detach().cpu(), account, col_names)
+            y_pred_detached = y_pred.clone().detach()[0]
+
+
+            # state = torch.tensor(account_value_change_pct).to(device)
+            # state = torch.cat((y_pred_detached, state), dim = 0)
+            action = decision_model.select_action(y_pred_detached)
+            # print(action)
+            decision = policy.decide('AAPL', price, account, action)
+
+
+
+
+
             decisions.append(decision)
             if decision[0] == 'b':
                 buy_decisions.append(1)
@@ -128,6 +148,10 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
                 sell_decisions.append(0)
 
             account_value = account.evaluate()
+            account_value_change_pct = (account_value - prev_account_value) / prev_account_value * 100
+            reward = account_value_change_pct - growth_constant
+            decision_model.rewards.append(reward)
+            prev_account_value = account_value
             if decision[0] != 'n' or i == 0:
                 long_count, profitable_long_count, \
                 short_count, profitable_short_count, \
@@ -153,7 +177,10 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
             account_value_hist.append(account_value)
             price_hist.append(price)
 
-            if (i%1000 == 0):
+            if (i%1000 == 0) and (i != 0):
+                decision_model.step(optimizer)
+
+
                 start_time = time.time()
                 ax1.clear()
                 ax2.clear()
@@ -173,11 +200,11 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
                 pct_change_min = min(y1_pct_change_min, y2_pct_change_min)
                 pct_change_max = max(y1_pct_change_max, y2_pct_change_max)
 
-                ax1_y_min = price_hist_start*(1+pct_change_min) - 0.05
-                ax1_y_max = price_hist_start*(1+pct_change_max) + 0.05
+                ax1_y_min = price_hist_start*(1+pct_change_min - 0.05) 
+                ax1_y_max = price_hist_start*(1+pct_change_max + 0.05) 
 
-                ax2_y_min = account_value_start*(1+pct_change_min)
-                ax2_y_max = account_value_start*(1+pct_change_max)
+                ax2_y_min = account_value_start*(1+pct_change_min - 0.05) 
+                ax2_y_max = account_value_start*(1+pct_change_max + 0.05) 
 
                 # set limits of both y-axes to begin at the same height
                 ax1.set_ylim([ax1_y_min, ax1_y_max])
@@ -256,9 +283,21 @@ def back_test(model, data_loader, col_names, num_epochs = 1):
 def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
 
+def save_params(best_prediction, optimizers, model_state, best_model_state, model_path, last_model_path, model_training_param_path):
+    print('saving params...')
+
+    # encoder_lr = get_current_lr(optimizers[0])
+    # decoder_lr = get_current_lr(optimizers[1])
+    # with open(model_training_param_path, 'w') as f:
+    #     json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
+    print('saving model...')
+    # torch.save(best_model_state, model_path)
+    torch.save(model_state, last_model_path)
+    print('done.')
+
+
 if __name__ == "__main__":
-    policy = NaiveLong()
-    # policy = NaiveMACD()
+    policy = NaiveLongShort()
     initial_capital = 100000
     account = Account(initial_capital, ['AAPL'])
 
@@ -281,8 +320,16 @@ if __name__ == "__main__":
     name = 'MSFT'
     data_type = '23feature'
     data_path = f'../data/csv/bar_set_huge_{time_str}_{name}_{data_type}.csv'
+    pred_model_name = 'lstm_updown_S2S_attention'
+    pred_model_pth = f'../model/last_model_{pred_model_name}.pt'
 
-    test_loader, col_names = \
+    decision_model_name = 'actor_crytic'
+    decision_model_pth = f'../model/model_{decision_model_name}.pt'
+    last_decision_model_pth = f'../model/last_model_{decision_model_name}.pt'
+    decision_model_training_param_path = f'../model/model_training_param_{decision_model_name}.json'
+
+
+    data_loader, col_names = \
         load_n_split_data(  data_path, 
                           hist_window, 
                           prediction_window, 
@@ -290,13 +337,33 @@ if __name__ == "__main__":
                           train_ratio = 0, 
                           global_normalization_list = None, 
                           normalize = True)
-    model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    config_name = 'lstm_updown_S2S_attention'
-    model_pth = f'../model/last_model_{config_name}.pt'
-    model.load_state_dict(torch.load(model_pth))
-    with torch.no_grad():
+    pred_model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)    
+    pred_model.load_state_dict(torch.load(pred_model_pth))
+
+    decision_model_feature_num = prediction_window # + ?
+    decision_model = ActorCritic(device, decision_model_feature_num, decision_hidden_size, action_num).to(device)
+    if os.path.exists(last_decision_model_pth):
+        print('Loading existing model')
+        decision_model.load_state_dict(torch.load(last_decision_model_pth))
+        # with open(decision_model_training_param_path, 'r') as f:
+        #     saved_data = json.load(f)
+        #     encoder_lr = saved_data['encoder_learning_rate']
+        #     decoder_lr = saved_data['decoder_learning_rate']
+        #     best_prediction = saved_data['best_prediction']
+        #     start_best_prediction = best_prediction
+    else:
+        print('No existing model')
+        encoder_lr = learning_rate
+        decoder_lr = learning_rate
+        best_prediction = 0.0
+        start_best_prediction = best_prediction
+
+    
+    optimizer = AdamW(decision_model.parameters(),weight_decay=1e-5, lr=1e-3)
+
+    try: # with torch.no_grad():
         buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price = \
-            back_test(model, test_loader, col_names, num_epochs = 1)
+            back_test(pred_model, decision_model, data_loader, col_names, num_epochs = 1, optimizer = optimizer)
         print(f'account value: {account_value_hist[-1]:.2f}')
         print(f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
         print(f'stock value change: {end_price/start_price*100 - 100:.2f}%')
@@ -324,5 +391,11 @@ if __name__ == "__main__":
         print(f'plotting completed in {time.time()-start_time:.2f} seconds')
         plt.show()
         # plot(predictions, targets, test_size)
-        # plot(raw_predictions, raw_targets, test_size)
-    
+            # plot(raw_predictions, raw_targets, test_size)
+        save_params(None, None, decision_model.state_dict(), None, None, last_decision_model_pth, None)
+        torch.cuda.empty_cache()
+        gc.collect()
+    except KeyboardInterrupt or Exception or TypeError:
+        save_params(None, None, decision_model.state_dict(), None, None, last_decision_model_pth, None)
+        torch.cuda.empty_cache()
+        gc.collect()
