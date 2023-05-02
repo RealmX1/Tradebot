@@ -9,6 +9,7 @@ import os
 import numpy as np
 import time
 import pickle
+import threading
 np.set_printoptions(precision=4, suppress=True) 
 
 
@@ -44,7 +45,7 @@ def get_direction_diff(y_batch,y_pred):
 
     return total_cells, same_cells, total_cells_list, same_cells_list
 
-def plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = False):
+def plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations):
     
     ax1.clear()
     ax2.clear()
@@ -102,13 +103,8 @@ def plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_gr
     ax1.legend(loc='upper right')
     ax2.legend(loc='upper left')
     plt.pause(0.1)
-    if show:
-        plt.show()
 
-def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, to_plot = True, to_print = True):
-    timers = [0.0] * 10
-
-    st = time.time()
+def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, to_plot = True, to_print = True):    
     teacher_forcing_ratio = 0
     model.eval()
     start_time = time.time()
@@ -130,19 +126,15 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
     start_balance = 0
     end_price = 0
     
-    fig, ax1 = plt.subplots()
-    ax2 = ax1.twinx()
-
-    timers[0] = time.time() - st # time spent initializing
-    st = time.time()
+    if to_plot:
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
     for epoch in range(num_epochs):
         i=0
+
         annotations = []
+        
         for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
-
-            timers[1] += time.time() - st # time spent using data_loader
-            st = time.time()
-
             # print('x_batch.shape: ', x_batch.shape)
             # print('y_batch.shape: ', y_batch.shape)
             # x_batch   [N, hist_window, feature_num]
@@ -158,8 +150,6 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
             y_batch = y_batch.float().to(device)
         
             y_pred = model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
-            timers[2] += time.time() - st # time spent on prediction 
-            st = time.time()
 
             loss = loss_fn(y_pred, y_batch)
             loss_val = loss.mean().item()
@@ -172,10 +162,10 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
             if (epoch == num_epochs-1 and i == len(data_loader)-1):
                 end_price = price
 
-            # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
+            # decision = policy.decide('MSFT', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
             prediction = y_pred.clone().detach().cpu()
             weighted_prediction = (prediction * weights).sum() / weights.sum()
-            decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, weighted_prediction, account, col_names)
+            decision = policy.decide('MSFT', x_batch.clone().detach().cpu(), price, weighted_prediction, account, col_names)
             #policy.decide('BABA', None, price, y_pred, account)
             decisions.append(decision)
             if decision[0] == 'b':
@@ -189,14 +179,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
                 sell_decisions.append(0)
 
             account_value = account.evaluate()
-            
-            account_value_hist.append(account_value)
-            price_hist.append(price)
-
-            timers[3] += time.time() - st # time spent on decision making
-            st = time.time()
-
-            if (decision[0] != 'n' and to_print) or i == (len(data_loader)-1):
+            if decision[0] != 'n' or i == 0:
                 long_count, profitable_long_count, \
                 short_count, profitable_short_count, \
                 mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
@@ -225,38 +208,30 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
                 if to_print == True:
                     print(prediction_stat_str)
                     print(account_n_stock_str)
-            
-            timers[4] += time.time() - st # time spent on printing
-            st = time.time()
 
-            draw_interval = 2000
+            account_value_hist.append(account_value)
+            price_hist.append(price)
+
+            draw_interval = 5000
             if (i%draw_interval == 0) and (i != 0) and to_plot == True:
                 # start_time_plot = time.time()
                 plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations)
 
                 # print(f'plotting completed in {time.time()-start_time_plot:.2f} seconds')
             # print(account.evaluate())
-
-            timers[5] += time.time() - st # time spent on plotting
-            st = time.time()
         
-        plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
+        if to_plot: 
+            plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations)
+        
         average_loss /= i
-        
-        # print(f'Time spent on initialization: {timers[0]:.2f} seconds\n' + \
-        #         f'Time spent on data loading: {timers[1]:.2f} seconds\n' + \
-        #         f'Time spent on prediction: {timers[2]:.2f} seconds\n' + \
-        #         f'Time spent on decision making: {timers[3]:.2f} seconds\n' + \
-        #         f'Time spent on printing: {timers[4]:.2f} seconds\n' + \
-        #         f'Time spent on plotting: {timers[5]:.2f} seconds\n'
-        #       )
-        # print(f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
-        #       f'Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ')
+            
+        print(f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
+              f'Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ')
         
         
 
 
-    print(f'back test completed in {time.time()-start_time:.2f} seconds')
+    print(f'completed in {time.time()-start_time:.2f} seconds')
 
     return  buy_decisions, \
             sell_decisions, \
@@ -273,17 +248,38 @@ def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
 
 def save_result(block_str_lst = [], end_strs_lst = [], loss_lst = []):
-    print('saving results...')
-    with open('lists_no_multithread_AAPL.pkl', 'wb') as f:
+    with open('lists.pkl', 'wb') as f:
         pickle.dump((block_str_lst, end_strs_lst, loss_lst), f)
+
+
+block_str_lst = []
+end_strs_lst = []
+loss_lst = []
+
+def run_back_test(col_names, x):
+    policy = SimpleLongShort()
+    account = Account(initial_capital, ['MSFT'])
+    block_str = f'blocking column {x}:{col_names[x]}'
+    print(block_str)
+    buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss = \
+        back_test(model, test_loader, col_names, num_epochs=1, block_col=x, to_plot=False, to_print=False)
+
+    # append the results to the global lists
+    block_str_lst.append(block_str)
+    end_strs_lst.append(end_strs)
+    loss_lst.append(loss)
+    print('loss: ', loss)
     
-    print('results saved')
+    print(f'account value: {account_value_hist[-1]:.2f}')
+    print(f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
+    print(f'stock value change: {end_price/start_price*100 - 100:.2f}%')
+    print(f'Test completed in {time.time()-start_time:.2f} seconds')
 
 if __name__ == "__main__":
     policy = SimpleLongShort()
     # policy = NaiveMACD()
     initial_capital = 100000
-    account = Account(initial_capital, ['AAPL'])
+    account = Account(initial_capital, ['MSFT'])
 
 
     close_idx = 3 # after removing time column
@@ -300,8 +296,8 @@ if __name__ == "__main__":
     # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
     # data_path = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
     # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
-    time_str = '20230418_20230501'
-    name = 'AAPL'
+    time_str = '20230101_20230501'
+    name = 'MSFT'
     data_type = '23feature'
     data_path = f'../data/csv/bar_set_huge_{time_str}_{name}_{data_type}.csv'
 
@@ -318,29 +314,19 @@ if __name__ == "__main__":
     model_pth = f'../model/last_model_{config_name}.pt'
     model.load_state_dict(torch.load(model_pth))
 
-    block_str_lst = []
-    end_strs_lst = []
-    loss_lst = []
 
+    threads = []
     try:
         with torch.no_grad():
-            for x in range(feature_num):
-                # x = None
-                policy = SimpleLongShort()
-                account = Account(initial_capital, ['AAPL'])
-                block_str = f'blocking column {x}:{col_names[x]}'
-                print(block_str)
-                buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
-                    back_test(model, test_loader, col_names, num_epochs = 1, block_col = x, to_plot = False, to_print = False)
-                
-                block_str_lst.append(block_str)
-                end_strs_lst.append(end_strs)
-                loss_lst.append(loss)
-                # print(f'account value: {account_value_hist[-1]:.2f}')
-                # print(f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
-                # print(f'stock value change: {end_price/start_price*100 - 100:.2f}%')
+            for x in range(13,feature_num):
+                t = threading.Thread(target=run_back_test, args=(col_names, x))
+                threads.append(t)
 
-            print(f'Test completed in {time.time()-start_time:.2f} seconds')
+        for t in threads:
+            t.start()
+
+        for t in threads:
+            t.join()
 
         save_result(block_str_lst, end_strs_lst, loss_lst)
         # plot(predictions, targets, test_size)

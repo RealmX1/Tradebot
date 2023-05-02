@@ -15,7 +15,7 @@ class Policy(object):
 class SimpleLongShort(Policy):
     def __init__(self):
         super().__init__()
-        self.threshold = 0.01
+        self.threshold = 0.005
 
         self.bought = False
         self.short = False
@@ -44,28 +44,7 @@ class SimpleLongShort(Policy):
         # print(f'prediction: {prediction}, weighted_prediction: {weighted_prediction}')
         
         last_hist = hist[0,-1,:]
-        # print(last_hist.shape)
-        # print('last_hist: ', last_hist)
-        # if prediction[0][0] > 0 and weighted_prediction > 0:
-        #     purchase_num = account.place_buy_max_order(symbol, price, 0)
-        #     if purchase_num > 0:
-        #         account.complete_buy_order(symbol, 0)
-        #         # print(f'bought all! {purchase_num} shares at {price}$')
-        #         return ('b',purchase_num)
-        #     else:
-        #         account.cancel_buy_order(symbol, 0)
-        #         return ('n',0)
-        # elif prediction[0][0] < 0 and weighted_prediction < 0: # (and prediction[0][0] < 0)
-        #     purchase_num = account.place_sell_max_order(symbol, price, 0)
-        #     if purchase_num > 0:
-        #         account.complete_sell_order(symbol, 0)
-        #         # print(f'bought all! {purchase_num} shares at {price}$')
-        #         return ('s',purchase_num)
-        #     else:
-        #         account.cancel_sell_order(symbol,0)
-        #         return ('n',0)
-        # else:
-        #     return ('n',0)
+
         edt_scale_col = locate_cols(col_names, 'edt_scaled')[0]
         # print(edt_scale_col)
 
@@ -179,8 +158,8 @@ class SimpleLongShort(Policy):
     def get_trade_stat(self):
         # print("long profit pct list: ", self.long_profit_pct_list)
         # print("short profit pct list: ", self.short_profit_pct_list)
-        mean_long_profit_pct = statistics.mean(self.long_profit_pct_list)
-        mean_short_profit_pct = statistics.mean(self.short_profit_pct_list)
+        mean_long_profit_pct = np.mean(self.long_profit_pct_list)
+        mean_short_profit_pct = np.mean(self.short_profit_pct_list)
         return self.long_count, self.profitable_long_count, self.short_count, self.profitable_short_count, mean_long_profit_pct, mean_short_profit_pct
 
 
