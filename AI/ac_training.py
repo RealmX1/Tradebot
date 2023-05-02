@@ -129,12 +129,7 @@ def back_test(pred_model, decision_model, data_loader, col_names, num_epochs = 1
             # state = torch.tensor(account_value_change_pct).to(device)
             # state = torch.cat((y_pred_detached, state), dim = 0)
             action = decision_model.select_action(y_pred_detached)
-            # print(action)
             decision = policy.decide('AAPL', price, account, action)
-
-
-
-
 
             decisions.append(decision)
             if decision[0] == 'b':
@@ -156,6 +151,8 @@ def back_test(pred_model, decision_model, data_loader, col_names, num_epochs = 1
                 long_count, profitable_long_count, \
                 short_count, profitable_short_count, \
                 mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
+                
+                print(action)
                 print(decision, 
                         f'price: {price:>6.2f}, ' +
                         f'long: {long_count:>4}, ' +
@@ -174,10 +171,11 @@ def back_test(pred_model, decision_model, data_loader, col_names, num_epochs = 1
                       f'stock growth: {stock_growth:>6.2f}%, ' + 
                       f'growth diff: {account_growth-stock_growth:>6.2f}%, ' +
                       f'past 1000 interval growth: ')
+                      
             account_value_hist.append(account_value)
             price_hist.append(price)
 
-            if (i%1000 == 0) and (i != 0):
+            if (i%2000 == 0) and (i != 0):
                 decision_model.step(optimizer)
 
 

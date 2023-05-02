@@ -257,7 +257,7 @@ def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
 
 if __name__ == "__main__":
-    policy = NaiveLong()
+    policy = SimpleLongShort()
     # policy = NaiveMACD()
     initial_capital = 100000
     account = Account(initial_capital, ['AAPL'])

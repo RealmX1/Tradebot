@@ -1,0 +1,4 @@
+Account Value:   39071.25, accont growth: -60.93%, stock growth: -27.53%, growth diff: -33.40%, past 1000 interval growth: 
+('s', 221) price: 241.94, long: 22197, ? long: 10286, ? long pct: 46.34%, long profit pct: -0.001%, short: 24635, ? short: 11763, ? short pct: 47.75%, short profit pct: 0.000%
+
+simple actor critic not performing very well.
