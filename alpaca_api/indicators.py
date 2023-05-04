@@ -2,8 +2,10 @@ import pandas as pd
 import numpy as np
 import pandas_ta as ta
 import time
+import json
 import matplotlib.pyplot as plt
 
+from indicator_param import *
 # pd.set_option('display.max_columns', None)
 
 '''
@@ -46,41 +48,48 @@ def add_time_embedding(df):
 
     df.drop(columns=['timestamps_col', 'edt_time', 'edt_hour'], inplace=True)
 
-def append_indicators(df_raw):
+def append_indicators(df):
     # Add EMA
-    df_raw.ta.ema(append=True)
+    df.ta.ema(append=True, length = 14)
     # Add DEMA
-    df_raw.ta.dema(append=True)
+    df.ta.dema(append=True)
     # Add TEMA
-    df_raw.ta.tema(append=True)
+    df.ta.tema(append=True)
     # Add Bollinger Bands
-    df_raw.ta.bbands(append=True)
+    df.ta.bbands(append=True)
     # Add RSI
-    df_raw.ta.rsi(append=True)
+    df.ta.rsi(append=True)
     # Add CCI
-    df_raw.ta.cci(append=True)
+    df.ta.cci(append=True)
     # # Add DI+ and DI-
     # df.ta.dmi(append=True) # not working
     # Add ADX
-    df_raw.ta.adx(append=True)
+    df.ta.adx(append=True)
 
-    add_time_embedding(df_raw) # very inefficient compared to pandas_ta indicators;
+    add_time_embedding(df) # very inefficient compared to pandas_ta indicators;
     # # the previous indicators in total used 0.025 seconds on a week's data, this one took 0.065 seconds
 
-    # df_raw.ta.macd(append=True)
+    # df.ta.macd(append=True)
 
-    df = df_raw.dropna()
+    df.dropna(inplace = True)
 
-    return df
+    df.drop(columns=['open', 'high', 'low', 'volume', 'trade_count', \
+                     f"DMN_{IndicatorParam.ADX.value['length']}", f"DMN_{IndicatorParam.ADX.value['length']}"], inplace=True)
+    return list(df.columns)
+
+
 
 def main():
+    features_hist_pth = 'features_hist.json'
+    with open(features_hist_pth, 'r') as f:
+        feature_hist_dict = json.load(f)
+    print(feature_hist_dict)
     
     # time_str = '20200101_20230417'
     # input_path = f'../data/csv/bar_set_huge_{time_str}_raw.csv'
     time_str = '20220101_20230501'
     input_path = f'../data/csv/{pre}_{time_str}_{post}.csv'
     
-    data_type = '23feature' # later used to construct save_path
     df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
     # df = pd.read_csv('data/csv/test_ bar_set_20230101_20230412_baba.csv', index_col = ['symbol', 'timestamp'])
     # df = df.drop(df.index[:144])
@@ -93,7 +102,6 @@ def main():
 
 
     groups = df.groupby('symbol')
-    columns = []
 
     total_calculation_time = 0
     total_csv_saving_time = 0
@@ -108,33 +116,46 @@ def main():
         # Do something with the group dataframe, for example:
         print(f'Group {name}:')
         
-        append_indicators(df)
-
-        print(df.head(5))
-        # columns = list(df.columns)
-        # print(columns)
+        col_lst = append_indicators(df)
+        col_num_str = str(len(col_lst))
+        
         calculation_time = time.time() - start_time2
         total_calculation_time += calculation_time
         print(f'finished calculating indicators for {name} in {calculation_time} seconds')
         start_time2 = time.time()
         print('start saving csv...')
+
+        if not (col_num_str in feature_hist_dict):
+            feature_hist_dict[col_num_str] = [col_lst]
+        else:
+            exist = False
+            for lst in feature_hist_dict[col_num_str]:
+                if set(lst) == set(col_lst):
+                    exist = True
+            
+            if not exist: 
+                feature_hist_dict[col_num_str].append(col_lst)
+
+        id = feature_hist_dict[col_num_str].index(col_lst)
+        data_type = f'{col_num_str}feature{id}' # later used to construct save_path
+
         save_path = f'../data/csv/bar_set_{time_str}_{name}_{data_type}.csv'
         df.to_csv(save_path, index=True, index_label=['symbol', 'timestamp'])
         csv_saving_time = time.time() - start_time2
         total_csv_saving_time += csv_saving_time
         print(f'finished calculating indicators for {name} in {csv_saving_time} seconds')
         # df.to_csv(f'data/csv/test.csv', index=True, index_label=['symbol', 'timestamp'])
+
     print(f'finished calculating indicators for all symbols in {time.time() - start_time} seconds')
 
-    data = df.values
+    # data = df.values
     # plot close_price
-    plt.plot(data[:,3])
-    plt.show()
-
-
-    # ['open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap', 'EMA_10', 'DEMA_10', 'TEMA_10', 'BBL_5_2.0', 'BBM_5_2.0', 'BBU_5_2.0', 'BBB_5_2.0', 'BBP_5_2.0', 'RSI_14', 'CCI_14_0.015', 'ADX_14', 'DMP_14', 'DMN_14']
-    # normalize_method: 0: no normalization, 1: normalize using close, 2: normalize itself, 3: custom normalization (fixed value)
-    normalize_method = [1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 0, 0, 3, 3, 3, 3, 3]
+    # plt.plot(data[:,3])
+    # plt.show()
+    
+    print(feature_hist_dict)
+    with open(features_hist_pth, 'w') as f:
+        json.dump(feature_hist_dict, f)
 
 if __name__ == '__main__':
     main()

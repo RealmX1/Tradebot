@@ -103,3 +103,9 @@ Epoch   1/  1, Loss:  0.0564798, Time/epoch: 5.23 seconds, ? Direction: 46.53%, 
 ¡ü Precision: 45.9694%, Background ¡ü: 45.7245%, ¡ý Precision: 60.2613%, Background ¡ý: 54.2755% 
 Accuracy List:  [44.333, 46.269, 47.059, 47.409, 47.586]
 last_model_lstm_attention_23f1l100h30hw5pw copy.pt
+
+
+decision: n:   0, price: 307.62, long: 7223, ? long: 5334, ? long pct: 73.85%, long profit pct: 0.028%, 
+Account Value:  602122.34, accont growth: 502.12%, stock growth:  -7.87%, growth diff: 510.00%
+blocking x = [0,1,4,5,18,19]
+model_path: f'../model/model_lstm_updown_S2S_attention copy for block test.pt'

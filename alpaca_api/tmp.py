@@ -163,11 +163,18 @@ import pytz
 
 
 
-import pandas_ta as ta
+# import pandas_ta as ta
 
-df = pd.read_csv('data/csv/test.csv')
-df.ta.macd(append = True)
-df = df.dropna()
-print(df.columns.tolist())
-print(df.index.names)
-print(df.head(20))
+# df = pd.read_csv('data/csv/test.csv')
+# df.ta.macd(append = True)
+# df = df.dropna()
+# print(df.columns.tolist())
+# print(df.index.names)
+# print(df.head(20))
+my_set = {1, 3, 2}
+list_of_sets = [{4, 5, 6}, {1, 2, 3}, {7, 8, 9}]
+
+if my_set in list_of_sets:
+    print("The set exists in the list!")
+else:
+    print("The set does not exist in the list.")

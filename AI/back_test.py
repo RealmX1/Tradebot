@@ -303,6 +303,7 @@ if __name__ == "__main__":
                           test = True)
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
     model_pth = f'../model/last_model_{config_name}.pt'
+    
     model.load_state_dict(torch.load(model_pth))
 
     block_str_lst = []
@@ -312,7 +313,7 @@ if __name__ == "__main__":
     try:
         with torch.no_grad():
             # for x in range(feature_num):
-            x = []
+            x = [0,1,4,5,18,19]
             
             account = Account(initial_capital, ['AAPL'])
             policy = SimpleLongShort(account)
@@ -329,6 +330,8 @@ if __name__ == "__main__":
             # print(f'stock value change: {end_price/start_price*100 - 100:.2f}%')
 
             print(f'Test completed in {time.time()-start_time:.2f} seconds')
+
+            print(model_pth)
 
         # save_result(pkl_path, block_str_lst, end_strs_lst, loss_lst)
         # plot(predictions, targets, test_size)

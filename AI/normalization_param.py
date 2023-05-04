@@ -9,7 +9,7 @@ class NormParam(Enum):
     ADX         = {'norm_param': (30.171159,16.460923), 'search_str': 'ADX'}
     DMP         = {'norm_param': (32.843816,18.971341), 'search_str': 'DMP'}
     DMN         = {'norm_param': (32.276572,18.399032), 'search_str': 'DMN'}
-    DayOfWeek   = {'norm_param': (2,1), 'search_str': 'dayofweek'}
+    DayOfWeek   = {'norm_param': (2,1.414), 'search_str': 'dayofweek'}
     EDT         = {'norm_param': (0.5,1.25), 'search_str': 'edt_scaled'}
     IsCoreTime  = {'norm_param': (0.5,1), 'search_str': 'is_core_time'}
     CDL         = {'norm_param': (0,1), 'search_str': 'CDL'}

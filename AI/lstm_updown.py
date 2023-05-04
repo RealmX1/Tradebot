@@ -132,7 +132,7 @@ def count_tensor_num():
 
 def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
     if mode == 0:
-        teacher_forcing_ratio = 0.1
+        teacher_forcing_ratio = 0.0
         model.train()
     else:
         teacher_forcing_ratio = 0
@@ -174,8 +174,8 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
         epoch_below_thres = 0
         i=0
         for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
-            # block_idx = [0,1]
-            # x_batch[:,:,block_idx] = 0
+            block_idx = [0,1,4,5,18,19] # it seems that open isn't useful at all.... since it is basically the last close price.
+            x_batch[:,:,block_idx] = 0
             
             # print('x_batch[0,:,:]: ', x_batch[0,:,:])
             # x_batch   [N, hist_window, feature_num]
