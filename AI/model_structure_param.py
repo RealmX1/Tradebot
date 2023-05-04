@@ -1,5 +1,5 @@
 import torch
-close_idx           = 3
+# close_idx           = 3
 
 feature_num         = input_size = 23  # candel  # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
 hidden_size         = 100    # Number of neurons in the hidden layer of the LSTM
@@ -29,5 +29,6 @@ attention = True
 if attention:
     config_name = f'lstm_{"attention_"}{feature_num}f{num_layers}l{hidden_size}h{hist_window}hw{prediction_window}pw'
 
-
 initial_capital = 100000
+
+policy_threshold = 0.005

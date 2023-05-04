@@ -37,17 +37,26 @@ torch.autograd.set_detect_anomaly(True)
 
 def get_direction_diff(y_batch,y_pred):
     
+
     # start_time = time.time()
     # print('start get_direction_diff')
     # true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
-
-    true_direction = np.clip(y_batch.cpu().numpy(), 0, np.inf) # this turns negative to 0, positive to 1
+    y_batch_np_raw = y_batch.cpu().numpy()
+    y_batch_below_threshold = np.zeros_like(y_batch_np_raw, dtype=bool)
+    y_batch_below_threshold[np.abs(y_batch_np_raw) < policy_threshold] = True
+    true_direction = np.clip(y_batch_np_raw, 0, np.inf) # this turns negative to 0, positive to 1
     true_direction[true_direction != 0] = 1
+    true_direction[true_direction == 0] = -1
+    true_direction[y_batch_below_threshold] = 0
     # true_direction = y_batch.cpu().numpy()
 
-
-    pred_direction = np.clip(y_pred.clone().detach().cpu().numpy(), 0, np.inf) # turn all 
+    y_pred_np_raw = y_pred.detach().cpu().numpy()
+    y_pred_below_threshold = np.zeros_like(y_pred_np_raw, dtype=bool)
+    y_pred_below_threshold[np.abs(y_pred_np_raw) < policy_threshold] = True
+    pred_direction = np.clip(y_pred_np_raw, 0, np.inf) # turn all 
     pred_direction[pred_direction != 0] = 1
+    pred_direction[pred_direction == 0] = -1
+    pred_direction[y_pred_below_threshold] = 0
     # pred_direction[pred_direction == 0.5] = 0
     # pred_direction = y_pred.clone().detach().cpu().numpy()
 
@@ -57,37 +66,54 @@ def get_direction_diff(y_batch,y_pred):
     instance_num =  true_direction.shape[0]
     prediction_min = true_direction.shape[1]
 
-    total_cells = instance_num * prediction_min
+    all_cells = instance_num * prediction_min
     same_cells = np.count_nonzero(true_direction == pred_direction)
 
-    total_cells_list = np.full((prediction_min,), instance_num)
-    same_cells_list = np.count_nonzero(true_direction == pred_direction, axis = 0)
-    # print('total_cells: ',total_cells)
+    all_cells_lst = np.full((prediction_min,), instance_num)
+    same_cells_lst = np.count_nonzero(true_direction == pred_direction, axis = 0)
+
+    true_change_lst = np.count_nonzero(true_direction != 0, axis = 0)
+    true_change_true_pred_lst = np.count_nonzero((true_direction == pred_direction) & (true_direction != 0), axis = 0)
+    true_change_all_pred_lst = np.count_nonzero(pred_direction != 0, axis = 0)
+
+    true_change = np.sum(true_change_lst)
+    true_change_true_pred = np.sum(true_change_true_pred_lst)
+    true_change_all_pred = np.sum(true_change_all_pred_lst)
+    # print('all_cells: ',all_cells)
     # print('same_cells.shape: ',same_cells.shape)
     # print(type(true_direction))
     # print(true_direction.typedf())
-    tp = np.sum((true_direction == 1) & (pred_direction == 1))
-    fp = np.sum((true_direction == 0) & (pred_direction == 1))
+    t_up = np.sum((true_direction == 1) & (pred_direction == 1))
+    f_up = np.sum((true_direction != 1) & (pred_direction == 1))
 
-    tn = np.sum((true_direction == 0) & (pred_direction == 0))
-    fn = np.sum((true_direction == 1) & (pred_direction == 0))
+    t_dn = np.sum((true_direction == -1) & (pred_direction == -1))
+    f_dn = np.sum((true_direction != -1) & (pred_direction == -1))
 
-    total_up = np.sum(true_direction == 1)
-    total_down = np.sum(true_direction == 0)
-    assert total_up + total_down == total_cells
-    assert tp + fp + tn + fn == total_cells
-    assert same_cells == tp + tn, f'{same_cells} != {tp} + {tn}'
+    t_below_thres = np.sum((true_direction == 0) & (pred_direction == 0))
+    f_below_thres = np.sum((true_direction != 0) & (pred_direction == 0))
 
-    # print('total_cells: ',total_cells)
-    # print('total_cells_list: ',total_cells_list)
+    all_up = np.sum(true_direction == 1)
+    all_down = np.sum(true_direction == -1)
+    all_below_thres = np.sum(true_direction == 0)
+    assert all_up + all_down + all_below_thres == all_cells
+    assert t_up + f_up + t_dn + f_dn + t_below_thres + f_below_thres == all_cells
+    assert same_cells == t_up + t_dn + t_below_thres, f'{same_cells} != {t_up} + {t_dn} + {t_below_thres}'
+
+    # print('all_cells: ',all_cells)
+    # print('all_cells_lst: ',all_cells_lst)
     # print('same_cells: ',same_cells)
-    # print('same_cells_list: ',same_cells_list)
-    # print('total_true: ',tp+tn)
-    # print('total_false: ',fp+fn)
-    # print('total_num: ', tp+tn+fp+fn)
+    # print('same_cells_lst: ',same_cells_lst)
+    # print('all_true: ',tp+tn)
+    # print('all_false: ',fp+fn)
+    # print('all_num: ', tp+tn+fp+fn)
 
     # print('get_direction_diff time: ', time.time()-start_time)
-    return total_cells, same_cells, total_cells_list, same_cells_list, tp, fp, tn, fn, total_up, total_down
+    return all_cells, same_cells, \
+            true_change, true_change_true_pred, true_change_all_pred, \
+            all_cells_lst, same_cells_lst, \
+            true_change_lst, true_change_true_pred_lst, true_change_all_pred_lst,\
+            t_up, f_up, t_dn, f_dn, t_below_thres, f_below_thres, \
+            all_up, all_down, all_below_thres
 
 
 def calculate_policy_return(x_batch,y_batch,y_pred):
@@ -117,8 +143,11 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
     # count_tensor_num()
 
 
-    total_predictions = np.zeros(prediction_window) # one elemnt for each minute of prediction window
-    total_true_predictions = np.zeros(prediction_window)
+    all_predictions             = np.zeros(prediction_window) # one elemnt for each minute of prediction window
+    all_true_predictions        = np.zeros(prediction_window)
+    all_changes                 = np.zeros(prediction_window)
+    all_change_true_predictions = np.zeros(prediction_window)
+    all_change_all_predictions  = np.zeros(prediction_window)
 
     average_loss = 0
 
@@ -133,13 +162,16 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
         epoch_loss = 0
         epoch_predictions = 0
         epoch_true_predictions = 0
-        epoch_tp = 0
-        epoch_fp = 0
-        epoch_tn = 0
-        epoch_fn = 0
+        epoch_t_up = 0
+        epoch_f_up = 0
+        epoch_t_dn = 0
+        epoch_f_dn = 0
+        epoch_t_below_thres = 0
+        epoch_f_below_thres = 0
 
         epoch_up = 0
         epoch_down = 0
+        epoch_below_thres = 0
         i=0
         for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
             # block_idx = [0,1]
@@ -183,18 +215,30 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
             #     ma_loss *= 0.8
             #     ma_loss += 0.2*tmp.sum(axis = 0)
 
-            total_cells, same_cells, total_cells_list, same_cells_list, tp, fp, tn, fn, up, down = get_direction_diff(y_batch, y_pred)
-            epoch_predictions += total_cells
+            all_cells, same_cells, \
+            tc, tctp, tcap, \
+            all_cells_lst, same_cells_lst, \
+            tcl, tctpl, tcapl, \
+            tp, fp, tn, fn, t_below_thres, f_below_thres, up, down, below_thres = get_direction_diff(y_batch, y_pred)
+            
+            epoch_predictions += all_cells
             epoch_true_predictions += same_cells
-            epoch_tp += tp
-            epoch_fp += fp
-            epoch_tn += tn
-            epoch_fn += fn
+            epoch_t_up += tp
+            epoch_f_up += fp
+            epoch_t_dn += tn
+            epoch_f_dn += fn
+            epoch_t_below_thres += t_below_thres
+            epoch_f_below_thres += f_below_thres
 
             epoch_up += up
             epoch_down += down
-            total_predictions += total_cells_list
-            total_true_predictions += same_cells_list
+            epoch_below_thres += below_thres
+            all_predictions += all_cells_lst
+            all_true_predictions += same_cells_lst
+            all_changes += tcl
+            all_change_true_predictions += tctpl
+            all_change_all_predictions += tcapl
+
 
             
             epoch_loss += loss_val
@@ -202,13 +246,14 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
         epoch_loss /= (i+1)
         average_loss += epoch_loss
         accuracy = epoch_true_predictions / epoch_predictions * 100
-        assert epoch_tp + epoch_fp + epoch_tn + epoch_fn == epoch_predictions
-        assert epoch_up + epoch_down == epoch_predictions
-        assert epoch_tp + epoch_fn == epoch_up
-        assert epoch_fp + epoch_tn == epoch_down
+        assert epoch_t_up + epoch_f_up + epoch_t_dn + epoch_f_dn + epoch_t_below_thres + epoch_f_below_thres == epoch_predictions
+        assert epoch_up + epoch_down + epoch_below_thres == epoch_predictions
+        # assert epoch_t_up + epoch_f_dn == epoch_up No longer applicable after adding below_thres
+        # assert epoch_f_up + epoch_t_dn == epoch_down
 
-        epoch_up_pred = epoch_tp + epoch_fp
-        epoch_down_pred = epoch_fn + epoch_tn
+        epoch_up_pred = epoch_t_up + epoch_f_up
+        epoch_down_pred = epoch_f_dn + epoch_t_dn
+        epoch_below_thres_pred = epoch_t_below_thres + epoch_f_below_thres
             
         print(f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
               f'Loss: {epoch_loss:10.7f}, ' +
@@ -217,22 +262,33 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
               f'Encocder LR: {get_current_lr(optimizers[0]):9.8f},' + # Decoder LR: {get_current_lr(optimizers[1]):9.8f}, ' +
               f'\nBackground \u2191: {  epoch_up        /epoch_predictions*100:7.4f}%, ' +
               f'\u2191 Pred pct: {      epoch_up_pred   /epoch_predictions*100:7.4f}%, ' +
-              f'\u2191 Precision: {     epoch_tp        /epoch_up_pred*100:7.4f}%, ' +
+              f'\u2191 Precision: {     epoch_t_up      /epoch_up_pred*100:7.4f}%, ' +
 
               f'\nBackground \u2193: {  epoch_down      /epoch_predictions*100:7.4f}%, ' +
               f'\u2193 Pred pct: {      epoch_down_pred /epoch_predictions*100:7.4f}%, ' +
-              f'\u2193 Precision: {     epoch_tn        /epoch_down_pred*100:7.4f}%, ')
+              f'\u2193 Precision: {     epoch_t_dn      /epoch_down_pred*100:7.4f}%, ' +
+              
+              f'\nBackground \u2192: {  epoch_below_thres       /epoch_predictions*100:7.4f}%, ' +
+              f'\u2192 Pred pct: {      epoch_below_thres_pred  /epoch_predictions*100:7.4f}%, ' +
+              f'\u2192 Precision: {     epoch_t_below_thres     /epoch_below_thres_pred*100:7.4f}%')
               # f'Weighted Loss: {final_loss.item():10.7f}, MA Loss: {ma_loss.mean().item():10.7f}') 
             
     
     average_loss /= num_epochs
-    accuracy_list = total_true_predictions / total_predictions * 100
-    accuracy_list_print = [round(x, 3) for x in accuracy_list]
-    print('Accuracy List: ', accuracy_list_print)
+    accuracy_lst = all_true_predictions / all_predictions * 100
+    accuracy_lst_print = [round(x, 3) for x in accuracy_lst]
+
+    change_accuracy_lst = all_change_true_predictions / all_changes * 100
+    change_accuracy_lst_print = [round(x, 3) for x in change_accuracy_lst]
+    change_precision_lst = all_change_true_predictions / all_change_all_predictions * 100
+    change_precision_lst_print = [round(x, 3) for x in change_precision_lst]
+    print('Accuracy List: ', accuracy_lst_print)
+    print('Change Accuracy List: ', change_accuracy_lst_print)
+    print('Change Precision List: ', change_precision_lst_print)
     # print(f'completed in {time.time()-start_time:.2f} seconds')
 
     if mode == 1:
-        return accuracy_list, average_loss
+        return change_precision_lst, average_loss
     else:
         return average_loss
 
@@ -325,7 +381,7 @@ def main():
         start_time = time.time()
         print('Training model')
         test_every_x_epoch = 1
-        test_accuracy_hist = np.zeros((prediction_window,1))
+        test_change_precision_hist = np.zeros((prediction_window,1))
         eval_loss_hist = []
         train_loss_hist = []
 
@@ -339,31 +395,31 @@ def main():
         for epoch in range(num_epochs):
             print(f'Epoch {epoch+1}/{num_epochs}')
             if test_every_x_epoch and epoch % test_every_x_epoch == 0:
-                test_accuracy_list, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
+                test_change_precision_lst, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
                 
-                # print(test_accuracy_list.shape)
-                accuracy = test_accuracy_list.reshape(prediction_window,1)*weights
-                accuracy = accuracy.sum()/np.sum(weights)
+                # print(test_change_precision_lst.shape)
+                change_precision = test_change_precision_lst.reshape(prediction_window,1)*weights
+                change_precision = change_precision.sum()/np.sum(weights)
 
                 if epoch == 0:
-                    test_accuracy_hist[:,0] = test_accuracy_list
+                    test_change_precision_hist[:,0] = test_change_precision_lst
                 else:
-                    test_accuracy_hist = np.concatenate((test_accuracy_hist, test_accuracy_list.reshape(prediction_window,1)), axis=1)
+                    test_change_precision_hist = np.concatenate((test_change_precision_hist, test_change_precision_lst.reshape(prediction_window,1)), axis=1)
                 eval_loss_hist.append(average_loss)
-                if accuracy > best_prediction: 
+                if change_precision > best_prediction: 
                     has_improvement = True
-                    print(f'\nNEW BEST prediction: {accuracy:.4f}%\n')
-                    best_prediction = accuracy
+                    print(f'\nNEW BEST prediction: {change_precision:.4f}%\n')
+                    best_prediction = change_precision
                     best_model_state = model.state_dict()
                 else:
-                    print(f'\ncurrent prediction: {accuracy:.4f}%\n')
+                    print(f'\ncurrent change prediction precision: {change_precision:.4f}%\n')
             
                 plt.clf()
                 for i in range(prediction_window):
-                    accuracies = test_accuracy_hist[i,:]
+                    accuracies = test_change_precision_hist[i,:]
                     plt.plot(accuracies, label=f'{i+1} min accuracy', linestyle='solid')
-                plt.plot(test_accuracy_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
-                plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
+                plt.plot(test_change_precision_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
+                plt.plot((test_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
                 # plt.clf()
                 # plt.plot(moving_average(eval_loss_hist, 3), label=f'loss', linestyle='solid')
 
@@ -384,16 +440,16 @@ def main():
             print(f'NO IMPROVEMENET from {start_best_prediction:.2f}%')
         print('\n\n')
 
-        print(test_accuracy_hist.shape)
+        print(test_change_precision_hist.shape)
         # predictions = np.mean(predictions, axis = )
         # plt.ion()
         # for i in range(prediction_window):
-        #     predictions = test_accuracy_hist[i,:]
+        #     predictions = test_change_precision_hist[i,:]
         #     plt.plot(predictions, label=f'{i+1} min prediction', linestyle='solid')
-        # plt.plot(test_accuracy_hist.mean(axis=0), label=f'average prediction', linestyle='dashed')
+        # plt.plot(test_change_precision_hist.mean(axis=0), label=f'average prediction', linestyle='dashed')
         # weights = np.linspace(1, 0.1, num=prediction_window)
         # weights = weights.reshape(prediction_window,1)
-        # plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted prediction', linestyle='dotted')
+        # plt.plot((test_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted prediction', linestyle='dotted')
         # plt.legend()
 
         print('Training Complete')
@@ -409,14 +465,14 @@ def main():
         # start_time = time.time()
         # print('Testing model')
         # with torch.no_grad():
-        #     test_accuracy_list, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
-        #     test_accuracy_hist[:,0] = test_accuracy_list
+        #     test_change_precision_lst, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
+        #     test_change_precision_hist[:,0] = test_change_precision_lst
         #     plt.clf()
         #     for i in range(prediction_window):
-        #         predictions = test_accuracy_hist[i,:]
+        #         predictions = test_change_precision_hist[i,:]
         #         plt.plot(predictions, 0, label=f'{i+1} min accuracy', marker = 'o')
-        #     plt.plot(test_accuracy_hist.mean(axis=0), 0, label=f'average accuracy', marker = 'o')
-        #     plt.plot((test_accuracy_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
+        #     plt.plot(test_change_precision_hist.mean(axis=0), 0, label=f'average accuracy', marker = 'o')
+        #     plt.plot((test_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
         #     plt.legend()
         #     plt.ylim(0, 1)
         #     plt.show()
