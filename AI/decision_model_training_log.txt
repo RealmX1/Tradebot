@@ -20,3 +20,77 @@ Account Value:  136020.58, accont growth:  36.02%, stock growth:  27.21%, growth
 MSFT_small, Low sensitivity (0.01), without short
 ('b', 432) price: 308.04, long:  927, ? long:  616, ? long pct: 66.45%, long profit pct: 0.035%, 
 Account Value:  133114.13, accont growth:  33.11%, stock growth:  27.21%, growth diff:   5.91%
+
+
+
+
+Going back to test how each feature blocking do in training eval accuracy:
+Epoch   1/  1, Loss:  0.0558762, Time/epoch: 2.80 seconds, ? Direction: 50.13%, Encocder LR: 0.00000020,
+¡ü Precision: 46.8793%, Background ¡ü: 45.7245%, ¡ý Precision: 56.5602%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.011, 51.712, 50.459, 49.001, 48.466]
+
+Epoch   1/  1, Loss:  0.0558760, Time/epoch: 2.77 seconds, ? Direction: 50.14%, Encocder LR: 0.00000020,
+¡ü Precision: 46.8854%, Background ¡ü: 45.7245%, ¡ý Precision: 56.5641%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.039, 51.72, 50.47, 49.013, 48.472]
+
+current prediction: 51.1133%
+
+
+WHEN BLOCKING HIGH/1
+Epoch   1/  1, Loss:  0.0558845, Time/epoch: 2.97 seconds, ? Direction: 50.39%
+¡ü Precision: 46.8806%, Background ¡ü: 45.7245%, ¡ý Precision: 56.1810%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.643, 51.905, 50.686, 49.306, 48.424]
+
+NEW BEST prediction: 51.6350%
+
+but later when the model learn data without HIGH; it gradually decreases in performance again...
+
+
+
+WHEN BLOCKING OPEN/0
+Epoch   1/  1, Loss:  0.0558784, Time/epoch: 3.12 seconds, ? Direction: 50.18%
+¡ü Precision: 46.8892%, Background ¡ü: 45.7245%, ¡ý Precision: 56.5273%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.214, 51.711, 50.476, 49.015, 48.46]
+
+current prediction: 51.2522%
+
+also has positive effect on performance.
+
+
+WHEN BLOCKING BOTH HIGH/1 and OPEN/0
+Epoch   1/  1, Loss:  0.0558897, Time/epoch: 2.99 seconds, ? Direction: 50.39%
+¡ü Precision: 46.8724%, Background ¡ü: 45.7245%, ¡ý Precision: 56.1559%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.494, 51.88, 50.754, 49.34, 48.489]
+
+current prediction: 51.5147%
+
+
+WHEN BLOCKING DMP/18
+Epoch   1/  1, Loss:  0.0558748, Time/epoch: 3.00 seconds, ? Direction: 50.02%, Encocder LR: 0.00000000,
+¡ü Precision: 46.9583%, Background ¡ü: 45.7245%, ¡ý Precision: 57.1526%, Background ¡ý: 54.2755% 
+Accuracy List:  [50.686, 51.39, 50.442, 49.024, 48.549]
+
+current prediction: 50.7772%
+
+this one has adverse effect;
+
+
+WHEN BLOCKING DMN/19
+Epoch   1/  1, Loss:  0.0558710, Time/epoch: 3.09 seconds, ? Direction: 49.92%, Encocder LR: 0.00000000,
+¡ü Precision: 46.9522%, Background ¡ü: 45.7245%, ¡ý Precision: 57.3397%, Background ¡ý: 54.2755% 
+Accuracy List:  [50.835, 51.481, 50.279, 48.626, 48.397]
+
+current prediction: 50.9037%
+
+also has adverse effect; don't know why these two make decision model happy...
+
+
+
+
+DOUBLE Layer lstm seems to provide good signal strength; but trade less often: (without blocking view of "high")
+decision: n:   0, price: 169.40, long:  254, ? long:  197, ? long pct: 77.56%, long profit pct: 0.029%, 
+Account Value:  107063.27, accont growth:   7.06%, stock growth:   1.91%, growth diff:   5.16%
+
+single layer 400 hidden (without blocking view of "high")
+decision: n:   0, price: 169.40, long:  375, ? long:  278, ? long pct: 74.13%, long profit pct: 0.027%, 
+Account Value:  109722.35, accont growth:   9.72%, stock growth:   1.91%, growth diff:   7.82%

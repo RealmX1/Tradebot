@@ -54,11 +54,13 @@ class Account:
         del self.orders[symbol][order_id]
     
     def complete_buy_order(self, symbol, order_id):
-        self.holding[symbol][0] += self.orders[symbol][order_id][0]
+        shares = self.orders[symbol][order_id][0]
+        self.holding[symbol][0] += shares
         if self.holding[symbol][0] >= 0:
             self.balance += self.frozen_balance
             self.frozen_balance = 0
         del self.orders[symbol][order_id]
+        return shares
 
     # sell order functions
     def place_sell_order(self, symbol, price, shares, order_id):
@@ -86,6 +88,7 @@ class Account:
         SEC_FEE = math.ceil(value * SEC * 100) / 100
         self.balance += value - FINRA_FEE - SEC_FEE
         del self.orders[symbol][order_id]
+        return shares
     
     # short order functions
     def place_short_order(self, symbol, price, shares, order_id):
@@ -130,6 +133,7 @@ class Account:
         SEC_FEE = math.ceil(value * SEC * 100) / 100
         self.balance = self.balance - FINRA_FEE - SEC_FEE
         del self.orders[symbol][order_id]
+        return shares # positive shares
 
 
 
@@ -147,11 +151,10 @@ class Account:
                 return -1
     
     def complete_reverse_short_order(self, symbol, order_id):
-        self.complete_buy_order(symbol, order_id)
+        return self.complete_buy_order(symbol, order_id)
 
     def cancel_reverse_short_order(self, symbol, order_id):
         self.cancel_buy_order(symbol, order_id)
-
 
     def get_free_account_balance(self):
         return self.balance

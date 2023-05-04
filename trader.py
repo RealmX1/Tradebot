@@ -1,6 +1,3 @@
-API_KEY = "AKOZFEX5F94X2SD7HQOQ"
-SECRET_KEY =  "3aNqjtbPlkJv09NicPgYFXC3KUhNOR16JGGdiLet"
-
 import pandas as pd
 import torch
 import numpy as np
@@ -16,12 +13,16 @@ import msgpack
 from AI.S2S import *
 from AI.sim import *
 from AI.data_utils import *
-from stock_data.indicators import append_indicators
-from stock_data.alpaca_history_bars import last_week_bars
+from AI.model_structure_param import *
+from alpaca_api.indicators import append_indicators
+from alpaca_api.alpaca_history_bars import last_week_bars
+from alpaca_api.alpaca_trading import *
+from alpaca_api.alpaca_api_param import * # API_KEY, SECRET_KEY
 
 
 # stream parmeters
-symbols = ['AAPL']
+trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+symbols = ['AAPL','BABA','TSLA']
 BAR_MAPPING = {
     "t": "timestamp",
     "o": "open",
@@ -38,83 +39,153 @@ raw_data = True
 # data parameters
 df = None
 stream_df = None
+data_path = 'data/'
 df_csv_path = "data/df.csv"
 stream_csv_path = "data/csv/stream.csv"
 
+rows_buffer = [] # buffer for processing rows.
+current_time_stamp = None
+last_data_update_time = time.time()
+
 # model parameters
-model = None
-feature_num         = input_size = 23 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size         = 200    # Number of neurons in the hidden layer of the LSTM
-num_layers          = 4     # Number of layers in the LSTM
-output_size         = 1     # Number of output values (closing price 1~10min from now)
-prediction_window   = 5
-hist_window         = 100 # using how much data from the past to make prediction?
-data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
-
-
-learning_rate   = 0.0001
-batch_size      = 1
-train_percent   = 0
-num_epochs      = 0
-dropout         = 0.1
-teacher_forcing_ratio = 0
+model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
+model_pth = f'../model/model_{config_name}.pt'
+model.load_state_dict(torch.load(model_pth))
+model.eval()
+teacher_forcing_ratio = 0.0
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# policy parameters
-policy = NaiveLong()
-account = Account(100000, ['AAPL'])
+async def on_receive_bar(bar): # even with multiple subscritions, bars come in one by one.
+    # how to handle aftermarket, when not all symbol bars are received?
+    # maybe not doing data processing in this handler
+    global last_data_update_time
+    last_data_update_time = time.time()
 
-async def on_receive_bar(bar):
+    symbol = bar['S']
+    print(f"received new bars:")
+    print(bar)
     handler_start_time = time.time()
     mapped_bar = {
         BAR_MAPPING[key]: val for key, val in bar.items() if key in BAR_MAPPING
     }
-    print(mapped_bar["timestamp"])
+    print(mapped_bar)
     dt = mapped_bar['timestamp'].to_datetime()
     formatted = dt.strftime('%Y-%m-%d %H:%M:%S+00:00')
-    print(dt)
-    print(formatted)
     del mapped_bar['timestamp']
 
-    new_row = pd.DataFrame(mapped_bar, index=pd.MultiIndex.from_tuples([(symbols[0], formatted)],
+    new_row = pd.DataFrame(mapped_bar, index=pd.MultiIndex.from_tuples([(symbol, formatted)],
                                                        names=['symbol', 'timestamp']))
+    print(new_row)
+    global rows_buffer, current_time_stamp
+    if current_time_stamp == None:
+        print("buffer is empty")
+        current_time_stamp = dt        
+
+    if dt != current_time_stamp: 
+        assert rows_buffer == [], "Warning: buffer should be empty!"
+        current_time_stamp = dt
+    rows_buffer.append(new_row)
+
+
+    
+
+    print(f'Data processing completed {time.time() - handler_start_time} seconds after receiving bar.')
+
+        # stream_df_indicated  = append_indicators(stream_df)
+        # print(stream_df_indicated.tail(5))
+
+        # y_pred = model()
+
+
+
+    # stream_df.to_csv(stream_csv_path)
+def my_function():
+    
+    print("Thread executing...")
+    global last_data_update_time, rows_buffer, symbols
+
+    no_more_data = time.time() - last_data_update_time > 5 and len(rows_buffer) != 0
+    # note that when not all symbols are refreshed, it doesn't quite matter, 
+    # as the policy will make the same prediction for those not updated symbols -- i.e., policy will not do anything.
+    collection_complete = len(rows_buffer) == len(symbols)
+
+    if no_more_data or collection_complete:
+        print("buffer is full, start processing.")
+
+        global stream_df
+        if stream_df is None:
+            global df
+            stream_df = df.tail(200)
+        stream_df = pd.concat([stream_df] + rows_buffer)
+        rows_buffer = []
+        print(stream_df.tail(5))
+
+        
+        append_indicators(stream_df)
+        print(stream_df.tail(5))
+
+
+        # start making prediction
+        global model
+        with torch.no_grad():
+            predictions = {}
+            groups = stream_df.groupby('symbol')
+            for name, df_single_symbol in groups:
+                x_np = normalize_data(df_single_symbol.tail(hist_window))
+                x_batch = torch.tensor(x_np).view(1, hist_window, input_size).float().to(device)
+                print(df_single_symbol.tail(3))
+
+                print("x_batch.shape: ", x_batch.shape)
+            
+                y_pred = model(x_batch, None, teacher_forcing_ratio)
+
+                # should I have policy make one decision for every symbol, or one decision for all symbols?
+                # all symbols.
+                # then I should put prediction of all symbols together and feed to policy
+
+
+            
+                
+
+
+        
+        alpaca_account = trading_client.get_account()
+
+
+        if alpaca_account.trading_blocked:
+            print('Account is currently restricted from trading.')
+        # market_order_data = create_limit_order(symbol = "AAPL", price = price, qty = 1, order_side = OrderSide.BUY, tif = TimeInForce.DAY)
+
+        # Check how much money we can use to open new positions.
+        print('${} is available as buying power.'.format(alpaca_account.buying_power))
+    # Add your desired function code here
+
+def thread_function():
+    while True:
+        t = threading.Thread(target=my_function)
+        t.start()
+        time.sleep(1)
+
+
+def main():
     global df
-    global stream_df
-    if stream_df is None:
-        stream_df = df.tail(200)
-    stream_df = pd.concat([stream_df, new_row])
+    df = last_week_bars(symbols, dp = data_path, download = False)
+
+    stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data, feed=DataFeed.SIP)
     
-
-    print(f'prediction completed {time.time() - handler_start_time} seconds after receiving bar.')
-
-    stream_df_indicated  = append_indicators(stream_df)
-    print(stream_df_indicated.tail(5))
-
-    y_pred = model()
-
-
-
-    stream_df.to_csv(stream_csv_path)
-
-
-
-    
-    
-    
-if __name__ == "__main__":    
-    model_pth = 'AI/lstm_updown_S2S_attention.pt'
-    model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    model.load_state_dict(torch.load(model_pth))
-
-    df = last_week_bars(symbols)
-    print(df.tail(5))
-
-
-
-
-    stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data) #, feed=DataFeed.IEX)
     for symbol in symbols:
         stream.subscribe_bars(on_receive_bar, symbol)
+        # subscribe_quote
+        print(f'subscribed to {symbol}')
+
+    thread = threading.Thread(target=thread_function)
+    thread.start()
+
     stream.run()
+
+
     print("is this printed?")
+
+if __name__ == "__main__":
+    main()

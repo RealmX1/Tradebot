@@ -102,14 +102,13 @@ def main():
     print('start calculating indicators...')
     for name, df in groups:
         start_time2 = time.time()
-        print(df.head(5))
         # name: the name of the group (in this case, the unique values in 'index_1')
         # group_df: the dataframe containing the group data
         
         # Do something with the group dataframe, for example:
         print(f'Group {name}:')
         
-        df = append_indicators(df)
+        append_indicators(df)
 
         print(df.head(5))
         # columns = list(df.columns)

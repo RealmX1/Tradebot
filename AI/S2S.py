@@ -155,10 +155,7 @@ class Seq2Seq(nn.Module):
         # print("softmax_outputs: ", softmax_outputs[0])
 
         return outputs.squeeze(2) # note that squeeze is used since y_batch is 2d, yet y_pred is 3d. (if output size sin't 1, then y_batch will be 3d.)            
-
-
-
-
+        # return -1* torch.ones(batch_size, self.prediction_window).to(self.device) # test if get_diff_direction is fucntional
 
 
 

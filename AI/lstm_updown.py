@@ -1,5 +1,3 @@
-import random
-import json
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import torch # PyTorch
 import torch.nn as nn # PyTorch neural network module
@@ -14,6 +12,9 @@ import numpy as np
 import time
 import gc
 import atexit
+import copy
+import random
+import json
 
 np.set_printoptions(precision=4, suppress=True) 
 
@@ -22,53 +23,15 @@ np.set_printoptions(precision=4, suppress=True)
 from S2S import *
 # from sim import *
 from data_utils import * 
-from model_structure_param import *
-
-
-# policy = NaiveLong()
-# account = Account(100000, ['AAPL'])
+from model_structure_param import * # Define hyperparameters
 
 close_idx = 3 # after removing time column
 
-# Define hyperparameters
-model_structure_param_path = '../model_structure_param.json'
-# with open(model_structure_param_path, 'r') as f:
-#     saved_data = json.load(f)
-
-#     feature_num = saved_data['feature_num']
-#     hidden_size = saved_data['hidden_size']
-#     num_layers = saved_data['num_layers']
-#     output_size = saved_data['output_size']
-#     prediction_window = saved_data['prediction_window']
-#     hist_window = saved_data['hist_window']
-#     data_prep_window = saved_data['data_prep_window']
-#     dropout = saved_data['dropout']
-
-#     learning_rate = saved_data['learning_rate']
-#     batch_size = saved_data['batch_size']
-
-
-
-# feature_num         = input_size = 23  # candel  # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-# hidden_size         = 100    # Number of neurons in the hidden layer of the LSTM
-# num_layers          = 1    # Number of layers in the LSTM
-# output_size         = 1     # Number of output values (closing price 1~10min from now)
-# prediction_window   = 5
-# hist_window         = 30 # using how much data from the past to make prediction?
-# data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
-# dropout         = 0.1
-
-
-# learning_rate   = 0.00005
-# batch_size      = 10000
 train_ratio     = 0.9
 num_epochs      = 100
 
 loss_fn = nn.MSELoss(reduction = 'none')
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-plot_minutes = [0]
 
 
 torch.autograd.set_detect_anomaly(True)
@@ -151,7 +114,6 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
 
     inverse_mask = torch.linspace(1, 11, 10)
     # print ('inverse_mask.shape: ', inverse_mask.shape)
-    weight_decay = 0.2
     weights = torch.pow(torch.tensor(weight_decay), torch.arange(prediction_window).float()).to(device)
     # ([1.0000, 0.8000, 0.6400, 0.5120, 0.4096, 0.3277, 0.2621, 0.2097, 0.1678,0.1342])
     # weights = torch.linspace(1, 0.1, steps=prediction_window)
@@ -169,6 +131,8 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
         epoch_down = 0
         i=0
         for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
+            # block_idx = [0,1]
+            # x_batch[:,:,block_idx] = 0
             
             # print('x_batch[0,:,:]: ', x_batch[0,:,:])
             # x_batch   [N, hist_window, feature_num]
@@ -266,7 +230,7 @@ def get_current_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def save_params(best_prediction, optimizers, model_state, best_model_state, model_path, last_model_path, model_training_param_path):
+def save_params(best_prediction, optimizers, model_state, best_model_state, model_path, last_model_path, model_training_param_path, has_improvement = True):
     print('saving params...')
 
     encoder_lr = get_current_lr(optimizers[0])
@@ -274,7 +238,8 @@ def save_params(best_prediction, optimizers, model_state, best_model_state, mode
     with open(model_training_param_path, 'w') as f:
         json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
     print('saving model...')
-    torch.save(best_model_state, model_path)
+    if has_improvement:
+        torch.save(best_model_state, model_path)
     torch.save(model_state, last_model_path)
     print('done.')
     
@@ -284,30 +249,27 @@ def moving_average(data, window_size = 5):
 
 def main():
     # CHANGE CONFIG NAME to save a new model
-    config_name = 'lstm_updown_S2S_attention'
-    # torch.cuda.empty_cache()
-    # gc.collect()
-    # torch.backends.cudnn.benchmark = True # according to https://www.youtube.com/watch?v=9mS1fIYj1So, this speeds up cnn.
-    
     start_time = time.time()
     print('loading data & model')
     # data_path = 'data/cdl_test_2.csv'
-    data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
+    data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_23features.csv'
     model_path = f'../model/model_{config_name}.pt'
     last_model_path = f'../model/last_model_{config_name}.pt'
     model_training_param_path = f'../model/training_param_{config_name}.json'
     print('loaded in ', time.time()-start_time, ' seconds')
     
-    train_loader, test_loader = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio, global_normalization_list = None)
+    train_loader, test_loader = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio)
     
 
 
     print('loading model')
     start_time = time.time()
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device, attention = True).to(device)
+    best_model = copy.deepcopy(model)
     if os.path.exists(last_model_path):
         print('Loading existing model')
         model.load_state_dict(torch.load(last_model_path))
+        best_model.load_state_dict(torch.load(model_path))
         with open(model_training_param_path, 'r') as f:
             saved_data = json.load(f)
             encoder_lr = saved_data['encoder_learning_rate']
@@ -320,8 +282,8 @@ def main():
         decoder_lr = learning_rate
         best_prediction = 0.0
         start_best_prediction = best_prediction
-    best_model_state = model.state_dict()
-
+    best_model_state = best_model.state_dict()
+   
     print(model)
     print(f'model loading completed in {time.time()-start_time:.2f} seconds')
 
@@ -329,8 +291,8 @@ def main():
     # optimizer = SGD(model.parameters(), lr=learning_rate)
     encoder_optimizer = AdamW(model.encoder.parameters(),weight_decay=1e-5, lr=encoder_lr)
     decoder_optimizer = AdamW(model.decoder.parameters(),weight_decay=1e-5, lr=decoder_lr)
-    encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, mode='min', factor=0.95, patience=10, threshold=0.00001)
-    decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, mode='min', factor=0.95, patience=10, threshold=0.00001)
+    encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, mode='min', factor=scheduler_factor, patience=scheduler_patience, threshold=scheduler_threshold)
+    decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, mode='min', factor=scheduler_factor, patience=scheduler_patience, threshold=scheduler_threshold)
 
     optimizers = [encoder_optimizer, decoder_optimizer]
     schedulers = [encoder_scheduler, decoder_scheduler]
@@ -346,7 +308,8 @@ def main():
         eval_loss_hist = []
         train_loss_hist = []
 
-        weight_decay = 0.2
+        has_improvement = False
+
         arr = np.ones(prediction_window)
         for i in range(1, prediction_window):
             arr[i] = arr[i-1] * weight_decay
@@ -367,6 +330,7 @@ def main():
                     test_accuracy_hist = np.concatenate((test_accuracy_hist, test_accuracy_list.reshape(prediction_window,1)), axis=1)
                 eval_loss_hist.append(average_loss)
                 if accuracy > best_prediction: 
+                    has_improvement = True
                     print(f'\nNEW BEST prediction: {accuracy:.4f}%\n')
                     best_prediction = accuracy
                     best_model_state = model.state_dict()
@@ -438,13 +402,13 @@ def main():
         #     plt.pause(1)
         # print(f'testing completed in {time.time()-start_time:.2f} seconds')
 
-        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_training_param_path) 
+        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_training_param_path, has_improvement) 
         print('Normal exit. Model saved.')
         torch.cuda.empty_cache()
         gc.collect()
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
-        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_training_param_path)
+        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_training_param_path, has_improvement)
         torch.cuda.empty_cache()
         gc.collect()
 

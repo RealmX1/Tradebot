@@ -115,7 +115,6 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
 
     average_loss = 0
 
-    weight_decay = 0.2
     arr = np.ones(prediction_window)
     for i in range(1, prediction_window):
         arr[i] = arr[i-1] * weight_decay
@@ -157,7 +156,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
             # print("one input: ", x_batch[0:,:,:])
             y_batch = y_batch.float().to(device)
         
-            y_pred = model(x_batch, y_batch, teacher_forcing_ratio) # [N, prediction_window]
+            y_pred = model(x_batch, None, teacher_forcing_ratio) # [N, prediction_window]
             timers[2] += time.time() - st # time spent on prediction 
             st = time.time()
 
@@ -175,7 +174,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
             # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
             prediction = y_pred.clone().detach().cpu()
             weighted_prediction = (prediction * weights).sum() / weights.sum()
-            decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, weighted_prediction, account, col_names)
+            decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
             #policy.decide('BABA', None, price, y_pred, account)
             decisions.append(decision)
             if decision[0] == 'b':
@@ -272,19 +271,14 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
 def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
 
-def save_result(block_str_lst = [], end_strs_lst = [], loss_lst = []):
+def save_result(pkl_path, block_str_lst = [], end_strs_lst = [], loss_lst = []):
     print('saving results...')
-    with open('lists_no_multithread_AAPL.pkl', 'wb') as f:
+    with open(pkl_path, 'wb') as f:
         pickle.dump((block_str_lst, end_strs_lst, loss_lst), f)
     
     print('results saved')
 
 if __name__ == "__main__":
-    policy = SimpleLongShort()
-    # policy = NaiveMACD()
-    initial_capital = 100000
-    account = Account(initial_capital, ['AAPL'])
-
 
     close_idx = 3 # after removing time column
 
@@ -292,7 +286,6 @@ if __name__ == "__main__":
     
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print('account value: ', account.evaluate())
 
     # Make predictions
     start_time = time.time()
@@ -300,22 +293,22 @@ if __name__ == "__main__":
     # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
     # data_path = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
     # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
-    time_str = '20230418_20230501'
-    name = 'AAPL'
+    time_str = '20230101_20230501'
+    name = 'MSFT'
     data_type = '23feature'
     data_path = f'../data/csv/bar_set_huge_{time_str}_{name}_{data_type}.csv'
+    pkl_path = 'lists_no_multithread_AAPL_noblock.pkl'
 
     test_loader, col_names = \
-        load_n_split_data(  data_path, 
+        load_n_split_data(data_path, 
                           hist_window, 
                           prediction_window, 
                           batch_size, 
                           train_ratio = 0, 
-                          global_normalization_list = None, 
-                          normalize = True)
+                          normalize = True,
+                          test = True)
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    config_name = 'lstm_updown_S2S_attention'
-    model_pth = f'../model/last_model_{config_name}.pt'
+    model_pth = f'../model/model_{config_name}.pt'
     model.load_state_dict(torch.load(model_pth))
 
     block_str_lst = []
@@ -324,26 +317,28 @@ if __name__ == "__main__":
 
     try:
         with torch.no_grad():
-            for x in range(feature_num):
-                # x = None
-                policy = SimpleLongShort()
-                account = Account(initial_capital, ['AAPL'])
-                block_str = f'blocking column {x}:{col_names[x]}'
-                print(block_str)
-                buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
-                    back_test(model, test_loader, col_names, num_epochs = 1, block_col = x, to_plot = False, to_print = False)
-                
-                block_str_lst.append(block_str)
-                end_strs_lst.append(end_strs)
-                loss_lst.append(loss)
-                # print(f'account value: {account_value_hist[-1]:.2f}')
-                # print(f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
-                # print(f'stock value change: {end_price/start_price*100 - 100:.2f}%')
+            # for x in range(feature_num):
+            x = [0,1]
+            
+            account = Account(initial_capital, ['AAPL'])
+            policy = SimpleLongShort(account)
+            block_str = f'blocking column {x}:{col_names[x]}'
+            print(block_str)
+            buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
+                back_test(model, test_loader, col_names, num_epochs = 1, block_col = x, to_plot = True, to_print = True)
+            
+            block_str_lst.append(block_str)
+            end_strs_lst.append(end_strs)
+            loss_lst.append(loss)
+            # print(f'account value: {account_value_hist[-1]:.2f}')
+            # print(f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
+            # print(f'stock value change: {end_price/start_price*100 - 100:.2f}%')
 
             print(f'Test completed in {time.time()-start_time:.2f} seconds')
 
-        save_result(block_str_lst, end_strs_lst, loss_lst)
+        # save_result(pkl_path, block_str_lst, end_strs_lst, loss_lst)
         # plot(predictions, targets, test_size)
         # plot(raw_predictions, raw_targets, test_size)
     except KeyboardInterrupt or Exception or TypeError:
-        save_result(block_str_lst, end_strs_lst, loss_lst)
+        # save_result(pkl_path, block_str_lst, end_strs_lst, loss_lst)
+        pass

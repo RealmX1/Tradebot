@@ -16,6 +16,7 @@ import msgpack
 from AI.S2S import *
 from AI.sim import *
 from AI.data_utils import *
+from AI.model_structure_param import *
 from stock_data.indicators import append_indicators
 from stock_data.alpaca_history_bars import get_bars
 
@@ -41,27 +42,11 @@ stream_df = None
 df_csv_path = "data/df.csv"
 stream_csv_path = "data/forever_stream.csv"
 
-# model parameters
-feature_num         = input_size = 23 # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size         = 200    # Number of neurons in the hidden layer of the LSTM
-num_layers          = 4     # Number of layers in the LSTM
-output_size         = 1     # Number of output values (closing price 1~10min from now)
-prediction_window   = 5
-hist_window         = 100 # using how much data from the past to make prediction?
-data_prep_window    = hist_window + prediction_window # +ouput_size becuase we need to keep 10 for calculating loss
-
-
-learning_rate   = 0.0001
-batch_size      = 1
-train_percent   = 0
-num_epochs      = 0
-dropout         = 0.1
-teacher_forcing_ratio = 0
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # policy parameters
-policy = NaiveLong()
+policy = SimpleLongShort(allow_short = False)
 account = Account(100000, ['AAPL'])
 
 async def on_receive_bar(bar):
@@ -101,10 +86,6 @@ async def on_receive_bar(bar):
     
 if __name__ == "__main__":
     tf = TimeFrame.Minute
-    start = (datetime.now() - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    df = get_bars(symbols, tf, start, None, None).df
-    print(df.shape)
-    print(df.tail(5))
 
     stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data, feed=DataFeed.SIP)
     for symbol in symbols:

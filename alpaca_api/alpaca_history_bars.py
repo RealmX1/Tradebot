@@ -24,13 +24,13 @@ from alpaca.data.requests import (
 from alpaca.data.timeframe import TimeFrame
 from alpaca.data.enums import Exchange, DataFeed
 from alpaca.data.models import BarSet, QuoteSet, TradeSet
+API_KEY = "AKOZFEX5F94X2SD7HQOQ"
+SECRET_KEY =  '3aNqjtbPlkJv09NicPgYFXC3KUhNOR16JGGdiLet'
 
 
 
 
 pd.set_option('display.max_rows', None)
-API_KEY = 'AKOZFEX5F94X2SD7HQOQ'
-SECRET_KEY =  '3aNqjtbPlkJv09NicPgYFXC3KUhNOR16JGGdiLet'
 data_source = DataFeed.IEX
 
 stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
@@ -114,14 +114,14 @@ def concat_symbols(df):
     return df_concat
 
 # saves pkl to 
-def get_and_process_bars(symbols, timeframe, start, end, limit = None, download=False, pre = pre, post = post):
+def get_and_process_bars(symbols, timeframe, start, end, limit = None, download=False, pre = pre, post = post, dp = data_path):
     symbol_num = len(symbols)
     start_time = time.time()
     start_str = start.strftime('%Y%m%d')
     end_str = end.strftime('%Y%m%d')
     time_str = f'{start_str}_{end_str}'
-    pkl_path = f'{data_path}pkl/{pre}_{time_str}_{post}.pkl'
-    csv_path = f'{data_path}csv/{pre}_{time_str}_{post}.csv'
+    pkl_path = f'{dp}pkl/{pre}_{time_str}_{post}.pkl'
+    csv_path = f'{dp}csv/{pre}_{time_str}_{post}.csv'
 
     if download:
         print('Start getting bars')
@@ -222,12 +222,12 @@ def get_latest_bars(symbol_or_symbols):
 
     return bar_set
 
-def last_week_bars(symbols, timeframe = TimeFrame.Minute):
+def last_week_bars(symbols, timeframe = TimeFrame.Minute, dp = data_path, download = True):
     # get the last week of data
     end = datetime.now()
     start = (end - timedelta(days=end.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
     
-    df = get_and_process_bars(symbols, timeframe, start, end, download = True, pre = 'last_week_' + pre)
+    df = get_and_process_bars(symbols, timeframe, start, end, download = download, pre = 'last_week_' + pre, dp = dp)
     return df
     # return get_and_process_bars(symbols, timeframe, start, end, None)
 
