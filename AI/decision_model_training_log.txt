@@ -94,3 +94,12 @@ Account Value:  107063.27, accont growth:   7.06%, stock growth:   1.91%, growth
 single layer 400 hidden (without blocking view of "high")
 decision: n:   0, price: 169.40, long:  375, ? long:  278, ? long pct: 74.13%, long profit pct: 0.027%, 
 Account Value:  109722.35, accont growth:   9.72%, stock growth:   1.91%, growth diff:   7.82%
+
+
+Epoch   1/  1, Loss:  0.0564821, Time/epoch: 5.28 seconds, ? Direction: 46.68%, Encocder LR: 0.00001802,
+¡ü Precision: 45.9971%, Background ¡ü: 45.7245%, ¡ý Precision: 59.2675%, Background ¡ý: 54.2755% 
+Accuracy List:  [44.259, 46.483, 47.155, 47.851, 47.673]
+Epoch   1/  1, Loss:  0.0564798, Time/epoch: 5.23 seconds, ? Direction: 46.53%, Encocder LR: 0.00001531,
+¡ü Precision: 45.9694%, Background ¡ü: 45.7245%, ¡ý Precision: 60.2613%, Background ¡ý: 54.2755% 
+Accuracy List:  [44.333, 46.269, 47.059, 47.409, 47.586]
+last_model_lstm_attention_23f1l100h30hw5pw copy.pt

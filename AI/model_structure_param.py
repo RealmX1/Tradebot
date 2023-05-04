@@ -2,7 +2,7 @@ import torch
 close_idx           = 3
 
 feature_num         = input_size = 23  # candel  # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size         = 400    # Number of neurons in the hidden layer of the LSTM
+hidden_size         = 100    # Number of neurons in the hidden layer of the LSTM
 num_layers          = 1   # Number of layers in the LSTM
 output_size         = 1     # Number of output values (closing price 1~10min from now)
 prediction_window   = 5

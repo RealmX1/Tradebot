@@ -1,25 +1,40 @@
 from enum import Enum
 class NormParam(Enum):
-    CloseBatch = (0,1) # (mean, std)
-    NoNorm = (0,1)
-    Volume = (0,1)
-    TradeCount = (0,1)
-    RSI = (50,10)
-    CCI = (0,100)
-    ADX = (30.171159,16.460923)
-    DMP = (32.843816,18.971341)
-    DMN = (32.276572,18.399032)
-    DayOfWeek = (2,1)
-    EDT = (0.5,0.288675)
-    IsCoreTime = (0.5,0.5)
+    CloseBatch  = {'norm_param': (0,1), 'search_str': 'BBL_|BBM_|BBU_|MA_|open|high|low|close|vwap'}
+    NoNorm      = {'norm_param': (0,1), 'search_str': 'BBB_|BBP_|MACD'}
+    Volume      = {'norm_param': (0,1), 'search_str': 'volume'}
+    TradeCount  = {'norm_param': (0,1), 'search_str': 'trade_count'}
+    RSI         = {'norm_param': (50,10), 'search_str': 'RSI'}
+    CCI         = {'norm_param': (0,100), 'search_str': 'CCI'}
+    ADX         = {'norm_param': (30.171159,16.460923), 'search_str': 'ADX'}
+    DMP         = {'norm_param': (32.843816,18.971341), 'search_str': 'DMP'}
+    DMN         = {'norm_param': (32.276572,18.399032), 'search_str': 'DMN'}
+    DayOfWeek   = {'norm_param': (2,1), 'search_str': 'dayofweek'}
+    EDT         = {'norm_param': (0.5,1.25), 'search_str': 'edt_scaled'}
+    IsCoreTime  = {'norm_param': (0.5,1), 'search_str': 'is_core_time'}
+    CDL         = {'norm_param': (0,1), 'search_str': 'CDL'}
     # how should std for adx,dmp,and dmn be set?
 
-    CDL = (0,1)
+    # volume might need to be normalized with respect to the stocks' own volume (i.e., no need for special treatment)
+    # or it can be normalized with respect to total volume of the stock.. I'm not sure. 
+    # if volume is to be normalized according to total volume, do it in indicators.py step, not in data_util.
+    # also, is alpaca's volume data adjusted for split? if not, it is pretty much useless without intense processing
+
+    # trade_count should probably be normalized using volume/trade. (i beleive this is the only useful information that can be gained from trade count)
     
+    # how should mean for adx,dmp,and dmn be set? Are they calculated irrelavent to relative price of the stock?
 
 
 
 
+    # BB_mask = col_names.contains("BBL_|BBM_|BBU_").tolist() # bolinger band
+    # MA_mask = col_names.contains("MA_").tolist() # moving average
+    # CDL_mask = col_names.contains("open|high|low|close|vwap").tolist()
+    # close_batch_mean_lst = [a or b or c for a, b, c in zip(BB_mask, MA_mask, CDL_mask)]
+    # close_batch_mean_lst = np.where(close_batch_mean_lst)[0].tolist()
+    # print("close_batch_mean_lst: ", close_batch_mean_lst, type(close_batch_mean_lst))
+    # norm_param_2_idx_dict[NormParam.CloseBatch] = close_batch_mean_lst
+    # print(norm_param_2_idx_dict[NormParam.CloseBatch])
 
 
 

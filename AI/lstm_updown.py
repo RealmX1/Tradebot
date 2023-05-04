@@ -25,8 +25,6 @@ from S2S import *
 from data_utils import * 
 from model_structure_param import * # Define hyperparameters
 
-close_idx = 3 # after removing time column
-
 train_ratio     = 0.9
 num_epochs      = 100
 
@@ -38,6 +36,7 @@ torch.autograd.set_detect_anomaly(True)
 
 
 def get_direction_diff(y_batch,y_pred):
+    
     # start_time = time.time()
     # print('start get_direction_diff')
     # true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
@@ -75,6 +74,17 @@ def get_direction_diff(y_batch,y_pred):
 
     total_up = np.sum(true_direction == 1)
     total_down = np.sum(true_direction == 0)
+    assert total_up + total_down == total_cells
+    assert tp + fp + tn + fn == total_cells
+    assert same_cells == tp + tn, f'{same_cells} != {tp} + {tn}'
+
+    # print('total_cells: ',total_cells)
+    # print('total_cells_list: ',total_cells_list)
+    # print('same_cells: ',same_cells)
+    # print('same_cells_list: ',same_cells_list)
+    # print('total_true: ',tp+tn)
+    # print('total_false: ',fp+fn)
+    # print('total_num: ', tp+tn+fp+fn)
 
     # print('get_direction_diff time: ', time.time()-start_time)
     return total_cells, same_cells, total_cells_list, same_cells_list, tp, fp, tn, fn, total_up, total_down
@@ -96,7 +106,7 @@ def count_tensor_num():
 
 def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
     if mode == 0:
-        teacher_forcing_ratio = 0.0
+        teacher_forcing_ratio = 0.1
         model.train()
     else:
         teacher_forcing_ratio = 0
@@ -115,6 +125,7 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
     inverse_mask = torch.linspace(1, 11, 10)
     # print ('inverse_mask.shape: ', inverse_mask.shape)
     weights = torch.pow(torch.tensor(weight_decay), torch.arange(prediction_window).float()).to(device)
+    # print(weights)
     # ([1.0000, 0.8000, 0.6400, 0.5120, 0.4096, 0.3277, 0.2621, 0.2097, 0.1678,0.1342])
     # weights = torch.linspace(1, 0.1, steps=prediction_window)
     # ma_loss = None
@@ -172,7 +183,7 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
             #     ma_loss *= 0.8
             #     ma_loss += 0.2*tmp.sum(axis = 0)
 
-            total_cells, same_cells, total_cells_list,same_cells_list, tp, fp, tn, fn, up, down = get_direction_diff(y_batch, y_pred)
+            total_cells, same_cells, total_cells_list, same_cells_list, tp, fp, tn, fn, up, down = get_direction_diff(y_batch, y_pred)
             epoch_predictions += total_cells
             epoch_true_predictions += same_cells
             epoch_tp += tp
@@ -191,16 +202,26 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
         epoch_loss /= (i+1)
         average_loss += epoch_loss
         accuracy = epoch_true_predictions / epoch_predictions * 100
+        assert epoch_tp + epoch_fp + epoch_tn + epoch_fn == epoch_predictions
+        assert epoch_up + epoch_down == epoch_predictions
+        assert epoch_tp + epoch_fn == epoch_up
+        assert epoch_fp + epoch_tn == epoch_down
+
+        epoch_up_pred = epoch_tp + epoch_fp
+        epoch_down_pred = epoch_fn + epoch_tn
             
         print(f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
               f'Loss: {epoch_loss:10.7f}, ' +
               f'Time/epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ' +
               f'\u2713 Direction: {accuracy:.2f}%, ' +
               f'Encocder LR: {get_current_lr(optimizers[0]):9.8f},' + # Decoder LR: {get_current_lr(optimizers[1]):9.8f}, ' +
-              f'\n\u2191 Precision: {epoch_tp/(epoch_tp+epoch_fp)*100:7.4f}%, ' +
-              f'Background \u2191: {epoch_up/(epoch_up+epoch_down)*100:7.4f}%, ' +
-              f'\u2193 Precision: {epoch_tn/(epoch_tn+epoch_fn)*100:7.4f}%, ' +
-              f'Background \u2193: {epoch_down/(epoch_up+epoch_down)*100:7.4f}% ')
+              f'\nBackground \u2191: {  epoch_up        /epoch_predictions*100:7.4f}%, ' +
+              f'\u2191 Pred pct: {      epoch_up_pred   /epoch_predictions*100:7.4f}%, ' +
+              f'\u2191 Precision: {     epoch_tp        /epoch_up_pred*100:7.4f}%, ' +
+
+              f'\nBackground \u2193: {  epoch_down      /epoch_predictions*100:7.4f}%, ' +
+              f'\u2193 Pred pct: {      epoch_down_pred /epoch_predictions*100:7.4f}%, ' +
+              f'\u2193 Precision: {     epoch_tn        /epoch_down_pred*100:7.4f}%, ')
               # f'Weighted Loss: {final_loss.item():10.7f}, MA Loss: {ma_loss.mean().item():10.7f}') 
             
     
@@ -252,7 +273,7 @@ def main():
     start_time = time.time()
     print('loading data & model')
     # data_path = 'data/cdl_test_2.csv'
-    data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_23features.csv'
+    data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_23feature.csv'
     model_path = f'../model/model_{config_name}.pt'
     last_model_path = f'../model/last_model_{config_name}.pt'
     model_training_param_path = f'../model/training_param_{config_name}.json'

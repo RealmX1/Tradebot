@@ -228,7 +228,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
             timers[4] += time.time() - st # time spent on printing
             st = time.time()
 
-            draw_interval = 2000
+            draw_interval = 5000
             if (i%draw_interval == 0) and (i != 0) and to_plot == True:
                 # start_time_plot = time.time()
                 plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations)
@@ -279,12 +279,6 @@ def save_result(pkl_path, block_str_lst = [], end_strs_lst = [], loss_lst = []):
     print('results saved')
 
 if __name__ == "__main__":
-
-    close_idx = 3 # after removing time column
-
-
-    
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Make predictions
@@ -293,7 +287,7 @@ if __name__ == "__main__":
     # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
     # data_path = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
     # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
-    time_str = '20230101_20230501'
+    time_str = '20220101_20230501'
     name = 'MSFT'
     data_type = '23feature'
     data_path = f'../data/csv/bar_set_huge_{time_str}_{name}_{data_type}.csv'
@@ -308,7 +302,7 @@ if __name__ == "__main__":
                           normalize = True,
                           test = True)
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    model_pth = f'../model/model_{config_name}.pt'
+    model_pth = f'../model/last_model_{config_name}.pt'
     model.load_state_dict(torch.load(model_pth))
 
     block_str_lst = []
@@ -318,7 +312,7 @@ if __name__ == "__main__":
     try:
         with torch.no_grad():
             # for x in range(feature_num):
-            x = [0,1]
+            x = []
             
             account = Account(initial_capital, ['AAPL'])
             policy = SimpleLongShort(account)
