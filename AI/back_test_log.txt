@@ -1,0 +1,106 @@
+Going back to test how each feature blocking do in training eval accuracy:
+Epoch   1/  1, Loss:  0.0558762, Time/epoch: 2.80 seconds, ? Direction: 50.13%, Encocder LR: 0.00000020,
+¡ü Precision: 46.8793%, Background ¡ü: 45.7245%, ¡ý Precision: 56.5602%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.011, 51.712, 50.459, 49.001, 48.466]
+
+Epoch   1/  1, Loss:  0.0558760, Time/epoch: 2.77 seconds, ? Direction: 50.14%, Encocder LR: 0.00000020,
+¡ü Precision: 46.8854%, Background ¡ü: 45.7245%, ¡ý Precision: 56.5641%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.039, 51.72, 50.47, 49.013, 48.472]
+
+current prediction: 51.1133%
+
+
+WHEN BLOCKING HIGH/1
+Epoch   1/  1, Loss:  0.0558845, Time/epoch: 2.97 seconds, ? Direction: 50.39%
+¡ü Precision: 46.8806%, Background ¡ü: 45.7245%, ¡ý Precision: 56.1810%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.643, 51.905, 50.686, 49.306, 48.424]
+
+NEW BEST prediction: 51.6350%
+
+but later when the model learn data without HIGH; it gradually decreases in performance again...
+
+
+
+WHEN BLOCKING OPEN/0
+Epoch   1/  1, Loss:  0.0558784, Time/epoch: 3.12 seconds, ? Direction: 50.18%
+¡ü Precision: 46.8892%, Background ¡ü: 45.7245%, ¡ý Precision: 56.5273%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.214, 51.711, 50.476, 49.015, 48.46]
+
+current prediction: 51.2522%
+
+also has positive effect on performance.
+
+
+WHEN BLOCKING BOTH HIGH/1 and OPEN/0
+Epoch   1/  1, Loss:  0.0558897, Time/epoch: 2.99 seconds, ? Direction: 50.39%
+¡ü Precision: 46.8724%, Background ¡ü: 45.7245%, ¡ý Precision: 56.1559%, Background ¡ý: 54.2755% 
+Accuracy List:  [51.494, 51.88, 50.754, 49.34, 48.489]
+
+current prediction: 51.5147%
+
+
+WHEN BLOCKING DMP/18
+Epoch   1/  1, Loss:  0.0558748, Time/epoch: 3.00 seconds, ? Direction: 50.02%, Encocder LR: 0.00000000,
+¡ü Precision: 46.9583%, Background ¡ü: 45.7245%, ¡ý Precision: 57.1526%, Background ¡ý: 54.2755% 
+Accuracy List:  [50.686, 51.39, 50.442, 49.024, 48.549]
+
+current prediction: 50.7772%
+
+this one has adverse effect;
+
+
+WHEN BLOCKING DMN/19
+Epoch   1/  1, Loss:  0.0558710, Time/epoch: 3.09 seconds, ? Direction: 49.92%, Encocder LR: 0.00000000,
+¡ü Precision: 46.9522%, Background ¡ü: 45.7245%, ¡ý Precision: 57.3397%, Background ¡ý: 54.2755% 
+Accuracy List:  [50.835, 51.481, 50.279, 48.626, 48.397]
+
+current prediction: 50.9037%
+
+also has adverse effect; don't know why these two make decision model happy...
+
+
+
+
+DOUBLE Layer lstm seems to provide good signal strength; but trade less often: (without blocking view of "high")
+decision: n:   0, price: 169.40, long:  254, ? long:  197, ? long pct: 77.56%, long profit pct: 0.029%, 
+Account Value:  107063.27, accont growth:   7.06%, stock growth:   1.91%, growth diff:   5.16%
+
+single layer 400 hidden (without blocking view of "high")
+decision: n:   0, price: 169.40, long:  375, ? long:  278, ? long pct: 74.13%, long profit pct: 0.027%, 
+Account Value:  109722.35, accont growth:   9.72%, stock growth:   1.91%, growth diff:   7.82%
+
+
+Epoch   1/  1, Loss:  0.0564821, Time/epoch: 5.28 seconds, ? Direction: 46.68%, Encocder LR: 0.00001802,
+¡ü Precision: 45.9971%, Background ¡ü: 45.7245%, ¡ý Precision: 59.2675%, Background ¡ý: 54.2755% 
+Accuracy List:  [44.259, 46.483, 47.155, 47.851, 47.673]
+Epoch   1/  1, Loss:  0.0564798, Time/epoch: 5.23 seconds, ? Direction: 46.53%, Encocder LR: 0.00001531,
+¡ü Precision: 45.9694%, Background ¡ü: 45.7245%, ¡ý Precision: 60.2613%, Background ¡ý: 54.2755% 
+Accuracy List:  [44.333, 46.269, 47.059, 47.409, 47.586]
+last_model_lstm_attention_23f1l100h30hw5pw copy.pt
+
+
+decision: n:   0, price: 307.62, long: 7223, ? long: 5334, ? long pct: 73.85%, long profit pct: 0.028%, 
+Account Value:  602122.34, accont growth: 502.12%, stock growth:  -7.87%, growth diff: 510.00%
+blocking x = [0,1,4,5,18,19]
+model_path: f'../model/model_lstm_updown_S2S_attention copy for block test.pt'
+
+
+MADNESS
+decision: b:1035506, price: 232.74, long: 34705, ? long: 24032, ? long pct: 69.25%, long profit pct: 0.025%, 
+Account Value: 241003744.85, accont growth: 240903.74%, stock growth:  51.08%, growth diff: 240852.66%, interval per trade: 20.59, i/t since last plot: 21.55,
+
+
+No weight (1 decay), 20200101_20200630 MSFT 
+decision: n:   0, price: 198.06, long: 5937, ? long: 4030, ? long pct: 67.88%, long profit pct: 0.029%, 
+Account Value:  477212.11, accont growth: 377.21%, stock growth:  28.57%, pct growth diff: 1279.10%, interval per trade: 19.69, i/t since last plot: 19.64,
+
+Regular weights (0.2 decay), 20200101_20200630 MSFT 
+decision: n:   0, price: 198.06, long: 1974, ? long: 1259, ? long pct: 63.78%, long profit pct: 0.0704%, 
+Account Value:  370320.90, accont growth: 270.32%, stock growth:  28.57%, pct growth diff: 288.03%, interval per trade: 59.19, i/t since last plot: 70.56,
+long profit pct is much higher; might need to lower threshold to increase trade rate and decrease profit pct to make it comparable to no weight.
+ALSO: should start consider tracking "HOLD TIME". How much percent of time is a stock being held on to -- as un utilized time can be used to buy other stocks.
+
+TEST WITH LOWER THRESHOLD
+decision: n:    0, price: 198.06, long: 3772, ? long: 2433, ? long pct: 64.50%, long profit pct: 0.0416%, occupancy rate: 47.22%, 
+Account Value:  423498.08, accont growth: 323.50%, stock growth:  28.57%, pct growth diff: 329.39%, interval per trade: 30.98, i/t since last plot: 31.75, 
+# MIGHT NEED TO TEST DOWN GOING STOCK AS WELL.

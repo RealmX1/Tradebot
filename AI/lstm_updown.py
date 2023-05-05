@@ -41,19 +41,18 @@ def get_direction_diff(y_batch,y_pred):
     # start_time = time.time()
     # print('start get_direction_diff')
     # true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
-    y_batch_np_raw = y_batch.cpu().numpy()
-    y_batch_below_threshold = np.zeros_like(y_batch_np_raw, dtype=bool)
-    y_batch_below_threshold[np.abs(y_batch_np_raw) < policy_threshold] = True
-    true_direction = np.clip(y_batch_np_raw, 0, np.inf) # this turns negative to 0, positive to 1
+    y_batch_below_threshold = np.zeros_like(y_batch, dtype=bool)
+    y_batch_below_threshold[np.abs(y_batch) < policy_threshold] = True
+    true_direction = np.clip(y_batch, 0, np.inf) # this turns negative to 0, positive to 1
     true_direction[true_direction != 0] = 1
     true_direction[true_direction == 0] = -1
+    actual_direction = true_direction.copy() # SUPER STAR!
     true_direction[y_batch_below_threshold] = 0
     # true_direction = y_batch.cpu().numpy()
 
-    y_pred_np_raw = y_pred.detach().cpu().numpy()
-    y_pred_below_threshold = np.zeros_like(y_pred_np_raw, dtype=bool)
-    y_pred_below_threshold[np.abs(y_pred_np_raw) < policy_threshold] = True
-    pred_direction = np.clip(y_pred_np_raw, 0, np.inf) # turn all 
+    y_pred_below_threshold = np.zeros_like(y_pred, dtype=bool)
+    y_pred_below_threshold[np.abs(y_pred) < policy_threshold] = True
+    pred_direction = np.clip(y_pred, 0, np.inf) # turn all 
     pred_direction[pred_direction != 0] = 1
     pred_direction[pred_direction == 0] = -1
     pred_direction[y_pred_below_threshold] = 0
@@ -72,13 +71,13 @@ def get_direction_diff(y_batch,y_pred):
     all_cells_lst = np.full((prediction_min,), instance_num)
     same_cells_lst = np.count_nonzero(true_direction == pred_direction, axis = 0)
 
-    true_change_lst = np.count_nonzero(true_direction != 0, axis = 0)
-    true_change_true_pred_lst = np.count_nonzero((true_direction == pred_direction) & (true_direction != 0), axis = 0)
-    true_change_all_pred_lst = np.count_nonzero(pred_direction != 0, axis = 0)
+    all_change_lst = np.count_nonzero(true_direction != 0, axis = 0)
+    true_change_pred_lst = np.count_nonzero((true_direction == pred_direction) & (true_direction != 0), axis = 0)
+    all_change_pred_lst = np.count_nonzero(pred_direction != 0, axis = 0)
 
-    true_change = np.sum(true_change_lst)
-    true_change_true_pred = np.sum(true_change_true_pred_lst)
-    true_change_all_pred = np.sum(true_change_all_pred_lst)
+    all_change = np.sum(all_change_lst)
+    true_change_pred = np.sum(true_change_pred_lst)
+    all_change_pred = np.sum(all_change_pred_lst)
     # print('all_cells: ',all_cells)
     # print('same_cells.shape: ',same_cells.shape)
     # print(type(true_direction))
@@ -108,12 +107,18 @@ def get_direction_diff(y_batch,y_pred):
     # print('all_num: ', tp+tn+fp+fn)
 
     # print('get_direction_diff time: ', time.time()-start_time)
+    all_pred_actual_change_lst = np.sum(pred_direction != 0, axis = 0)
+    true_pred_actual_change_lst = np.sum((actual_direction == pred_direction) & (pred_direction != 0), axis = 0)
+    all_pred_actual_change = np.sum(all_pred_actual_change_lst)
+    true_pred_actual_change = np.sum(true_pred_actual_change_lst)
     return all_cells, same_cells, \
-            true_change, true_change_true_pred, true_change_all_pred, \
             all_cells_lst, same_cells_lst, \
-            true_change_lst, true_change_true_pred_lst, true_change_all_pred_lst,\
+            all_change, true_change_pred, all_change_pred, \
+            all_change_lst, true_change_pred_lst, all_change_pred_lst,\
             t_up, f_up, t_dn, f_dn, t_below_thres, f_below_thres, \
-            all_up, all_down, all_below_thres
+            all_up, all_down, all_below_thres, \
+            all_pred_actual_change, true_pred_actual_change, \
+            all_pred_actual_change_lst, true_pred_actual_change_lst
 
 
 def calculate_policy_return(x_batch,y_batch,y_pred):
@@ -130,12 +135,14 @@ def count_tensor_num():
             pass
     print('num of tensors: ', num)
 
-def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
-    if mode == 0:
+weights = torch.pow(torch.tensor(weight_decay), torch.arange(prediction_window).float()).to(device)
+# print("weights: ",weights.shape)
+def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
+    if train:
         teacher_forcing_ratio = 0.0
         model.train()
     else:
-        teacher_forcing_ratio = 0
+        teacher_forcing_ratio = 0.0
         model.eval()
     start_time = time.time()
     same_cells = 0
@@ -145,15 +152,18 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
 
     all_predictions             = np.zeros(prediction_window) # one elemnt for each minute of prediction window
     all_true_predictions        = np.zeros(prediction_window)
-    all_changes                 = np.zeros(prediction_window)
-    all_change_true_predictions = np.zeros(prediction_window)
-    all_change_all_predictions  = np.zeros(prediction_window)
+    all_changes               = np.zeros(prediction_window)
+    all_true_change_predictions = np.zeros(prediction_window)
+    all_change_predictions      = np.zeros(prediction_window)
+
+    all_all_pred_actual_change_lst = np.zeros(prediction_window)
+    all_true_pred_actual_change_lst = np.zeros(prediction_window)
 
     average_loss = 0
 
     inverse_mask = torch.linspace(1, 11, 10)
     # print ('inverse_mask.shape: ', inverse_mask.shape)
-    weights = torch.pow(torch.tensor(weight_decay), torch.arange(prediction_window).float()).to(device)
+    global weights
     # print(weights)
     # ([1.0000, 0.8000, 0.6400, 0.5120, 0.4096, 0.3277, 0.2621, 0.2097, 0.1678,0.1342])
     # weights = torch.linspace(1, 0.1, steps=prediction_window)
@@ -174,8 +184,11 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
         epoch_below_thres = 0
         i=0
         for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
-            block_idx = [0,1,4,5,18,19] # it seems that open isn't useful at all.... since it is basically the last close price.
-            x_batch[:,:,block_idx] = 0
+
+            # tensor_count = sum([len(gc.get_objects()) for obj in gc.get_objects() if isinstance(obj, torch.Tensor)])
+            # print(f"There are currently {tensor_count} Torch tensors in memory.")
+            # block_idx = [0,1,4,5,18,19] # it seems that open isn't useful at all.... since it is basically the last close price.
+            # x_batch[:,:,block_idx] = 0
             
             # print('x_batch[0,:,:]: ', x_batch[0,:,:])
             # x_batch   [N, hist_window, feature_num]
@@ -191,12 +204,13 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
             loss = loss_fn(y_pred, y_batch)
             # print('loss shape: ', loss.shape)
 
-            loss_val = loss.mean().item()
+            loss_val = loss.clone().detach().cpu().mean().item()
 
             weighted_loss = loss * weights
+            # print(f"loss: {loss.shape}, weighted loss: {weighted_loss.shape}")
             final_loss = weighted_loss.mean()
             
-            if mode == 0:
+            if train:
                 for optimizer in optimizers:
                     optimizer.zero_grad() # removing zero_grad doesn't improve training speed (unlike some claimed); need more testing
                 final_loss.backward()
@@ -205,8 +219,8 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
                 if schedulers is not None:
                     for scheduler in schedulers:
                         scheduler.step(final_loss)
-                        
-                        # pass
+            memory_used = torch.cuda.memory_allocated()
+            # print('memory_used: ', memory_used/1024/1024/8)
 
             # tmp = weighted_loss.detach()
             # if ma_loss is None:
@@ -214,12 +228,17 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
             # else:
             #     ma_loss *= 0.8
             #     ma_loss += 0.2*tmp.sum(axis = 0)
+            y_batch_safe = y_batch.clone().detach().cpu().numpy()
+            y_pred_safe = y_pred.clone().detach().cpu().numpy()
 
             all_cells, same_cells, \
-            tc, tctp, tcap, \
             all_cells_lst, same_cells_lst, \
-            tcl, tctpl, tcapl, \
-            tp, fp, tn, fn, t_below_thres, f_below_thres, up, down, below_thres = get_direction_diff(y_batch, y_pred)
+            ac, tcp, acp, \
+            acl, tcpl, acpl, \
+            tp, fp, tn, fn, t_below_thres, f_below_thres, \
+            all_up, all_down, all_below_thres, \
+            apac, tpac, \
+            apacl, tpacl = get_direction_diff(y_batch_safe, y_pred_safe)
             
             epoch_predictions += all_cells
             epoch_true_predictions += same_cells
@@ -230,15 +249,19 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
             epoch_t_below_thres += t_below_thres
             epoch_f_below_thres += f_below_thres
 
-            epoch_up += up
-            epoch_down += down
-            epoch_below_thres += below_thres
+            epoch_up += all_up
+            epoch_down += all_down
+            epoch_below_thres += all_below_thres
+
+
             all_predictions += all_cells_lst
             all_true_predictions += same_cells_lst
-            all_changes += tcl
-            all_change_true_predictions += tctpl
-            all_change_all_predictions += tcapl
+            all_changes += acl
+            all_true_change_predictions += tcpl
+            all_change_predictions += acpl
 
+            all_all_pred_actual_change_lst += apacl
+            all_true_pred_actual_change_lst += tpacl
 
             
             epoch_loss += loss_val
@@ -246,6 +269,7 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
         epoch_loss /= (i+1)
         average_loss += epoch_loss
         accuracy = epoch_true_predictions / epoch_predictions * 100
+        change_accuracy = tpac / apac * 100
         assert epoch_t_up + epoch_f_up + epoch_t_dn + epoch_f_dn + epoch_t_below_thres + epoch_f_below_thres == epoch_predictions
         assert epoch_up + epoch_down + epoch_below_thres == epoch_predictions
         # assert epoch_t_up + epoch_f_dn == epoch_up No longer applicable after adding below_thres
@@ -259,6 +283,7 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
               f'Loss: {epoch_loss:10.7f}, ' +
               f'Time/epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ' +
               f'\u2713 Direction: {accuracy:.2f}%, ' +
+              f'\u2713 change Direction: {change_accuracy:.2f}%, ' +
               f'Encocder LR: {get_current_lr(optimizers[0]):9.8f},' + # Decoder LR: {get_current_lr(optimizers[1]):9.8f}, ' +
               f'\nBackground \u2191: {  epoch_up        /epoch_predictions*100:7.4f}%, ' +
               f'\u2191 Pred pct: {      epoch_up_pred   /epoch_predictions*100:7.4f}%, ' +
@@ -272,25 +297,29 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, mode = 0, sche
               f'\u2192 Pred pct: {      epoch_below_thres_pred  /epoch_predictions*100:7.4f}%, ' +
               f'\u2192 Precision: {     epoch_t_below_thres     /epoch_below_thres_pred*100:7.4f}%')
               # f'Weighted Loss: {final_loss.item():10.7f}, MA Loss: {ma_loss.mean().item():10.7f}') 
-            
+              
+        del x_batch, y_batch, y_pred, loss, weighted_loss, final_loss
     
     average_loss /= num_epochs
     accuracy_lst = all_true_predictions / all_predictions * 100
     accuracy_lst_print = [round(x, 3) for x in accuracy_lst]
 
-    change_accuracy_lst = all_change_true_predictions / all_changes * 100
+    change_accuracy_lst = all_true_change_predictions / all_changes * 100
     change_accuracy_lst_print = [round(x, 3) for x in change_accuracy_lst]
-    change_precision_lst = all_change_true_predictions / all_change_all_predictions * 100
+    change_precision_lst = all_true_change_predictions / all_change_predictions * 100
     change_precision_lst_print = [round(x, 3) for x in change_precision_lst]
+    prediction_of_change_precision_lst = all_true_pred_actual_change_lst/ all_all_pred_actual_change_lst * 100
+    prediction_of_change_precision_lst_print = [round(x, 3) for x in prediction_of_change_precision_lst]
     print('Accuracy List: ', accuracy_lst_print)
     print('Change Accuracy List: ', change_accuracy_lst_print)
     print('Change Precision List: ', change_precision_lst_print)
+    print('Prediction of Change Precision List: ', prediction_of_change_precision_lst_print)
     # print(f'completed in {time.time()-start_time:.2f} seconds')
 
-    if mode == 1:
-        return change_precision_lst, average_loss
-    else:
+    if train:
         return average_loss
+    else:
+        return prediction_of_change_precision_lst, average_loss
 
 def plot(predictions, targets, test_size):
     # Plot the results
@@ -307,17 +336,17 @@ def get_current_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def save_params(best_prediction, optimizers, model_state, best_model_state, model_path, last_model_path, model_training_param_path, has_improvement = True):
+def save_params(best_prediction, optimizers, model_state, best_model_state, model_pth, last_model_pth, model_training_param_path, has_improvement = True):
     print('saving params...')
 
     encoder_lr = get_current_lr(optimizers[0])
     decoder_lr = get_current_lr(optimizers[1])
     with open(model_training_param_path, 'w') as f:
         json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
-    print('saving model...')
+    print('saving model to: ', model_pth)
     if has_improvement:
-        torch.save(best_model_state, model_path)
-    torch.save(model_state, last_model_path)
+        torch.save(best_model_state, model_pth)
+    torch.save(model_state, last_model_pth)
     print('done.')
     
 def moving_average(data, window_size = 5):
@@ -328,14 +357,14 @@ def main():
     # CHANGE CONFIG NAME to save a new model
     start_time = time.time()
     print('loading data & model')
-    # data_path = 'data/cdl_test_2.csv'
-    data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_23feature.csv'
-    model_path = f'../model/model_{config_name}.pt'
-    last_model_path = f'../model/last_model_{config_name}.pt'
+    # data_pth = 'data/cdl_test_2.csv'
+    data_pth = training_data_path
+    model_pth = f'../model/model_{config_name}.pt'
+    last_model_pth = f'../model/last_model_{config_name}.pt'
     model_training_param_path = f'../model/training_param_{config_name}.json'
     print('loaded in ', time.time()-start_time, ' seconds')
     
-    train_loader, test_loader = load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio)
+    train_loader, test_loader = load_n_split_data(data_pth, hist_window, prediction_window, batch_size, train_ratio)
     
 
 
@@ -343,10 +372,10 @@ def main():
     start_time = time.time()
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device, attention = True).to(device)
     best_model = copy.deepcopy(model)
-    if os.path.exists(last_model_path):
+    if os.path.exists(last_model_pth):
         print('Loading existing model')
-        model.load_state_dict(torch.load(last_model_path))
-        best_model.load_state_dict(torch.load(model_path))
+        model.load_state_dict(torch.load(last_model_pth))
+        best_model.load_state_dict(torch.load(model_pth))
         with open(model_training_param_path, 'r') as f:
             saved_data = json.load(f)
             encoder_lr = saved_data['encoder_learning_rate']
@@ -390,47 +419,48 @@ def main():
         arr = np.ones(prediction_window)
         for i in range(1, prediction_window):
             arr[i] = arr[i-1] * weight_decay
-        weights = arr.reshape(prediction_window,1)
+        weights = arr.reshape(1,prediction_window)
         
         for epoch in range(num_epochs):
             print(f'Epoch {epoch+1}/{num_epochs}')
             if test_every_x_epoch and epoch % test_every_x_epoch == 0:
-                test_change_precision_lst, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
-                
-                # print(test_change_precision_lst.shape)
-                change_precision = test_change_precision_lst.reshape(prediction_window,1)*weights
-                change_precision = change_precision.sum()/np.sum(weights)
+                with torch.no_grad():
+                    test_change_precision_lst, average_loss = work(model, test_loader, optimizers, num_epochs = 1, train = False)
+                    
+                    # print(test_change_precision_lst.shape)
+                    change_precision = test_change_precision_lst.reshape(1,prediction_window)*weights
+                    change_precision = change_precision.sum()/np.sum(weights)
 
-                if epoch == 0:
-                    test_change_precision_hist[:,0] = test_change_precision_lst
-                else:
-                    test_change_precision_hist = np.concatenate((test_change_precision_hist, test_change_precision_lst.reshape(prediction_window,1)), axis=1)
-                eval_loss_hist.append(average_loss)
-                if change_precision > best_prediction: 
-                    has_improvement = True
-                    print(f'\nNEW BEST prediction: {change_precision:.4f}%\n')
-                    best_prediction = change_precision
-                    best_model_state = model.state_dict()
-                else:
-                    print(f'\ncurrent change prediction precision: {change_precision:.4f}%\n')
-            
-                plt.clf()
-                for i in range(prediction_window):
-                    accuracies = test_change_precision_hist[i,:]
-                    plt.plot(accuracies, label=f'{i+1} min accuracy', linestyle='solid')
-                plt.plot(test_change_precision_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
-                plt.plot((test_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
+                    if epoch == 0:
+                        test_change_precision_hist[:,0] = test_change_precision_lst
+                    else:
+                        test_change_precision_hist = np.concatenate((test_change_precision_hist, test_change_precision_lst.reshape(prediction_window,1)), axis=1)
+                    eval_loss_hist.append(average_loss)
+                    if change_precision > best_prediction: 
+                        has_improvement = True
+                        print(f'\nNEW BEST prediction: {change_precision:.4f}%\n')
+                        best_prediction = change_precision
+                        best_model_state = model.state_dict()
+                    else:
+                        print(f'\ncurrent change prediction precision: {change_precision:.4f}%\n')
+                
+                    plt.clf()
+                    for i in range(prediction_window):
+                        accuracies = test_change_precision_hist[i,:]
+                        plt.plot(accuracies, label=f'{i+1} min accuracy', linestyle='solid')
+                    plt.plot(test_change_precision_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
+                    plt.plot((test_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
                 # plt.clf()
                 # plt.plot(moving_average(eval_loss_hist, 3), label=f'loss', linestyle='solid')
 
                 # actually train the model
-                average_loss = work(model, train_loader, optimizers, test_every_x_epoch, mode = 0, schedulers = schedulers)
+            average_loss = work(model, train_loader, optimizers, test_every_x_epoch, train = True, schedulers = schedulers)
                 # train_loss_hist.append(average_loss)
                 # plt.plot(train_loss_hist, label=f'train loss', linestyle='dotted')
-                if epoch == 0:
-                    plt.legend() 
-                    plt.pause(0.5)
-                plt.pause(0.1)
+            if epoch == 0:
+                plt.legend() 
+                plt.pause(0.5)
+            plt.pause(0.1)
         print(f'training completed in {time.time()-start_time:.2f} seconds')
         
         print('\n\n')
@@ -479,13 +509,13 @@ def main():
         #     plt.pause(1)
         # print(f'testing completed in {time.time()-start_time:.2f} seconds')
 
-        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_training_param_path, has_improvement) 
+        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_pth, last_model_pth, model_training_param_path, has_improvement) 
         print('Normal exit. Model saved.')
         torch.cuda.empty_cache()
         gc.collect()
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
-        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_path, last_model_path, model_training_param_path, has_improvement)
+        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_pth, last_model_pth, model_training_param_path, has_improvement)
         torch.cuda.empty_cache()
         gc.collect()
 

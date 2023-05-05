@@ -2,6 +2,7 @@ from .account import Account
 import numpy as np
 import torch
 import statistics
+import random
 
 class Policy(object):
     def __init__(self):
@@ -11,6 +12,108 @@ class Policy(object):
         # assumes that hist is of shape (hist_window, hist_features)
         # assumes that prediction is of shape (pred_window, pred_features), and that first of pred_feature is close price
         return None
+
+class RandomPolicy(Policy):
+    def __init__(self, account, buy_threshold = 0.005, allow_short = False, short_threshold = -0.005):
+        super().__init__()
+        self.account = account
+        self.allow_short = allow_short
+        self.short_threshold = short_threshold
+
+        self.threshold = buy_threshold
+
+        self.bought = False
+        self.short = False
+
+        self.long_count = 1
+        self.profitable_long_count = 0
+        self.short_count = 1
+        self.profitable_short_count = 0
+        self.prev_action_price = 0
+
+        self.long_profit_pct_list = [0]
+        self.short_profit_pct_list = [0]
+    
+    def decide(self, symbol:str, hist, price, weighted_prediction, col_names):
+        result = ('n',0)
+        prob = [0.02, 0.02, 0.96]
+        choices = range(-1,2)
+
+        pred = random.choices(choices, weights=prob, k=1)[0]
+
+        if pred == 1:
+            if self.bought == True:
+                # print("Already bought!")
+                return result # only invest 0.375 of all balance once.
+            purchase_num = self.account.place_buy_max_order(symbol, price, 0, optimal=False)
+            if purchase_num > 0:
+                self.account.complete_buy_order(symbol, 0)
+                # print(f'bought all! {purchase_num} shares at {price}$')
+                result = ('b',purchase_num)
+                self.bought = True
+            else:
+                print("BANKRUPT!")
+                quit()
+            #     self.account.cancel_buy_order(symbol, 0)
+            #     result = ('n',0)
+        elif pred == -1: # (and prediction[0][0] < 0)
+            purchase_num = self.account.place_sell_max_order(symbol, price, 0)
+            if purchase_num > 0:
+                self.account.complete_sell_order(symbol, 0)
+                # print(f'bought all! {purchase_num} shares at {price}$')
+                result = ('s',purchase_num)
+            else:
+                self.account.cancel_sell_order(symbol,0)
+                result = ('n',0)
+
+            if self.allow_short:
+                if weighted_prediction < self.short_threshold: # start short condition
+                    if self.short == True:
+                        return result
+                    purchase_num = self.account.place_short_max_order(symbol, price, 0)
+                    if purchase_num != 0:
+                        self.account.complete_short_order(symbol, 0)
+                        # print(f'sold all! {purchase_num} shares at {price}$')
+                        result = ('s', result[1] + purchase_num)
+                        self.short = True
+                    else:
+                        self.account.cancel_short_order(symbol,0)
+                        # result not changed
+
+        if result[0] == 'b':
+            if self.short == True:
+                profit_pct = (self.prev_action_price - price) / self.prev_action_price
+                self.short_profit_pct_list.append(profit_pct)
+                self.short_count += 1
+                if self.prev_action_price > price:
+                    self.profitable_short_count += 1
+                self.short = False
+
+            self.prev_action_price = price
+        if result[0] == 's':
+
+            if self.bought == True:
+                profit_pct = (price - self.prev_action_price) / self.prev_action_price * 100
+                self.long_profit_pct_list.append(profit_pct)
+                self.long_count += 1
+                if self.prev_action_price < price:
+                    self.profitable_long_count += 1
+                self.bought = False
+
+            self.prev_action_price = price
+
+        result = (result[0], int(result[1]))
+        return result
+
+    def get_trade_stat(self):
+        # print("long profit pct list: ", self.long_profit_pct_list)
+        # print("short profit pct list: ", self.short_profit_pct_list)
+        mean_long_profit_pct = np.mean(self.long_profit_pct_list)
+        mean_short_profit_pct = np.mean(self.short_profit_pct_list)
+        return self.long_count, self.profitable_long_count, self.short_count, self.profitable_short_count, mean_long_profit_pct, mean_short_profit_pct
+
+            
+            
 
 class SimpleLongShort(Policy):
     def __init__(self, account, buy_threshold = 0.005, allow_short = False, short_threshold = -0.005):
@@ -166,6 +269,8 @@ class SimpleLongShort(Policy):
         mean_short_profit_pct = np.mean(self.short_profit_pct_list)
         return self.long_count, self.profitable_long_count, self.short_count, self.profitable_short_count, mean_long_profit_pct, mean_short_profit_pct
 
+    def has_position(self):
+        return self.bought or self.short
 
 def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
@@ -319,6 +424,7 @@ class PolicyComplex(Policy):
 class ReinforcementPolicy(Policy):
     # return anything that may be considered a state for the RL.
     pass
+
 
 
 

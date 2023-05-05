@@ -70,14 +70,14 @@ def norm_param_2_idx(col_names):
         idx_lst = np.where(mask)[0].tolist()
         norm_param_2_idx_dict[x] = idx_lst
 
-    for key, val in norm_param_2_idx_dict.items():
-        print(key, val)
+    # for key, val in norm_param_2_idx_dict.items(): # debug print
+    #     print(key, val)
 
     return norm_param_2_idx_dict # np2i_dict for short.
 
 class StockDataset(Dataset):
     def __init__(self, data, prediction_window, not_close_batch_norm_lst, close_idx):
-        print("not_close_batch_norm_lst: ", not_close_batch_norm_lst)
+        # print("not_close_batch_norm_lst: ", not_close_batch_norm_lst)
 
         self.close_idx = close_idx
         feature_num = data.shape[2]
@@ -107,8 +107,8 @@ class StockDataset(Dataset):
         # print("x_mean.shape: ", self.x_mean.shape)
         # print("x.shape: ", self.x_raw.shape)
         # mean/std.shape: (data_num, feature_num)
-        print("x_mean: ", self.x_mean)
-        print("x_std: ", self.x_std)
+        print("x_mean: ", np.mean(self.x_mean, axis=0))
+        print("x_std: ", np.mean(self.x_std, axis=0))
         print("x_raw[0]: ", self.x_raw[0][0])
         self.x = (self.x_raw - self.x_mean[:,None,:])# / self.x_std[:,None,:]
         print("x[0]: ", self.x[0][0])
@@ -125,10 +125,10 @@ class StockDataset(Dataset):
         return self.__getitem__(idx)
 
 class MultiStockDataset(Dataset):
-    def __init__(self, data_lst, prediction_window, close_idx):
+    def __init__(self, data_lst, prediction_window, not_close_batch_norm_lst, close_idx):
         self.dataset_lst = []
         for data in data_lst:
-            self.dataset_lst.append(StockDataset(data, prediction_window, close_idx))
+            self.dataset_lst.append(StockDataset(data, prediction_window, not_close_batch_norm_lst, close_idx))
         pass
 
     def __len__(self):
@@ -156,7 +156,7 @@ def sample_z_continuous(arr, z):
 # all things that need special normalization treatment are listed in np2i_dict & NormParam.py; 
 # Default is direct standardization within scope of given input dataframe.
 
-def normalize_data(df, np2i_dict):
+def normalize_data(df, np2i_dict): # takes df, return np.
     num_cols = df.shape[1] 
     data = df.values
 
@@ -175,15 +175,15 @@ def normalize_data(df, np2i_dict):
     if num_cols < len(idx_lst):
         warnings.warn(f"{num_cols-len(idx_lst)} columns are directly standardized with respect to the scope of given dataframe.\n \
                       they are: {set(range(num_cols)) - set(idx_lst)}")
-    print(data_mean)
-    print(data_std)
+    # print('global mean: ', data_mean)
+    # print('global std: ', data_std)
     
 
     # TODO: As feature num increase, it is becoming tedious to maintain mean&variance for special feature. Will need new structure for updating this in future.
     # DONE!
 
     data_norm = (data - data_mean) / data_std
-    print("data_norm.shape: ", data_norm.shape)
+    # print("data_norm.shape: ", data_norm.shape)
     # print("normalized data: ", data_norm)
     return data_norm
 
@@ -216,7 +216,7 @@ def load_n_split_data(data_path, hist_window, prediction_window, batch_size, tra
         train_dataset = StockDataset(train_data, prediction_window, not_close_batch_norm_lst, close_idx)
         val_dataset = StockDataset(val_data, prediction_window, not_close_batch_norm_lst, close_idx)
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=False) 
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=False)
         # testing have shown that my gtx1080ti doesn't benefit from changing num_worker; but future hardware might need them.
         print(f'data loading completed in {time.time()-start_time:.2f} seconds')
         return train_loader, val_loader

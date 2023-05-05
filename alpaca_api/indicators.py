@@ -72,10 +72,15 @@ def append_indicators(df):
     # df.ta.macd(append=True)
 
     df.dropna(inplace = True)
-
-    df.drop(columns=['open', 'high', 'low', 'volume', 'trade_count', \
-                     f"DMN_{IndicatorParam.ADX.value['length']}", f"DMN_{IndicatorParam.ADX.value['length']}"], inplace=True)
-    return list(df.columns)
+    columns_2_drop_lst = ['open', 'high', 'low', 'volume', 'trade_count', \
+                     f"DMN_{IndicatorParam.ADX.value['length']}", f"DMP_{IndicatorParam.ADX.value['length']}"]
+    
+    for column in columns_2_drop_lst:
+        if column in df.columns:
+            df.drop(columns=column, inplace=True)
+    col_list = list(df.columns)
+    
+    return col_list
 
 
 
@@ -83,11 +88,11 @@ def main():
     features_hist_pth = 'features_hist.json'
     with open(features_hist_pth, 'r') as f:
         feature_hist_dict = json.load(f)
-    print(feature_hist_dict)
+    # print(feature_hist_dict)
     
     # time_str = '20200101_20230417'
     # input_path = f'../data/csv/bar_set_huge_{time_str}_raw.csv'
-    time_str = '20220101_20230501'
+    time_str = '20200101_20230504'
     input_path = f'../data/csv/{pre}_{time_str}_{post}.csv'
     
     df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
@@ -108,6 +113,9 @@ def main():
     # Create a new dataframe for each group
     start_time = time.time()
     print('start calculating indicators...')
+
+    col_lst = []
+    col_num_str = ''
     for name, df in groups:
         start_time2 = time.time()
         # name: the name of the group (in this case, the unique values in 'index_1')
@@ -123,7 +131,6 @@ def main():
         total_calculation_time += calculation_time
         print(f'finished calculating indicators for {name} in {calculation_time} seconds')
         start_time2 = time.time()
-        print('start saving csv...')
 
         if not (col_num_str in feature_hist_dict):
             feature_hist_dict[col_num_str] = [col_lst]
@@ -140,13 +147,16 @@ def main():
         data_type = f'{col_num_str}feature{id}' # later used to construct save_path
 
         save_path = f'../data/csv/bar_set_{time_str}_{name}_{data_type}.csv'
+        print('start saving to: ', save_path)
         df.to_csv(save_path, index=True, index_label=['symbol', 'timestamp'])
         csv_saving_time = time.time() - start_time2
         total_csv_saving_time += csv_saving_time
-        print(f'finished calculating indicators for {name} in {csv_saving_time} seconds')
+        print(f'finished calculating indicators for {name} in {csv_saving_time:4.2f} seconds')
         # df.to_csv(f'data/csv/test.csv', index=True, index_label=['symbol', 'timestamp'])
 
     print(f'finished calculating indicators for all symbols in {time.time() - start_time} seconds')
+    print(col_lst)
+    print(f'col num: {col_num_str}')
 
     # data = df.values
     # plot close_price

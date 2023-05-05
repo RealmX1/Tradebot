@@ -118,7 +118,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
     arr = np.ones(prediction_window)
     for i in range(1, prediction_window):
         arr[i] = arr[i-1] * weight_decay
-    weights = arr.reshape(prediction_window,1)
+    weights = arr.reshape(1, prediction_window)
 
     decisions = []
     buy_decisions = []
@@ -134,6 +134,13 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
 
     timers[0] = time.time() - st # time spent initializing
     st = time.time()
+    prev_long_count = 0
+    prev_short_count = 0
+    prev_interval = 0
+
+    zero_balance_timer = 0 # i.e., has a position on this stock
+    
+    draw_interval = 5000  
     for epoch in range(num_epochs):
         i=0
         annotations = []
@@ -172,10 +179,13 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
                 end_price = price
 
             # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
-            prediction = y_pred.clone().detach().cpu()
+            prediction = y_pred.clone().detach().cpu().numpy()
+            # print(prediction.shape, weights.shape)
             weighted_prediction = (prediction * weights).sum() / weights.sum()
             decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
             #policy.decide('BABA', None, price, y_pred, account)
+            if policy.has_position():
+                zero_balance_timer += 1
             decisions.append(decision)
             if decision[0] == 'b':
                 buy_decisions.append(1)
@@ -200,40 +210,49 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
                 short_count, profitable_short_count, \
                 mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
 
-                prediction_stat_str = f'decision: {decision[0]}:{decision[1]:>4}, ' + \
+                prediction_stat_str = \
+                        f'decision: {decision[0]}:{decision[1]:>5}, ' + \
                         f'price: {price:>6.2f}, ' + \
                         f'long: {long_count:>4}, ' + \
                         f'\u2713 long: {profitable_long_count:>4}, ' + \
                         f'\u2713 long pct: {profitable_long_count/long_count*100:>5.2f}%, ' + \
-                        f'long profit pct: {mean_long_profit_pct:>5.3f}%, ' # + \
+                        f'long profit pct: {mean_long_profit_pct:>6.4f}%, ' + \
+                        f'occupancy rate: {zero_balance_timer/(i+1)*100:>5.2f}%, ' # + \
                         # f'short: {short_count:>3}, ' + \
                         # f'\u2713 short: {profitable_short_count:>3}, ' + \
                         # f'\u2713 short pct: {profitable_short_count/short_count*100:>5.2f}%, ' + \
-                        # f'short profit pct: {mean_short_profit_pct:>5.3f}%'
-                
+                        # f'short profit pct: {mean_short_profit_pct:>5.3f}%'  
 
                 account_growth = account_value/start_balance*100-100
                 stock_growth = price/start_price*100-100
-
-                account_n_stock_str = f'Account Value: {account_value:>10.2f}, ' + \
-                      f'accont growth: {account_growth:>6.2f}%, ' + \
-                      f'stock growth: {stock_growth:>6.2f}%, ' +  \
-                      f'growth diff: {account_growth-stock_growth:>6.2f}%' # + \
+                pct_growth_diff = (account_growth+100)/(stock_growth+100)*100-100
+                account_n_stock_str = \
+                        f'Account Value: {account_value:>10.2f}, ' + \
+                        f'accont growth: {account_growth:>6.2f}%, ' + \
+                        f'stock growth: {stock_growth:>6.2f}%, ' +  \
+                        f'pct growth diff: {pct_growth_diff:>6.2f}%, ' + \
+                        f'interval per trade: {i/(long_count+short_count):>4.2f}, ' + \
+                        f'i/t since last plot: {(i-prev_interval)/(long_count+short_count-prev_long_count-prev_short_count + 1):>4.2f}, ' #+ \
                     #   f'past 1000 interval growth: '
 
                 if to_print == True:
                     print(prediction_stat_str)
                     print(account_n_stock_str)
+
             
             timers[4] += time.time() - st # time spent on printing
             st = time.time()
 
-            draw_interval = 5000
             if (i%draw_interval == 0) and (i != 0) and to_plot == True:
+                
                 # start_time_plot = time.time()
                 plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations)
 
                 # print(f'plotting completed in {time.time()-start_time_plot:.2f} seconds')
+                
+                prev_long_count = long_count
+                prev_short_count = short_count
+                prev_interval = i
             # print(account.evaluate())
 
             timers[5] += time.time() - st # time spent on plotting
@@ -271,9 +290,9 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
 def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
 
-def save_result(pkl_path, block_str_lst = [], end_strs_lst = [], loss_lst = []):
+def save_result(pkl_pth, block_str_lst = [], end_strs_lst = [], loss_lst = []):
     print('saving results...')
-    with open(pkl_path, 'wb') as f:
+    with open(pkl_pth, 'wb') as f:
         pickle.dump((block_str_lst, end_strs_lst, loss_lst), f)
     
     print('results saved')
@@ -284,17 +303,17 @@ if __name__ == "__main__":
     # Make predictions
     start_time = time.time()
     print("Making Prediction")
-    # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
-    # data_path = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
-    # data_path = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
-    time_str = '20220101_20230501'
+    # data_pth = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
+    # data_pth = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
+    # data_pth = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
+    time_str = '20200101_20200630'
     name = 'MSFT'
-    data_type = '23feature'
-    data_path = f'../data/csv/bar_set_huge_{time_str}_{name}_{data_type}.csv'
-    pkl_path = 'lists_no_multithread_AAPL_noblock.pkl'
+    data_type = '16feature0'
+    data_pth = f'../data/csv/bar_set_{time_str}_{name}_{data_type}.csv'
+    pkl_pth = 'lists_no_multithread_AAPL_noblock.pkl'
 
     test_loader, col_names = \
-        load_n_split_data(data_path, 
+        load_n_split_data(data_pth, 
                           hist_window, 
                           prediction_window, 
                           batch_size, 
@@ -313,10 +332,11 @@ if __name__ == "__main__":
     try:
         with torch.no_grad():
             # for x in range(feature_num):
-            x = [0,1,4,5,18,19]
+            x = []
             
             account = Account(initial_capital, ['AAPL'])
-            policy = SimpleLongShort(account)
+            # policy = RandomPolicy(account) # back ground has 0.023% of long profit pct... but it is only to do so in a bull market, and can only follow stock price; while the algorithm 
+            policy = SimpleLongShort(account, buy_threshold=0.0025)
             block_str = f'blocking column {x}:{col_names[x]}'
             print(block_str)
             buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
@@ -333,9 +353,9 @@ if __name__ == "__main__":
 
             print(model_pth)
 
-        # save_result(pkl_path, block_str_lst, end_strs_lst, loss_lst)
+        # save_result(pkl_pth, block_str_lst, end_strs_lst, loss_lst)
         # plot(predictions, targets, test_size)
         # plot(raw_predictions, raw_targets, test_size)
     except KeyboardInterrupt or Exception or TypeError:
-        # save_result(pkl_path, block_str_lst, end_strs_lst, loss_lst)
+        # save_result(pkl_pth, block_str_lst, end_strs_lst, loss_lst)
         pass

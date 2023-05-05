@@ -9,19 +9,26 @@ from alpaca.data import Trade, Snapshot, Quote, Bar, BarSet, QuoteSet, TradeSet
 from alpaca.data.timeframe import TimeFrame
 import datetime
 import msgpack
+import time
 
-from AI.S2S import *
-from AI.sim import *
-from AI.data_utils import *
-from AI.model_structure_param import *
-from alpaca_api.indicators import append_indicators
-from alpaca_api.alpaca_history_bars import last_week_bars
-from alpaca_api.alpaca_trading import *
-from alpaca_api.alpaca_api_param import * # API_KEY, SECRET_KEY
+
+import sys
+sys.path.append('AI')  # add the path to my_project
+sys.path.append('alpaca_api') 
+
+from S2S import *
+from sim import *
+from data_utils import *
+from model_structure_param import *
+from indicators import append_indicators
+from alpaca_history_bars import last_week_bars
+from alpaca_trading import *
+from alpaca_api_param import * # API_KEY, SECRET_KEY
+
 
 
 # stream parmeters
-trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+trading_client = TradingClient(PAPER_API_KEY, PAPER_SECRET_KEY, paper=True)
 symbols = ['AAPL','BABA','TSLA']
 BAR_MAPPING = {
     "t": "timestamp",
@@ -35,7 +42,7 @@ BAR_MAPPING = {
 }
 columns = ['open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']
 raw_data = True
-
+wait_time = time.time()
 # data parameters
 df = None
 stream_df = None
@@ -49,7 +56,7 @@ last_data_update_time = time.time()
 
 # model parameters
 model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-model_pth = f'../model/model_{config_name}.pt'
+model_pth = f'model/last_model_{config_name}.pt'
 model.load_state_dict(torch.load(model_pth))
 model.eval()
 teacher_forcing_ratio = 0.0
@@ -64,12 +71,12 @@ async def on_receive_bar(bar): # even with multiple subscritions, bars come in o
 
     symbol = bar['S']
     print(f"received new bars:")
-    print(bar)
+    # print(bar)
     handler_start_time = time.time()
     mapped_bar = {
         BAR_MAPPING[key]: val for key, val in bar.items() if key in BAR_MAPPING
     }
-    print(mapped_bar)
+    # print(mapped_bar)
     dt = mapped_bar['timestamp'].to_datetime()
     formatted = dt.strftime('%Y-%m-%d %H:%M:%S+00:00')
     del mapped_bar['timestamp']
@@ -91,6 +98,7 @@ async def on_receive_bar(bar): # even with multiple subscritions, bars come in o
     
 
     print(f'Data processing completed {time.time() - handler_start_time} seconds after receiving bar.')
+    print('')
 
         # stream_df_indicated  = append_indicators(stream_df)
         # print(stream_df_indicated.tail(5))
@@ -102,16 +110,20 @@ async def on_receive_bar(bar): # even with multiple subscritions, bars come in o
     # stream_df.to_csv(stream_csv_path)
 def my_function():
     
-    print("Thread executing...")
-    global last_data_update_time, rows_buffer, symbols
+    global last_data_update_time, rows_buffer, symbols, wait_time
+    # print('')
+    print(f"Thread Waiting...{time.time() - wait_time:4.2f}", end = '\r')
 
-    no_more_data = time.time() - last_data_update_time > 5 and len(rows_buffer) != 0
+    no_more_data = time.time() - last_data_update_time > 3 and len(rows_buffer) != 0
     # note that when not all symbols are refreshed, it doesn't quite matter, 
     # as the policy will make the same prediction for those not updated symbols -- i.e., policy will not do anything.
     collection_complete = len(rows_buffer) == len(symbols)
 
     if no_more_data or collection_complete:
-        print("buffer is full, start processing.")
+        if no_more_data:
+            print("no more data, start processing.")
+        else:
+            print("buffer is full, start processing.")
 
         global stream_df
         if stream_df is None:
@@ -119,30 +131,46 @@ def my_function():
             stream_df = df.tail(200)
         stream_df = pd.concat([stream_df] + rows_buffer)
         rows_buffer = []
-        print(stream_df.tail(5))
 
-        
-        append_indicators(stream_df)
-        print(stream_df.tail(5))
-
+        col_lst = append_indicators(stream_df)
+        col_num = len(col_lst)
+        close_idx = columns.index('close')
 
         # start making prediction
         global model
         with torch.no_grad():
-            predictions = {}
+            np2i_dict = {}
+            
+            normalized_buffer = []
             groups = stream_df.groupby('symbol')
             for name, df_single_symbol in groups:
-                x_np = normalize_data(df_single_symbol.tail(hist_window))
-                x_batch = torch.tensor(x_np).view(1, hist_window, input_size).float().to(device)
-                print(df_single_symbol.tail(3))
+                col_names = stream_df.columns.str
+                np2i_dict = norm_param_2_idx(col_names).copy()
+                x_df = df_single_symbol.tail(hist_window).copy()
+                x_normalized_np = normalize_data(x_df, np2i_dict)
+                # print('x_np shape: ', x_np.shape)
+                x_batch = x_normalized_np.view((1, hist_window, input_size)).float()
 
-                print("x_batch.shape: ", x_batch.shape)
+                normalized_buffer.append(x_batch)
+                
+                # print(df_single_symbol.tail(3))
+
+                # print("x_batch.shape: ", x_batch.shape)
             
-                y_pred = model(x_batch, None, teacher_forcing_ratio)
-
-                # should I have policy make one decision for every symbol, or one decision for all symbols?
-                # all symbols.
-                # then I should put prediction of all symbols together and feed to policy
+            # should I have policy make one decision for every symbol, or one decision for all symbols?
+            # all symbols.
+            # then I should put prediction of all symbols together and feed to policy
+            col_idx_set = set(range(col_num))
+            not_close_batch_norm_lst = list(col_idx_set - set(np2i_dict[NormParam.CloseBatch]))
+            dataset = MultiStockDataset(normalized_buffer, prediction_window, not_close_batch_norm_lst, close_idx)
+            data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0, pin_memory=False) 
+            for x_batch_lst, y_batch_lst, x_raw_lst in data_loader:
+                print("x_batch_lst.shape: ", x_batch_lst.shape)
+                print("y_batch_lst.shape: ", y_batch_lst.shape)
+                print("x_raw_lst.shape: ", x_raw_lst.shape)
+            
+            y_pred = model(x_batch, None, teacher_forcing_ratio)
+        wait_time = time.time()
 
 
             
@@ -158,8 +186,9 @@ def my_function():
         # market_order_data = create_limit_order(symbol = "AAPL", price = price, qty = 1, order_side = OrderSide.BUY, tif = TimeInForce.DAY)
 
         # Check how much money we can use to open new positions.
-        print('${} is available as buying power.'.format(alpaca_account.buying_power))
+        print(f'${alpaca_account.buying_power} is available as buying power.')
     # Add your desired function code here
+
 
 def thread_function():
     while True:
@@ -171,6 +200,7 @@ def thread_function():
 def main():
     global df
     df = last_week_bars(symbols, dp = data_path, download = False)
+    df.sort_index(level=1, inplace=True)
 
     stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data, feed=DataFeed.SIP)
     
@@ -183,6 +213,8 @@ def main():
     thread.start()
 
     stream.run()
+
+    thread.join()
 
 
     print("is this printed?")

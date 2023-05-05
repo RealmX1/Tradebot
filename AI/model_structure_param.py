@@ -1,8 +1,8 @@
 import torch
 # close_idx           = 3
 
-feature_num         = input_size = 23  # candel  # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
-hidden_size         = 100    # Number of neurons in the hidden layer of the LSTM
+feature_num         = input_size = 16  # candel  # Number of features (i.e. columns) in the CSV file -- the time feature is removed.
+hidden_size         = 200    # Number of neurons in the hidden layer of the LSTM
 num_layers          = 1   # Number of layers in the LSTM
 output_size         = 1     # Number of output values (closing price 1~10min from now)
 prediction_window   = 5
@@ -14,7 +14,7 @@ weight_decay = 0.2
 # weights = 
 
 learning_rate       = 0.00005
-batch_size          = 5000
+batch_size          = 20000
 
 scheduler_patience = 15
 scheduler_factor = 0.96
@@ -32,3 +32,5 @@ if attention:
 initial_capital = 100000
 
 policy_threshold = 0.005
+
+training_data_path = f'../data/csv/bar_set_20200101_20230504_AAPL_{feature_num}feature0.csv'

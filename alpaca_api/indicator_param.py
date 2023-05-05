@@ -5,5 +5,5 @@ class IndicatorParam(Enum):
     RSI = (1,1)
     BBANDS = 20
 
-for parm in IndicatorParam:
-    print(parm.name, parm.value)
+# for parm in IndicatorParam:
+#     print(parm.name, parm.value)
