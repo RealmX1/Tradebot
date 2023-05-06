@@ -356,9 +356,18 @@ def main():
 
     symbols = ['MSFT'] #['AAPL','MSFT','TSLA','GOOG','SPY']
     timeframe = TimeFrame.Minute
-    start = datetime(2020,3,1) # 2020-01-01 is wednesday
+    start = datetime(2020,1,1) # 2020-01-01 is wednesday
     end = datetime(2020,7,1) 
     # end = datetime.now() 
+    time_strs = ['20200101_20200201', '20200201_20200301', '20200301_20200701']
+    dfs = read_multiple_raw_data(time_strs, type = 'trades')
+
+    df = combine_bars(dfs, type = 'trades')
+
+    start_str = start.strftime('%Y%m%d')
+    end_str = end.strftime('%Y%m%d')
+    df.to_csv(f'{data_path}csv/trade_set_{start_str}_{end_str}_{post}.csv', index=True, index_label=['symbol', 'timestamp'])
+    
     # get_load_of_data(symbols, timeframe, start, end, limit = None, download=False, type = 'trades')
     # thread = threading.Thread(target=thread_function(time.time()))
     # thread.start()

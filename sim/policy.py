@@ -154,6 +154,11 @@ class SimpleLongShort(Policy):
         self.long_profit_pct_list = [0]
         self.short_profit_pct_list = [0]
 
+        self.continuous_unfilled_buy_count = 0
+        self.continuous_unfilled_sell_count = 0
+        self.additional_buy_price = 0.0
+        self.additional_sell_price = 0.0
+
     def has_position(self):
         return self.bought or self.short
     
@@ -186,7 +191,7 @@ class SimpleLongShort(Policy):
         if pred == 1:
             if self.bought == True:
                 # print("Already bought!")
-                return result # only invest 0.375 of all balance once.
+                return result
             purchase_num = self.account.place_buy_max_order(symbol, price, 0, optimal=False)
             # print(f'placing buy order for {purchase_num} shares at {price}$')
             if purchase_num > 0:
@@ -279,7 +284,9 @@ class SimpleLongShort(Policy):
         self.bought = True
 
     def cancel_buy_order(self, symbol, unfilled = False):
-        self.unfilled_buy += unfilled
+        if unfilled:
+            self.unfilled_buy += 1
+            self.continuous_unfilled_buy_count += 1
         self.bought = False
         self.account.cancel_buy_order(symbol, 0)
     
@@ -293,11 +300,14 @@ class SimpleLongShort(Policy):
             self.bought = False
             
         self.prev_action_price = price
+        self.continuous_unfilled_sell_count = 0
 
         self.account.complete_sell_order(symbol, 0)
     
     def cancel_sell_order(self, symbol, unfilled = False):
-        self.unfilled_sell += unfilled
+        if unfilled:
+            self.unfilled_sell += 1
+            self.continuous_unfilled_sell_count += 1
         self.account.cancel_sell_order(symbol, 0)
 
     def complete_short_order(self,symbol):
