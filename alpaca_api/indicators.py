@@ -27,6 +27,8 @@ def func(x):
 def add_time_embedding(df):
     # First, make sure the index is timezone aware (in UTC)
     df['timestamps_col'] = pd.to_datetime(df.index.get_level_values(1))
+#     /mnt/c/Users/zhang/OneDrive/desktop/Tradebot/alpaca_api/indicators.py:29: FutureWarning: Inferring datetime64[ns, UTC] from data containing strings is deprecated and will be removed in a future version. To retain the old behavior explicitly pass Series(data, dtype=datetime64[ns, UTC])
+#   df['timestamps_col'] = pd.to_datetime(df.index.get_level_values(1))
     # df['timestamps_col'] = pd.to_datetime(df['timestamps_col'], utc=True)
     # print(df.head(5))
     # print(df.index.get_level_values(1))

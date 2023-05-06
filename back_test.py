@@ -11,6 +11,11 @@ import time
 import pickle
 np.set_printoptions(precision=4, suppress=True) 
 
+import sys
+sys.path.append('AI')  # add the path to my_project
+sys.path.append('alpaca_api') 
+sys.path.append('sim')
+
 
 # import custom files
 from S2S import *
@@ -101,9 +106,21 @@ def plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_gr
 
     ax1.legend(loc='upper right')
     ax2.legend(loc='upper left')
-    plt.pause(0.1)
+    plt.pause(0.5)
     if show:
         plt.show()
+
+def time_analysis(start_time, timers):
+
+    print(f'Time spent on initialization: {timers[0]:.2f} seconds\n' + \
+        f'Time spent on data loading: {timers[1]:.2f} seconds\n' + \
+        f'Time spent on prediction: {timers[2]:.2f} seconds\n' + \
+        f'Time spent on decision making: {timers[3]:.2f} seconds\n' + \
+        f'Time spent on printing: {timers[4]:.2f} seconds\n' + \
+        f'Time spent on plotting: {timers[5]:.2f} seconds\n'
+        )
+    print(f'back test completed in {time.time()-start_time:.2f} seconds')    
+        
 
 def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, to_plot = True, to_print = True):
     timers = [0.0] * 10
@@ -117,7 +134,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
 
     arr = np.ones(prediction_window)
     for i in range(1, prediction_window):
-        arr[i] = arr[i-1] * weight_decay
+        arr[i] = arr[i-1] * 1.5
     weights = arr.reshape(1, prediction_window)
 
     decisions = []
@@ -139,142 +156,150 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
     prev_interval = 0
 
     zero_balance_timer = 0 # i.e., has a position on this stock
+
+    step_per_sec = 10
     
     draw_interval = 5000  
-    for epoch in range(num_epochs):
-        i=0
-        annotations = []
-        for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
-
-            timers[1] += time.time() - st # time spent using data_loader
-            st = time.time()
-
-            # print('x_batch.shape: ', x_batch.shape)
-            # print('y_batch.shape: ', y_batch.shape)
-            # x_batch   [N, hist_window, feature_num]
-            # y_batch & y_pred  [N, prediction_window]
-            # note here N = 1
-            if block_col != None:
-                x_batch[:,:,block_col] = 0
-
-            x_batch = x_batch.float().to(device) 
-            # probably need to do numpy to pt tensor in the dataset; need testing on efficiency 
-            # !!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
-            # print("one input: ", x_batch[0:,:,:])
-            y_batch = y_batch.float().to(device)
-        
-            y_pred = model(x_batch, None, teacher_forcing_ratio) # [N, prediction_window]
-            timers[2] += time.time() - st # time spent on prediction 
-            st = time.time()
-
-            loss = loss_fn(y_pred, y_batch)
-            loss_val = loss.mean().item()
-            average_loss += loss_val
-            
-            price = x_raw_close.item()
-            if (epoch == 0 and i == 0):
-                start_price = price
-                start_balance = account.evaluate()
-            if (epoch == num_epochs-1 and i == len(data_loader)-1):
-                end_price = price
-
-            # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
-            prediction = y_pred.clone().detach().cpu().numpy()
-            # print(prediction.shape, weights.shape)
-            weighted_prediction = (prediction * weights).sum() / weights.sum()
-            decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
-            #policy.decide('BABA', None, price, y_pred, account)
-            if policy.has_position():
-                zero_balance_timer += 1
-            decisions.append(decision)
-            if decision[0] == 'b':
-                buy_decisions.append(1)
-                sell_decisions.append(0)
-            elif decision[0] == 's':
-                buy_decisions.append(0)
-                sell_decisions.append(1)
-            else:
-                buy_decisions.append(0)
-                sell_decisions.append(0)
-
-            account_value = account.evaluate()
-            
-            account_value_hist.append(account_value)
-            price_hist.append(price)
-
-            timers[3] += time.time() - st # time spent on decision making
-            st = time.time()
-
-            if (decision[0] != 'n' and to_print) or i == (len(data_loader)-1):
-                long_count, profitable_long_count, \
-                short_count, profitable_short_count, \
-                mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
-
-                prediction_stat_str = \
-                        f'decision: {decision[0]}:{decision[1]:>5}, ' + \
-                        f'price: {price:>6.2f}, ' + \
-                        f'long: {long_count:>4}, ' + \
-                        f'\u2713 long: {profitable_long_count:>4}, ' + \
-                        f'\u2713 long pct: {profitable_long_count/long_count*100:>5.2f}%, ' + \
-                        f'long profit pct: {mean_long_profit_pct:>6.4f}%, ' + \
-                        f'occupancy rate: {zero_balance_timer/(i+1)*100:>5.2f}%, ' # + \
-                        # f'short: {short_count:>3}, ' + \
-                        # f'\u2713 short: {profitable_short_count:>3}, ' + \
-                        # f'\u2713 short pct: {profitable_short_count/short_count*100:>5.2f}%, ' + \
-                        # f'short profit pct: {mean_short_profit_pct:>5.3f}%'  
-
-                account_growth = account_value/start_balance*100-100
-                stock_growth = price/start_price*100-100
-                pct_growth_diff = (account_growth+100)/(stock_growth+100)*100-100
-                account_n_stock_str = \
-                        f'Account Value: {account_value:>10.2f}, ' + \
-                        f'accont growth: {account_growth:>6.2f}%, ' + \
-                        f'stock growth: {stock_growth:>6.2f}%, ' +  \
-                        f'pct growth diff: {pct_growth_diff:>6.2f}%, ' + \
-                        f'interval per trade: {i/(long_count+short_count):>4.2f}, ' + \
-                        f'i/t since last plot: {(i-prev_interval)/(long_count+short_count-prev_long_count-prev_short_count + 1):>4.2f}, ' #+ \
-                    #   f'past 1000 interval growth: '
-
-                if to_print == True:
-                    print(prediction_stat_str)
-                    print(account_n_stock_str)
-
-            
-            timers[4] += time.time() - st # time spent on printing
-            st = time.time()
-
-            if (i%draw_interval == 0) and (i != 0) and to_plot == True:
+    try:
+        for epoch in range(num_epochs):
+            i=0
+            annotations = []
+            for i, (x_batch, y_batch, x_raw_close, timestamp) in enumerate(data_loader):
                 
-                # start_time_plot = time.time()
-                plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations)
+                step_start = time.time()
 
-                # print(f'plotting completed in {time.time()-start_time_plot:.2f} seconds')
+                timers[1] += time.time() - st # time spent using data_loader
+                st = time.time()
+
+                # print('x_batch.shape: ', x_batch.shape)
+                # print('y_batch.shape: ', y_batch.shape)
+                # x_batch   [N, hist_window, feature_num]
+                # y_batch & y_pred  [N, prediction_window]
+                # note here N = 1
+                if block_col != None:
+                    x_batch[:,:,block_col] = 0
+
+                x_batch = x_batch.float().to(device) 
+                # probably need to do numpy to pt tensor in the dataset; need testing on efficiency 
+                # !!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
+                # print("one input: ", x_batch[0:,:,:])
+                y_batch = y_batch.float().to(device)
+            
+                y_pred = model(x_batch, None, teacher_forcing_ratio) # [N, prediction_window]
+                timers[2] += time.time() - st # time spent on prediction 
+                st = time.time()
+
+                loss = loss_fn(y_pred, y_batch)
+                loss_val = loss.mean().item()
+                average_loss += loss_val
                 
-                prev_long_count = long_count
-                prev_short_count = short_count
-                prev_interval = i
-            # print(account.evaluate())
+                price = x_raw_close.item()
+                if (epoch == 0 and i == 0):
+                    start_price = price
+                    start_balance = account.evaluate()
+                if (epoch == num_epochs-1 and i == len(data_loader)-1):
+                    end_price = price
 
-            timers[5] += time.time() - st # time spent on plotting
-            st = time.time()
-        
+                # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
+                prediction = y_pred.clone().detach().cpu().numpy()
+                # print(prediction.shape, weights.shape)
+                weighted_prediction = (prediction * weights).sum() / weights.sum()
+                decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
+                #policy.decide('BABA', None, price, y_pred, account)
+                if policy.has_position():
+                    zero_balance_timer += 1
+                decisions.append(decision)
+                if decision[0] == 'b':
+                    buy_decisions.append(1)
+                    sell_decisions.append(0)
+                elif decision[0] == 's':
+                    buy_decisions.append(0)
+                    sell_decisions.append(1)
+                else:
+                    buy_decisions.append(0)
+                    sell_decisions.append(0)
+
+                account_value = account.evaluate()
+                
+                account_value_hist.append(account_value)
+                price_hist.append(price)
+
+                timers[3] += time.time() - st # time spent on decision making
+                st = time.time()
+
+                if (decision[0] != 'n' and to_print) or i == (len(data_loader)-1):
+                    long_count, profitable_long_count, \
+                    short_count, profitable_short_count, \
+                    mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
+
+                    prediction_stat_str = \
+                            f'decision: {decision[0]}:{decision[1]:>5}, ' + \
+                            f'price: {price:>6.2f}, ' + \
+                            f'long: {long_count:>4}, ' + \
+                            f'\u2713 long: {profitable_long_count:>4}, ' + \
+                            f'\u2713 long pct: {profitable_long_count/long_count*100:>5.2f}%, ' + \
+                            f'long profit pct: {mean_long_profit_pct:>6.4f}%, ' + \
+                            f'occupancy rate: {zero_balance_timer/(i+1)*100:>5.2f}%, ' # + \
+                            # f'short: {short_count:>3}, ' + \
+                            # f'\u2713 short: {profitable_short_count:>3}, ' + \
+                            # f'\u2713 short pct: {profitable_short_count/short_count*100:>5.2f}%, ' + \
+                            # f'short profit pct: {mean_short_profit_pct:>5.3f}%'  
+
+                    account_growth = account_value/start_balance*100-100
+                    stock_growth = price/start_price*100-100
+                    pct_growth_diff = (account_growth+100)/(stock_growth+100)*100-100
+                    account_n_stock_str = \
+                            f'Account Value: {account_value:>10.2f}, ' + \
+                            f'accont growth: {account_growth:>6.2f}%, ' + \
+                            f'stock growth: {stock_growth:>6.2f}%, ' +  \
+                            f'pct growth diff: {pct_growth_diff:>6.2f}%, ' + \
+                            f'interval per trade: {i/(long_count+short_count):>4.2f}, ' + \
+                            f'i/t since last plot: {(i-prev_interval)/(long_count+short_count-prev_long_count-prev_short_count + 1):>4.2f}, ' #+ \
+                        #   f'past 1000 interval growth: '
+
+                    if to_print == True:
+                        print(prediction_stat_str)
+                        print(account_n_stock_str)
+
+                
+                timers[4] += time.time() - st # time spent on printing
+                st = time.time()
+
+                if (i%draw_interval == 0) and (i != 0) and to_plot == True:
+                    
+                    # start_time_plot = time.time()
+                    plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations)
+
+                    # print(f'plotting completed in {time.time()-start_time_plot:.2f} seconds')
+                    
+                    prev_long_count = long_count
+                    prev_short_count = short_count
+                    prev_interval = i
+                # print(account.evaluate())
+
+                timers[5] += time.time() - st # time spent on plotting
+                st = time.time()
+
+                step_per_sec = step_per_sec * 0.9 + 0.1 * (1/(st-step_start))
+
+        time_analysis(start_time, timers)
+        plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
+        average_loss /= i
+    except KeyboardInterrupt:
+        time_analysis(start_time, timers)
+        print(f'back test completed in {time.time()-start_time:.2f} seconds')
         plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
         average_loss /= i
         
-        # print(f'Time spent on initialization: {timers[0]:.2f} seconds\n' + \
-        #         f'Time spent on data loading: {timers[1]:.2f} seconds\n' + \
-        #         f'Time spent on prediction: {timers[2]:.2f} seconds\n' + \
-        #         f'Time spent on decision making: {timers[3]:.2f} seconds\n' + \
-        #         f'Time spent on printing: {timers[4]:.2f} seconds\n' + \
-        #         f'Time spent on plotting: {timers[5]:.2f} seconds\n'
-        #       )
+        
+
         # print(f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
         #       f'Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ')
         
         
 
 
-    print(f'back test completed in {time.time()-start_time:.2f} seconds')
+    
 
     return  buy_decisions, \
             sell_decisions, \
@@ -309,7 +334,7 @@ if __name__ == "__main__":
     time_str = '20200101_20200630'
     name = 'MSFT'
     data_type = '16feature0'
-    data_pth = f'../data/csv/bar_set_{time_str}_{name}_{data_type}.csv'
+    data_pth = f'data/csv/bar_set_{time_str}_{name}_{data_type}.csv'
     pkl_pth = 'lists_no_multithread_AAPL_noblock.pkl'
 
     test_loader, col_names = \
@@ -321,7 +346,7 @@ if __name__ == "__main__":
                           normalize = True,
                           test = True)
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    model_pth = f'../model/last_model_{config_name}.pt'
+    model_pth = f'model/last_model_{config_name}.pt'
     
     model.load_state_dict(torch.load(model_pth))
 
@@ -336,7 +361,7 @@ if __name__ == "__main__":
             
             account = Account(initial_capital, ['AAPL'])
             # policy = RandomPolicy(account) # back ground has 0.023% of long profit pct... but it is only to do so in a bull market, and can only follow stock price; while the algorithm 
-            policy = SimpleLongShort(account, buy_threshold=0.0025)
+            policy = SimpleLongShort(account, buy_threshold=0.005)
             block_str = f'blocking column {x}:{col_names[x]}'
             print(block_str)
             buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \

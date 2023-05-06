@@ -6,60 +6,11 @@ import warnings
 from torch.utils.data import Dataset, DataLoader # PyTorch data utilities
 
 # if __name__ == '__main__': It seem no longer necessary to use this to import local file; I jsut have to add local path at the highest use case.
-    
+from model_structure_param import *
 from normalization_param import *
 
 def norm_param_2_idx(col_names):
     norm_param_2_idx_dict = {}
-    # BB_mask = col_names.contains("BBL_|BBM_|BBU_").tolist() # bolinger band
-    # MA_mask = col_names.contains("MA_").tolist() # moving average
-    # CDL_mask = col_names.contains("open|high|low|close|vwap").tolist()
-    # close_batch_mean_lst = [a or b or c for a, b, c in zip(BB_mask, MA_mask, CDL_mask)]
-    # close_batch_mean_lst = np.where(close_batch_mean_lst)[0].tolist()
-    # print("close_batch_mean_lst: ", close_batch_mean_lst, type(close_batch_mean_lst))
-    # norm_param_2_idx_dict[NormParam.CloseBatch] = close_batch_mean_lst
-    # print(norm_param_2_idx_dict[NormParam.CloseBatch])
-    
-    # volume_mask = col_names.contains("volume").tolist()
-    # volume_index_lst = np.where(volume_mask)[0]
-    # print("volume_index_lst: ", volume_index_lst, type(volume_index_lst))
-    # norm_param_2_idx_dict[NormParam.Volume] = volume_index_lst
-    # # how to normalize it? With respect to total share count (calculate turnover rate? 
-    # # Or normalize it with respect to the average volume of the stock?
-    # # both techniques result in some level of informaiton loss -- but proabably make the feature actually learnable.
-    # trade_count_mask = col_names.contains("trade_count").tolist()
-    # trade_count_index_lst = np.where(trade_count_mask)[0]
-    # norm_param_2_idx_dict[NormParam.TradeCount] = trade_count_index_lst
-    # # how to normalize it? probably just get share/trade using volume? Or should I drop it?
-    # rsi_mask = col_names.contains("RSI").tolist()
-    # rsi_index_lst = np.where(rsi_mask)[0]
-    # norm_param_2_idx_dict[NormParam.RSI] = rsi_index_lst
-    # cci_mask = col_names.contains("CCI").tolist()
-    # cci_index_lst = np.where(cci_mask)[0]
-    # norm_param_2_idx_dict[NormParam.CCI] = cci_index_lst
-    # adx_mask = col_names.contains("ADX").tolist()
-    # adx_index_lst = np.where(adx_mask)[0]
-    # norm_param_2_idx_dict[NormParam.ADX] = adx_index_lst
-    # dmp_mask = col_names.contains("DMP").tolist()
-    # dmp_index_lst = np.where(dmp_mask)[0]
-    # norm_param_2_idx_dict[NormParam.DMP] = dmp_index_lst
-    # dmn_mask = col_names.contains("DMN").tolist()
-    # dmn_index_lst = np.where(dmn_mask)[0]
-    # norm_param_2_idx_dict[NormParam.DMN] = dmn_index_lst
-    # dayofweek_mask = col_names.contains("dayofweek").tolist()
-    # dayofweek_index_lst = np.where(dayofweek_mask)[0]
-    # norm_param_2_idx_dict[NormParam.DayOfWeek] = dayofweek_index_lst
-    # edt_scaled_mask = col_names.contains("edt_scaled").tolist()
-    # edt_scaled_index_lst = np.where(edt_scaled_mask)[0]
-    # norm_param_2_idx_dict[NormParam.EDT] = edt_scaled_index_lst
-    # is_core_time_mask = col_names.contains("is_core_time").tolist()
-    # is_core_time_index_lst = np.where(is_core_time_mask)[0]
-    # norm_param_2_idx_dict[NormParam.IsCoreTime] = is_core_time_index_lst
-    # cdl_mask = col_names.contains("CDL").tolist()
-    # cdl_lst = np.where(cdl_mask)[0]
-    # norm_param_2_idx_dict[NormParam.CDL] = cdl_lst
-    # # TODO: can automate this part as well
-    # # DONE!
 
     for x in NormParam:
         param = x.value
@@ -75,60 +26,80 @@ def norm_param_2_idx(col_names):
 
     return norm_param_2_idx_dict # np2i_dict for short.
 
+def batch_norm(x_raw, not_close_batch_norm_lst, close_idx):
+    x_mean = np.mean(x_raw[:,:,close_idx:close_idx+1], axis=1)
+    x_mean = np.tile(x_mean, (1, feature_num))
+    x_std = np.copy(x_mean)
+    x_mean[:,not_close_batch_norm_lst] = 0 
+    x_std[:,not_close_batch_norm_lst] = 1
+
+    return (x_raw - x_mean[:,None,:]) / x_std[:,None,:] * 100
+
+
 class StockDataset(Dataset):
-    def __init__(self, data, prediction_window, not_close_batch_norm_lst, close_idx):
+    def __init__(self, data, timestamp, prediction_window, not_close_batch_norm_lst, close_idx): # assumes that first column of data is timestampstr.
+        print('data.shape: ', data.shape)
+        print('timestamp.shape: ', timestamp.shape)
+        assert data.shape[0] == timestamp.shape[0], "data and timestamp must have the same number of rows."
+        # print(data.shape)
+        # print(timestamp.shape)
+        # (N, hist_window+pred_window, feature_num)
+        # (N, hist_window+pred_window, 1)
+        
+        self.timestamp = timestamp[:,-prediction_window-1] # timestamp of close price
+        # (n) 1-d array
         # print("not_close_batch_norm_lst: ", not_close_batch_norm_lst)
 
         self.close_idx = close_idx
         feature_num = data.shape[2]
-        self.x_raw = data[:,:-prediction_window,:] # slicing off the last entry of input
+        x_raw = data[:,:-prediction_window,:] # slicing off the last entry of input
         # print("x.shape: ",self.x.shape)
         # x.shape: (data_num, window_size, feature_num)
         y_raw = data[:,-prediction_window:,close_idx] 
-        tmp = self.x_raw[:,-1,close_idx:close_idx+1]
+        tmp = x_raw[:,-1,close_idx:close_idx+1]
         self.y = (y_raw - tmp)/tmp * 100 # don't need to normalize y; this is the best way; present target as the percentage growth with repsect to last close price.
         # print("y.shape: ",self.y.shape)
         # print("y:" , self.y)
         # y.shape: (data_num, output_size)
-        self.x_mean = np.mean(self.x_raw[:,:,close_idx:close_idx+1], axis=1)
-        self.x_mean = np.tile(self.x_mean, (1, feature_num))
-        # self.x_std = np.std(self.x_raw[:,:,close_idx:close_idx+1], axis=1)
-        # self.x_std = np.tile(self.x_std, (1, feature_num))
-        self.x_std = np.copy(self.x_mean)/1000 # actually not std here; it is just dividing close related features by mean close price.
+        # self.x_mean = np.mean(x_raw[:,:,close_idx:close_idx+1], axis=1)
+        # self.x_mean = np.tile(self.x_mean, (1, feature_num))
+        # # self.x_std = np.std(x_raw[:,:,close_idx:close_idx+1], axis=1)
+        # # self.x_std = np.tile(self.x_std, (1, feature_num))
+        # self.x_std = np.copy(self.x_mean)/1000 # actually not std here; it is just dividing close related features by mean close price.
 
-        print("x_mean.shape: ", self.x_mean.shape)
-        self.x_mean[:,not_close_batch_norm_lst] = 0 
-        # NEED TO USE SIMILAR METHOD AS USED IN NORMALIZATION TO DETERMINE THE MEAN AND STD OF EACH FEATURE.
+        # self.x_mean[:,not_close_batch_norm_lst] = 0 
+        # # NEED TO USE SIMILAR METHOD AS USED IN NORMALIZATION TO DETERMINE THE MEAN AND STD OF EACH FEATURE.
 
 
-        self.x_std[:,not_close_batch_norm_lst] = 1
-        # self.x_std[:,4:6] = 1
-        # self.x_std[:,13:] = 1
-        # print("x_mean.shape: ", self.x_mean.shape)
-        # print("x.shape: ", self.x_raw.shape)
-        # mean/std.shape: (data_num, feature_num)
-        print("x_mean: ", np.mean(self.x_mean, axis=0))
-        print("x_std: ", np.mean(self.x_std, axis=0))
-        print("x_raw[0]: ", self.x_raw[0][0])
-        self.x = (self.x_raw - self.x_mean[:,None,:])# / self.x_std[:,None,:]
+        # self.x_std[:,not_close_batch_norm_lst] = 1
+        # # print("x_mean: ", np.mean(self.x_mean, axis=0))
+        # # print("x_std: ", np.mean(self.x_std, axis=0))
+        self.x = batch_norm(x_raw, not_close_batch_norm_lst, close_idx)
+
         print("x[0]: ", self.x[0][0])
+        
+        print('timestamp: ', self.timestamp[0])
         # self.y = self.y - self.x_mean[:,0:1] # using this instead of self.y = self.y - self.x[:,-1,close_idx:close_idx+1]
         # doesn't make much sense. The target is to predict the the potential difference in value after last observed point.
+        self.price = x_raw[:,-1,close_idx] # close price
 
     def __len__(self):
         return self.y.shape[0]
 
     def __getitem__(self, idx):
-        return self.x[idx,:,:], self.y[idx,:], self.x_raw[idx,-1,self.close_idx: self.close_idx+1] #self.x_mean[idx,:], self.x_std[idx,:]
 
+        return self.x[idx,:,:], self.y[idx,:], self.price[idx], self.timestamp[idx,0]  #self.x_mean[idx,:], self.x_std[idx,:]
+        # (hist_window, feature_num), (prediction_window), (1), (1)
     def get_item(self, idx):
         return self.__getitem__(idx)
 
 class MultiStockDataset(Dataset):
     def __init__(self, data_lst, prediction_window, not_close_batch_norm_lst, close_idx):
         self.dataset_lst = []
-        for data in data_lst:
-            self.dataset_lst.append(StockDataset(data, prediction_window, not_close_batch_norm_lst, close_idx))
+        for data, timestamp in data_lst:
+            print("data.shape: ", data.shape)
+            print("timestamp.shape: ", timestamp.shape)
+            self.dataset_lst.append(StockDataset(data, timestamp, prediction_window, not_close_batch_norm_lst, close_idx))
         pass
 
     def __len__(self):
@@ -146,12 +117,20 @@ class MultiStockDataset(Dataset):
 
         return x_lst, y_lst, x_raw_lst
 
-def sample_z_continuous(arr, z):
-    n = arr.shape[0] - z + 1
-    result = np.zeros((n, z, arr.shape[1]))
+def sample_z_continuous(data, timestamp, z):
+    n = data.shape[0] - z + 1
+    feature_num = data.shape[1]
+    result = np.zeros((n, z, feature_num))
+    timestamp_lst = []
+
     for i in range(n):
-        result[i] = arr[i:i+z]
-    return result
+        result[i] = data[i:i+z]
+        timestamp_lst.append(timestamp[i:i+z])
+    print("memory_usage: ", result.nbytes/(1024**2))
+    # result = np.concatenate((result, time_stamp_result), axis=2)
+    timestamp_result = np.array(timestamp_lst)
+    print('timestamp_result.shape: ',timestamp_result.shape)
+    return timestamp_result, result
 
 # all things that need special normalization treatment are listed in np2i_dict & NormParam.py; 
 # Default is direct standardization within scope of given input dataframe.
@@ -159,6 +138,10 @@ def sample_z_continuous(arr, z):
 def normalize_data(df, np2i_dict): # takes df, return np.
     num_cols = df.shape[1] 
     data = df.values
+
+    # timestamp_data = np.array(data[:,0:1], dtype='datetime64')
+    timestamp_data = df.index.get_level_values('timestamp').to_numpy()
+    print('timestamp type: ', type(timestamp_data[0]))
 
     data_mean = np.mean(data, axis = 0)
     data_std = np.std(data, axis = 0)
@@ -177,15 +160,11 @@ def normalize_data(df, np2i_dict): # takes df, return np.
                       they are: {set(range(num_cols)) - set(idx_lst)}")
     # print('global mean: ', data_mean)
     # print('global std: ', data_std)
-    
-
-    # TODO: As feature num increase, it is becoming tedious to maintain mean&variance for special feature. Will need new structure for updating this in future.
-    # DONE!
 
     data_norm = (data - data_mean) / data_std
     # print("data_norm.shape: ", data_norm.shape)
     # print("normalized data: ", data_norm)
-    return data_norm
+    return timestamp_data.reshape(-1,1), data_norm
 
 def load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio, normalize = True, test = False):
     
@@ -200,28 +179,30 @@ def load_n_split_data(data_path, hist_window, prediction_window, batch_size, tra
     col_num = df.shape[1]
     np2i_dict = norm_param_2_idx(col_names)
 
-    if (normalize):
-        data_norm = normalize_data(df, np2i_dict)
-        data_norm = sample_z_continuous(data_norm, data_prep_window)
+    # if (normalize):
+    timestamp, data_norm = normalize_data(df, np2i_dict)
+    timestamp, data_norm = sample_z_continuous(data_norm, timestamp, data_prep_window)
 
     train_size = int(train_ratio * len(df))
     val_size = len(df) - train_size
     train_data = data_norm[val_size:,:,:]
+    train_timestamp = timestamp[val_size:,:,:]
     val_data = data_norm[:val_size,:,:]
+    val_timestamp = timestamp[:val_size,:,:]
 
     col_idx_set = set(range(col_num))
     not_close_batch_norm_lst = list(col_idx_set - set(np2i_dict[NormParam.CloseBatch]))
     close_idx = df.columns.get_loc('close')
     if not test:
-        train_dataset = StockDataset(train_data, prediction_window, not_close_batch_norm_lst, close_idx)
-        val_dataset = StockDataset(val_data, prediction_window, not_close_batch_norm_lst, close_idx)
+        train_dataset = StockDataset(train_data, train_timestamp, prediction_window, not_close_batch_norm_lst, close_idx)
+        val_dataset = StockDataset(val_data, val_timestamp, prediction_window, not_close_batch_norm_lst, close_idx)
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=False) 
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=False)
         # testing have shown that my gtx1080ti doesn't benefit from changing num_worker; but future hardware might need them.
         print(f'data loading completed in {time.time()-start_time:.2f} seconds')
         return train_loader, val_loader
     else:
-        test_dataset = StockDataset(data_norm, prediction_window, not_close_batch_norm_lst, close_idx)
+        test_dataset = StockDataset(data_norm, timestamp, prediction_window, not_close_batch_norm_lst, close_idx)
         test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=False)
         print(f'data loading completed in {time.time()-start_time:.2f} seconds')
         return test_loader, df.columns
@@ -243,11 +224,11 @@ def load_multi_symbol_data(data_path_lst, hist_window, prediction_window, batch_
     if (normalize):
         data_norm = normalize_data(df)
         data_norm = sample_z_continuous(data_norm, data_prep_window)
-    else:
-        data_norm = df.values
-        test_dataset = TwoDStockDataset(data_norm, prediction_window, close_idx)
-        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=False)
-        return test_loader, df.columns
+    # else:
+    #     data_norm = df.values
+    #     test_dataset = TwoDStockDataset(data_norm, prediction_window, close_idx)
+    #     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=False)
+    #     return test_loader, df.columns
 
     train_size = int(train_ratio * len(df))
     val_size = len(df) - train_size
@@ -274,7 +255,7 @@ def prepare_data_alpaca(df, type = "bar"):
 
 
 def main():
-    pass
+    tmp, tmp2 = load_n_split_data(training_data_path, hist_window, prediction_window, batch_size, train_ratio = 0.1, normalize = True, test = False)
     # data_path = "data/baba_test.csv"
     # df = pd.read_csv(data_path, index_col = ['symbol', 'timestamp'])
     # # open high low close volume trade_count vwap

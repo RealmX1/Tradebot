@@ -5,6 +5,7 @@ import scipy as sp
 import pickle
 import time
 import copy
+import threading
 
 
 from datetime import datetime, timedelta
@@ -35,10 +36,23 @@ data_source = DataFeed.SIP
 
 stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
 
-pre = 'bar_set'
+# pre = 'bar_set'
 post = 'raw'
 data_path = '../data/'
     
+
+def get_bars(symbol_or_symbols, timeframe, start, end, limit):
+    # Test single symbol request
+    
+    request = StockBarsRequest(
+        symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit, adjustment='all', feed = data_source
+    )
+
+    print('Start request')
+    bar_set = stock_client.get_stock_bars(request_params=request)
+    print('End request')
+
+    return bar_set
 
 def get_trades(symbol_or_symbols, timeframe, start, end, limit):
     # Test single symbol request
@@ -114,35 +128,43 @@ def concat_symbols(df):
     return df_concat
 
 # saves pkl to 
-def get_and_process_trades(symbols, timeframe, start, end, limit = None, download=False, pre = pre, post = post, dp = data_path):
-    symbol_num = len(symbols)
-    start_time = time.time()
+def get_and_process_data(symbols, timeframe, start, end, limit = None, download=False, pre = '', post = post, dp = data_path, type = 'bars'):
+    if type == 'bars':
+        get_data = get_bars
+        pre = pre + 'bar_set'
+    elif type == 'trades':
+        get_data = get_trades
+        pre = pre + 'trade_set'
+
     start_str = start.strftime('%Y%m%d')
     end_str = end.strftime('%Y%m%d')
     time_str = f'{start_str}_{end_str}'
     pkl_path = f'{dp}pkl/{pre}_{time_str}_{post}.pkl'
     csv_path = f'{dp}csv/{pre}_{time_str}_{post}.csv'
 
+    
+    start_time = time.time()
     if download:
-        print('Start getting bars')
-        bar_set = get_trades(symbols, timeframe, start, end, limit)
-
+        print(f'Start getting {type}:')
+        dataset = get_data(symbols, timeframe, start, end, limit)
         with open(pkl_path, 'wb') as f:
-            pickle.dump(bar_set, f)
+            pickle.dump(dataset, f)
         print(f'pkl download completed in {time.time()-start_time:.2f} seconds')
 
-        df = bar_set.df
-    
-        print('raw data shape: ', df.shape)
+        df = dataset.df
+        if type == 'trades':
+            print(df.columns.tolist())
+            df.drop(['exchange', 'id', 'conditions', 'tape'], axis = 1, inplace=True)
+            print(df.columns.tolist())
 
         start_time = time.time()
-        print('start saving to csv...')
+        print(f'start saving to csv at: {csv_path}')
         df.to_csv(csv_path, index=True, index_label=['symbol', 'timestamp']) 
         # note that the index_label is necessary; if not specified, the index name will not be saved
         print(f'csv saving completed in {time.time()-start_time:.2f} seconds')
     else:
         start_time = time.time()
-        print('reading from csv...')
+        print(f'reading from csv at: {csv_path}')
         df = pd.read_csv(csv_path, index_col = ['symbol', 'timestamp'])
         # note that the index_label is necessary; if not specified, the index name will not be saved
         print(f'csv reading completed in {time.time()-start_time:.2f} seconds')
@@ -173,7 +195,11 @@ def get_and_process_trades(symbols, timeframe, start, end, limit = None, downloa
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXassumes that df_bars is in the order of timestamp, symbol
 # UNTESTED
-def read_raw_bars(time_strs, pre, post):
+def read_multiple_raw_data(time_strs, pre = '', post = post, type = 'bars'):
+    if type == 'bars':
+        pre = pre + 'bar_set'
+    elif type == 'trades':
+        pre = pre + 'trade_set'
     start_time = time.time()
     print('Reading multiple processed csv...')
     dfs = []
@@ -227,12 +253,17 @@ def last_week_bars(symbols, timeframe = TimeFrame.Minute, dp = data_path, downlo
     end = datetime.now()
     start = (end - timedelta(days=end.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
     
-    df = get_and_process_trades(symbols, timeframe, start, end, download = download, pre = 'last_week_' + pre, dp = dp)
+    df = get_and_process_data(symbols, timeframe, start, end, download = download, pre = 'last_week_' + 'barset', dp = dp)
     return df
-    # return get_and_process_trades(symbols, timeframe, start, end, None)
+    # return get_and_process_data(symbols, timeframe, start, end, None)
 
 # UNTESTED
-def get_load_of_trades(symbols, timeframe, start, end, limit = None, download = False):
+def get_load_of_data(symbols, timeframe, start, end, limit = None, download = False, type = 'bars'):
+    if type == 'bars':
+        pre = 'bar_set'
+    elif type == 'trades':
+        pre = 'trade_set'
+    
     raw_start = start
     raw_end = end
     
@@ -257,13 +288,13 @@ def get_load_of_trades(symbols, timeframe, start, end, limit = None, download = 
         time_str = f'{start_str}_{end_str}'
         print('getting data with time_str: ', time_str)
         time_strs.append(time_str)
-        get_and_process_trades(symbols, timeframe, start, end, limit, download=download)
+        get_and_process_data(symbols, timeframe, start, end, limit, download=download)
     print(f'All files downloaded and processed in {time.time()-start_time:.2f} seconds')
 
     print('time_strs: ', time_strs)
 
     # combine multiple csv files into one
-    dfs = read_raw_bars(time_strs)
+    dfs = read_multiple_raw_data(time_strs)
 
     df = combine_bars(dfs, len(symbols))
 
@@ -274,6 +305,10 @@ def get_load_of_trades(symbols, timeframe, start, end, limit = None, download = 
     df.to_csv(f'{data_path}csv/{pre}_{start_str}_{end_str}_{post}.csv', index=True, index_label=['symbol', 'timestamp'])
     print(f'completed in {time.time()-start_time:.2f} seconds')
 
+def thread_function(start_time):
+    while True:
+        print(f"Thread Waiting...{time.time() - start_time:6.2f}", end = '\r')
+        time.sleep(1)
 
 def main():
     # barset = get_latest_bars('BABA')
@@ -283,23 +318,26 @@ def main():
     # start = datetime(2020,1,1)
     # end = datetime.now() 
 
-    # get_load_of_trades(symbols, timeframe, start, end, limit = None, download=False)
+    # get_load_of_bars(symbols, timeframe, start, end, limit = None, download=False)
 
 
 
-    # symbols = ['AAPL','MSFT','TSLA','GOOG','SPY']
-    symbols = ['MSFT']
+    symbols = ['MSFT'] #['AAPL','MSFT','TSLA','GOOG','SPY']
     timeframe = TimeFrame.Minute
-    start = datetime(2023,4,1)
-    end = datetime.now() 
-    # get_load_of_trades(symbols, timeframe, start, end, limit = None, download=True)
-    get_and_process_trades(symbols, timeframe, start, end, limit = None, download=True, pre = pre, post = post)
+    start = datetime(2020,2,1) # 2020-01-01 is wednesday
+    end = datetime(2020,4,1) 
+    # end = datetime.now() 
+    # get_load_of_data(symbols, timeframe, start, end, limit = None, download=True, type = 'bars')
+    # thread = threading.Thread(target=thread_function(time.time()))
+    # thread.start()
+    print('start getting data\n')
+    get_and_process_data(symbols, timeframe, start, end, limit = None, download=True, pre = '', post = post, type = 'trades')
 
 
-
+    # thread.join()
     # last_week_bars(symbols, timeframe = TimeFrame.Minute)
 
-    # df = get_trades(symbols, timeframe, start, end, limit = None).df
+    # df = get_bars(symbols, timeframe, start, end, limit = None).df
     # print(df)
     
     

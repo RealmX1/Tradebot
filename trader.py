@@ -10,20 +10,23 @@ from alpaca.data.timeframe import TimeFrame
 import datetime
 import msgpack
 import time
-
+import pytz
+est_tz = pytz.timezone('US/Eastern')
 
 import sys
 sys.path.append('AI')  # add the path to my_project
 sys.path.append('alpaca_api') 
+sys.path.append('sim')
 
 from S2S import *
-from sim import *
 from data_utils import *
 from model_structure_param import *
 from indicators import append_indicators
-from alpaca_history_bars import last_week_bars
-from alpaca_trading import *
+from alpaca_history import last_week_bars
+from alpaca_trade import *
 from alpaca_api_param import * # API_KEY, SECRET_KEY
+from policy import *
+from account import *
 
 
 
@@ -63,6 +66,14 @@ teacher_forcing_ratio = 0.0
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+
+# my_func parameters
+decision_making_flag = False
+weights = np.ones((prediction_window,1))
+for i in range(1, prediction_window):
+    weights[i][0] = weights[i-1][0] * 1.5
+policy = AlpacaSimpleLong(trading_client)
+
 async def on_receive_bar(bar): # even with multiple subscritions, bars come in one by one.
     # how to handle aftermarket, when not all symbol bars are received?
     # maybe not doing data processing in this handler
@@ -78,6 +89,7 @@ async def on_receive_bar(bar): # even with multiple subscritions, bars come in o
     }
     # print(mapped_bar)
     dt = mapped_bar['timestamp'].to_datetime()
+    print(dt)
     formatted = dt.strftime('%Y-%m-%d %H:%M:%S+00:00')
     del mapped_bar['timestamp']
 
@@ -97,7 +109,7 @@ async def on_receive_bar(bar): # even with multiple subscritions, bars come in o
 
     
 
-    print(f'Data processing completed {time.time() - handler_start_time} seconds after receiving bar.')
+    print(f'Data processing completed {time.time() - handler_start_time:5.2f} seconds after receiving bar.')
     print('')
 
         # stream_df_indicated  = append_indicators(stream_df)
@@ -108,7 +120,15 @@ async def on_receive_bar(bar): # even with multiple subscritions, bars come in o
 
 
     # stream_df.to_csv(stream_csv_path)
+def account_update(): 
+    
+    pass
+    # update status to policy when account status changes.
+
 def my_function():
+    global decision_making_flag
+    if decision_making_flag:
+        return
     
     global last_data_update_time, rows_buffer, symbols, wait_time
     # print('')
@@ -120,6 +140,7 @@ def my_function():
     collection_complete = len(rows_buffer) == len(symbols)
 
     if no_more_data or collection_complete:
+        decision_making_flag = True
         if no_more_data:
             print("no more data, start processing.")
         else:
@@ -129,48 +150,73 @@ def my_function():
         if stream_df is None:
             global df
             stream_df = df.tail(200)
+            
         stream_df = pd.concat([stream_df] + rows_buffer)
+        print(stream_df.shape)
         rows_buffer = []
 
-        col_lst = append_indicators(stream_df)
+        symbol_num = len(symbols)
+        
+        df = stream_df.tail(3*symbol_num*hist_window).copy()
+        col_lst = append_indicators(df)
         col_num = len(col_lst)
-        close_idx = columns.index('close')
+        close_idx = col_lst.index('close')
+        print('close_idx: ', close_idx)
 
         # start making prediction
+        
         global model
         with torch.no_grad():
             np2i_dict = {}
             
-            normalized_buffer = []
-            groups = stream_df.groupby('symbol')
-            for name, df_single_symbol in groups:
-                col_names = stream_df.columns.str
+            x_batch_buffer = []
+            col_names = df.columns.str
+            groups = df.groupby('symbol')
+            for symbol, df_single_symbol in groups:
                 np2i_dict = norm_param_2_idx(col_names).copy()
-                x_df = df_single_symbol.tail(hist_window).copy()
-                x_normalized_np = normalize_data(x_df, np2i_dict)
-                # print('x_np shape: ', x_np.shape)
-                x_batch = x_normalized_np.view((1, hist_window, input_size)).float()
-
-                normalized_buffer.append(x_batch)
                 
-                # print(df_single_symbol.tail(3))
+                # print('dict: ',np2i_dict)
+                x_df = df_single_symbol.tail(hist_window).copy()
+                timestamp, x_normalized_np = normalize_data(x_df, np2i_dict)
+                timestamp.reshape(1,-1,1) # z_continuous makes it
+                # print(timestamp)
+                x_batch = x_normalized_np.reshape(1, hist_window, input_size)
 
-                # print("x_batch.shape: ", x_batch.shape)
-            
+
+                col_idx_set = set(range(col_num))
+                not_close_batch_norm_lst = list(col_idx_set - set(np2i_dict[NormParam.CloseBatch]))
+
+                x_batch = batch_norm(x_batch, not_close_batch_norm_lst, close_idx)
+                
+                # print('x_batch shape: ', x_batch.shape)
+                # (1, hist_window, feature_num)
+
+                x_batch_buffer.append((symbol, timestamp, x_batch))
+                
             # should I have policy make one decision for every symbol, or one decision for all symbols?
             # all symbols.
             # then I should put prediction of all symbols together and feed to policy
+            
             col_idx_set = set(range(col_num))
             not_close_batch_norm_lst = list(col_idx_set - set(np2i_dict[NormParam.CloseBatch]))
-            dataset = MultiStockDataset(normalized_buffer, prediction_window, not_close_batch_norm_lst, close_idx)
-            data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0, pin_memory=False) 
-            for x_batch_lst, y_batch_lst, x_raw_lst in data_loader:
-                print("x_batch_lst.shape: ", x_batch_lst.shape)
-                print("y_batch_lst.shape: ", y_batch_lst.shape)
-                print("x_raw_lst.shape: ", x_raw_lst.shape)
+            for symbol, timestamp, hist in x_batch_buffer:
+                x_batch = torch.tensor(hist, dtype = torch.float32).to(device)
             
-            y_pred = model(x_batch, None, teacher_forcing_ratio)
-        wait_time = time.time()
+                y_pred = model(x_batch, None, teacher_forcing_ratio = 0.0)
+                predictions = y_pred.clone().detach().cpu().numpy()
+                global weights
+                weighted_prediction = np.matmul(predictions, weights)/np.sum(weights) # prediction 1,5; weights 5,1
+                weighted_prediction = weighted_prediction[0,0]
+                policy.process(symbol, hist, weighted_prediction, col_lst)
+
+                price = hist[0,-1,close_idx]
+                print('price: ', price)
+                alpaca_account = trading_client.get_account()
+                decision = policy.decide()
+
+                print('decision: ', decision)
+
+        
 
 
             
@@ -178,7 +224,7 @@ def my_function():
 
 
         
-        alpaca_account = trading_client.get_account()
+        
 
 
         if alpaca_account.trading_blocked:
@@ -187,14 +233,19 @@ def my_function():
 
         # Check how much money we can use to open new positions.
         print(f'${alpaca_account.buying_power} is available as buying power.')
+
+        decision_making_flag = False
+        wait_time = time.time()
     # Add your desired function code here
 
 
 def thread_function():
+    global policy
     while True:
         t = threading.Thread(target=my_function)
         t.start()
-        time.sleep(1)
+        time.sleep(.5)
+        policy.update_account_status()
 
 
 def main():

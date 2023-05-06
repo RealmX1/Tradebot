@@ -20,8 +20,8 @@ from AI.sim import *
 from AI.data_utils import *
 from AI.model_structure_param import *
 from alpaca_api.indicators import append_indicators
-from alpaca_api.alpaca_history_bars import last_week_bars
-from alpaca_api.alpaca_trading import * # trading client created.
+from alpaca_api.alpaca_history import last_week_bars
+from alpaca_api.alpaca_trade import * # trading client created.
 
 # df = last_week_bars(symbols, dp = 'data/')
 df = pd.read_csv('data/csv/last_week_bar_set_20230424_20230503_raw.csv', index_col = ['symbol', 'timestamp'])
