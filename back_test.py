@@ -1,6 +1,7 @@
 import random
 import json
 import pandas as pd
+import psutil
 import torch
 import torch.nn as nn 
 
@@ -122,7 +123,7 @@ def time_analysis(start_time, timers):
     print(f'back test completed in {time.time()-start_time:.2f} seconds')    
         
 
-def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, to_plot = True, to_print = True):
+def back_test(model, data_loader, col_names, weights, trade_df, num_epochs = 1, block_col = None, to_plot = True, to_print = True):
     timers = [0.0] * 10
 
     st = time.time()
@@ -132,10 +133,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
 
     average_loss = 0
 
-    arr = np.ones(prediction_window)
-    for i in range(1, prediction_window):
-        arr[i] = arr[i-1] * 1.5
-    weights = arr.reshape(1, prediction_window)
+    
 
     decisions = []
     buy_decisions = []
@@ -159,7 +157,7 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
 
     step_per_sec = 10
     
-    draw_interval = 5000  
+    draw_interval = 2000  
     try:
         for epoch in range(num_epochs):
             i=0
@@ -204,15 +202,44 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
                 prediction = y_pred.clone().detach().cpu().numpy()
                 # print(prediction.shape, weights.shape)
                 weighted_prediction = (prediction * weights).sum() / weights.sum()
-                decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
+                decision = policy.decide('MSFT', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
+                    
+
                 #policy.decide('BABA', None, price, y_pred, account)
                 if policy.has_position():
                     zero_balance_timer += 1
                 decisions.append(decision)
                 if decision[0] == 'b':
+                    
+                    trade_rows = trade_df[trade_df.index == timestamp[0]]
+                    completed = False
+                    for index, row in trade_rows.iterrows():
+                        # print(row['price'], price)
+                        if row['price'] <= price:
+                            print('buy order filled')
+                            policy.complete_buy_order('MSFT', row['price'])
+                            completed = True
+                            break
+                    
+                    if not completed:
+                        print('buy order not filled; cancelling order...')
+                        policy.cancel_buy_order('MSFT', unfilled=True)
+                    
                     buy_decisions.append(1)
                     sell_decisions.append(0)
                 elif decision[0] == 's':
+                    trade_rows = trade_df[trade_df.index == timestamp[0]]
+                    completed = False
+                    for index, row in trade_rows.iterrows():
+                        if row['price'] >= price:
+                            print('sell order filled')
+                            policy.complete_sell_order('MSFT', row['price'])
+                            completed = True
+                            break
+                    
+                    if not completed:
+                        print('sell order not filled; cancelling order...')
+                        policy.cancel_sell_order('MSFT', unfilled=True)
                     buy_decisions.append(0)
                     sell_decisions.append(1)
                 else:
@@ -228,8 +255,8 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
                 st = time.time()
 
                 if (decision[0] != 'n' and to_print) or i == (len(data_loader)-1):
-                    long_count, profitable_long_count, \
-                    short_count, profitable_short_count, \
+                    long_count, profitable_long_count, unfilled_buy,\
+                    short_count, profitable_short_count, unfilled_sell,\
                     mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
 
                     prediction_stat_str = \
@@ -260,6 +287,8 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
                     if to_print == True:
                         print(prediction_stat_str)
                         print(account_n_stock_str)
+                        
+                        # print(f'ram: {psutil.virtual_memory().percent:.2f}%, vram: {torch.cuda.memory_allocated()/1024**3:.2f}GB')
 
                 
                 timers[4] += time.time() - st # time spent on printing
@@ -281,14 +310,15 @@ def back_test(model, data_loader, col_names, num_epochs = 1, block_col = None, t
                 st = time.time()
 
                 step_per_sec = step_per_sec * 0.9 + 0.1 * (1/(st-step_start))
+                # print(st-step_start)
+
 
         time_analysis(start_time, timers)
         plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
         average_loss /= i
     except KeyboardInterrupt:
         time_analysis(start_time, timers)
-        print(f'back test completed in {time.time()-start_time:.2f} seconds')
-        plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
+        # plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
         average_loss /= i
         
         
@@ -331,11 +361,22 @@ if __name__ == "__main__":
     # data_pth = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
     # data_pth = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
     # data_pth = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
-    time_str = '20200101_20200630'
+    time_str = '20200101_20200201'
     name = 'MSFT'
     data_type = '16feature0'
-    data_pth = f'data/csv/bar_set_{time_str}_{name}_{data_type}.csv'
-    pkl_pth = 'lists_no_multithread_AAPL_noblock.pkl'
+    data_name = f'bar_set_{time_str}_{name}_{data_type}_RAW'
+    data_pth = f'data/csv/{data_name}.csv'
+    pkl_pth = 'lists_no_multithread_MSFT_noblock.pkl'
+
+    trade_data_pth = f'data/csv/trade_set_{time_str}_raw.csv'
+    trade_df = pd.read_csv(trade_data_pth, index_col = ['symbol'])
+    # print(trade_df.head(3))
+
+    trade_df['timestamp'] = pd.to_datetime(trade_df['timestamp'])
+    trade_df['rounded_timestamp'] = trade_df['timestamp'].dt.round('1min')
+    trade_df.set_index('rounded_timestamp', inplace=True)
+
+    # print(trade_df.head(3))
 
     test_loader, col_names = \
         load_n_split_data(data_pth, 
@@ -346,7 +387,22 @@ if __name__ == "__main__":
                           normalize = True,
                           test = True)
     model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    model_pth = f'model/last_model_{config_name}.pt'
+    model_name = f'last_model_{config_name}'
+    model_pth = f'model/{model_name}.pt'
+
+    weight_decay = 9.31
+    arr = np.ones(prediction_window)
+    for i in range(1, prediction_window):
+        arr[i] = arr[i-1] * weight_decay
+    weights = arr.reshape(1, prediction_window)
+    
+    i = 0
+    pic_pth = f'../TradebotGraph/{data_name}_{model_name}_{i}.png'
+    while os.path.exists(pic_pth):
+        i += 1
+        pic_pth = f'../TradebotGraph/{data_name}_{model_name}_{weight_decay}decay_{i}th_test.png'
+    print(i)
+
     
     model.load_state_dict(torch.load(model_pth))
 
@@ -359,13 +415,20 @@ if __name__ == "__main__":
             # for x in range(feature_num):
             x = []
             
-            account = Account(initial_capital, ['AAPL'])
+            account = Account(initial_capital, ['MSFT'])
             # policy = RandomPolicy(account) # back ground has 0.023% of long profit pct... but it is only to do so in a bull market, and can only follow stock price; while the algorithm 
-            policy = SimpleLongShort(account, buy_threshold=0.005)
+            policy = SimpleLongShort(account, buy_threshold=0.002 * pct_pred_multiplier, trade_data = True)
             block_str = f'blocking column {x}:{col_names[x]}'
             print(block_str)
-            buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
-                back_test(model, test_loader, col_names, num_epochs = 1, block_col = x, to_plot = True, to_print = True)
+            try:
+                buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
+                    back_test(model, test_loader, col_names, weights, trade_df, num_epochs = 1, block_col = x, to_plot = True, to_print = True)
+                
+                plt.savefig(pic_pth)
+                print(f'saving figure to {pic_pth}')
+            except KeyboardInterrupt:
+                plt.savefig(pic_pth)
+                print(f'saving figure to {pic_pth}')
             
             block_str_lst.append(block_str)
             end_strs_lst.append(end_strs)

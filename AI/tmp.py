@@ -260,3 +260,12 @@ import pandas as pd
 data_path = '../data/csv/last_week_bar_set_20230410_20230417_raw.csv'
 df = pd.read_csv(data_path, index_col = ['symbol', 'timestamp'])    
 print(df.head(5))
+
+
+
+# testing capbility of github-copiolet
+# this is a piece of code that calculates the number of miss match between two lists
+a = np.array([1,2,3,4,5,6,7,8,9,10])
+b = np.array([1,2,3,4,5,6,7,8,9,10])
+
+c = a == b

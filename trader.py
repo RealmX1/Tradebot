@@ -132,7 +132,7 @@ def my_function():
     
     global last_data_update_time, rows_buffer, symbols, wait_time
     # print('')
-    print(f"Thread Waiting...{time.time() - wait_time:4.2f}", end = '\r')
+    # print(f"Thread Waiting...{time.time() - wait_time:4.2f}", end = '\r')
 
     no_more_data = time.time() - last_data_update_time > 3 and len(rows_buffer) != 0
     # note that when not all symbols are refreshed, it doesn't quite matter, 
@@ -236,7 +236,6 @@ def my_function():
 
         decision_making_flag = False
         wait_time = time.time()
-    # Add your desired function code here
 
 
 def thread_function():
@@ -245,12 +244,13 @@ def thread_function():
         t = threading.Thread(target=my_function)
         t.start()
         time.sleep(.5)
+        if ()
         policy.update_account_status()
 
 
 def main():
     global df
-    df = last_week_bars(symbols, dp = data_path, download = False)
+    df = last_week_bars(symbols, dp = data_path, download = True)
     df.sort_index(level=1, inplace=True)
 
     stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data, feed=DataFeed.SIP)

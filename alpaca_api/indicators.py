@@ -94,7 +94,7 @@ def main():
     
     # time_str = '20200101_20230417'
     # input_path = f'../data/csv/bar_set_huge_{time_str}_raw.csv'
-    time_str = '20200101_20230504'
+    time_str = '20200101_20200701'
     input_path = f'../data/csv/{pre}_{time_str}_{post}.csv'
     
     df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])

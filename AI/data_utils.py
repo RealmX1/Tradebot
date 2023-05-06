@@ -29,11 +29,11 @@ def norm_param_2_idx(col_names):
 def batch_norm(x_raw, not_close_batch_norm_lst, close_idx):
     x_mean = np.mean(x_raw[:,:,close_idx:close_idx+1], axis=1)
     x_mean = np.tile(x_mean, (1, feature_num))
-    x_std = np.copy(x_mean)
+    x_std = np.copy(x_mean) / 100
     x_mean[:,not_close_batch_norm_lst] = 0 
     x_std[:,not_close_batch_norm_lst] = 1
 
-    return (x_raw - x_mean[:,None,:]) / x_std[:,None,:] * 100
+    return (x_raw - x_mean[:,None,:]) / x_std[:,None,:] # not a good idea to move the "/100" here... it should only apply to the close-related bathc
 
 
 class StockDataset(Dataset):
@@ -57,7 +57,7 @@ class StockDataset(Dataset):
         # x.shape: (data_num, window_size, feature_num)
         y_raw = data[:,-prediction_window:,close_idx] 
         tmp = x_raw[:,-1,close_idx:close_idx+1]
-        self.y = (y_raw - tmp)/tmp * 100 # don't need to normalize y; this is the best way; present target as the percentage growth with repsect to last close price.
+        self.y = (y_raw - tmp)/tmp * 100 * pct_pred_multiplier # don't need to normalize y; this is the best way; present target as the percentage growth with repsect to last close price.
         # print("y.shape: ",self.y.shape)
         # print("y:" , self.y)
         # y.shape: (data_num, output_size)
@@ -77,6 +77,7 @@ class StockDataset(Dataset):
         self.x = batch_norm(x_raw, not_close_batch_norm_lst, close_idx)
 
         print("x[0]: ", self.x[0][0])
+        print('y[0]: ', self.y[0])
         
         print('timestamp: ', self.timestamp[0])
         # self.y = self.y - self.x_mean[:,0:1] # using this instead of self.y = self.y - self.x[:,-1,close_idx:close_idx+1]
@@ -88,7 +89,7 @@ class StockDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        return self.x[idx,:,:], self.y[idx,:], self.price[idx], self.timestamp[idx,0]  #self.x_mean[idx,:], self.x_std[idx,:]
+        return self.x[idx,:,:], self.y[idx,:], self.price[idx], self.timestamp[idx]  #self.x_mean[idx,:], self.x_std[idx,:]
         # (hist_window, feature_num), (prediction_window), (1), (1)
     def get_item(self, idx):
         return self.__getitem__(idx)
@@ -164,7 +165,7 @@ def normalize_data(df, np2i_dict): # takes df, return np.
     data_norm = (data - data_mean) / data_std
     # print("data_norm.shape: ", data_norm.shape)
     # print("normalized data: ", data_norm)
-    return timestamp_data.reshape(-1,1), data_norm
+    return timestamp_data, data_norm
 
 def load_n_split_data(data_path, hist_window, prediction_window, batch_size, train_ratio, normalize = True, test = False):
     
@@ -186,9 +187,9 @@ def load_n_split_data(data_path, hist_window, prediction_window, batch_size, tra
     train_size = int(train_ratio * len(df))
     val_size = len(df) - train_size
     train_data = data_norm[val_size:,:,:]
-    train_timestamp = timestamp[val_size:,:,:]
+    train_timestamp = timestamp[val_size:,:]
     val_data = data_norm[:val_size,:,:]
-    val_timestamp = timestamp[:val_size,:,:]
+    val_timestamp = timestamp[:val_size,:]
 
     col_idx_set = set(range(col_num))
     not_close_batch_norm_lst = list(col_idx_set - set(np2i_dict[NormParam.CloseBatch]))
@@ -214,8 +215,6 @@ def load_multi_symbol_data(data_path_lst, hist_window, prediction_window, batch_
     for data_path in data_path_lst:
         df = pd.read_csv(data_path, index_col = ['symbol', 'timestamp'])
         dfs.append(df)
-
-    
 
     print("processing data")
     start_time = time.time()

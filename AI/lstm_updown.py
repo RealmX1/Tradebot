@@ -136,7 +136,7 @@ def count_tensor_num():
     print('num of tensors: ', num)
 
 weights = torch.pow(torch.tensor(weight_decay), torch.arange(prediction_window).float()).to(device)
-# print("weights: ",weights.shape)
+print("weights: ",weights.shape)
 def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT
     if train:
         teacher_forcing_ratio = 0.0
@@ -183,7 +183,7 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
         epoch_down = 0
         epoch_below_thres = 0
         i=0
-        for i, (x_batch, y_batch, x_raw_close) in enumerate(data_loader):
+        for i, (x_batch, y_batch, x_raw_close, timestamp) in enumerate(data_loader):
 
             # tensor_count = sum([len(gc.get_objects()) for obj in gc.get_objects() if isinstance(obj, torch.Tensor)])
             # print(f"There are currently {tensor_count} Torch tensors in memory.")
@@ -207,6 +207,7 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
             loss_val = loss.clone().detach().cpu().mean().item()
 
             weighted_loss = loss * weights
+            # print(weighted_loss.shape)
             # print(f"loss: {loss.shape}, weighted loss: {weighted_loss.shape}")
             final_loss = weighted_loss.mean()
             
@@ -336,16 +337,16 @@ def get_current_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def save_params(best_prediction, optimizers, model_state, best_model_state, model_pth, last_model_pth, model_training_param_path, has_improvement = True):
+def save_params(best_prediction, optimizers, model_state, last_model_pth, best_model_state, best_model_pth, model_training_param_path, has_improvement, best_weight_decay):
     print('saving params...')
 
     encoder_lr = get_current_lr(optimizers[0])
     decoder_lr = get_current_lr(optimizers[1])
     with open(model_training_param_path, 'w') as f:
-        json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction}, f)
-    print('saving model to: ', model_pth)
+        json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction, 'best_weight_decay':best_weight_decay}, f)
+    print('saving model to: ', best_model_pth)
     if has_improvement:
-        torch.save(best_model_state, model_pth)
+        torch.save(best_model_state, best_model_pth)
     torch.save(model_state, last_model_pth)
     print('done.')
     
@@ -359,7 +360,9 @@ def main():
     print('loading data & model')
     # data_pth = 'data/cdl_test_2.csv'
     data_pth = training_data_path
-    model_pth = f'../model/model_{config_name}.pt'
+    best_model_pth = f'../model/model_{config_name}.pt'
+    best_weight_decay = 0.00
+
     last_model_pth = f'../model/last_model_{config_name}.pt'
     model_training_param_path = f'../model/training_param_{config_name}.json'
     print('loaded in ', time.time()-start_time, ' seconds')
@@ -375,7 +378,7 @@ def main():
     if os.path.exists(last_model_pth):
         print('Loading existing model')
         model.load_state_dict(torch.load(last_model_pth))
-        best_model.load_state_dict(torch.load(model_pth))
+        best_model.load_state_dict(torch.load(best_model_pth))
         with open(model_training_param_path, 'r') as f:
             saved_data = json.load(f)
             encoder_lr = saved_data['encoder_learning_rate']
@@ -423,33 +426,47 @@ def main():
         
         for epoch in range(num_epochs):
             print(f'Epoch {epoch+1}/{num_epochs}')
-            if test_every_x_epoch and epoch % test_every_x_epoch == 0:
+            if test_every_x_epoch != 0 and epoch % test_every_x_epoch == 0:
                 with torch.no_grad():
-                    test_change_precision_lst, average_loss = work(model, test_loader, optimizers, num_epochs = 1, train = False)
+                    prediction_of_change_precision_lst, average_loss = work(model, test_loader, optimizers, num_epochs = 1, train = False)
                     
                     # print(test_change_precision_lst.shape)
-                    change_precision = test_change_precision_lst.reshape(1,prediction_window)*weights
+                    change_precision = prediction_of_change_precision_lst.reshape(1,prediction_window)*weights
                     change_precision = change_precision.sum()/np.sum(weights)
-
+                    # maybe i should try iterate through different weights at this stage to find the best weight for the stage. (and thus potentialy find the best possible model -- remmber to record this best weight in the best model's name.)
+                    # maybe i should try use the 
                     if epoch == 0:
-                        test_change_precision_hist[:,0] = test_change_precision_lst
+                        test_change_precision_hist[:,0] = prediction_of_change_precision_lst
                     else:
-                        test_change_precision_hist = np.concatenate((test_change_precision_hist, test_change_precision_lst.reshape(prediction_window,1)), axis=1)
+                        test_change_precision_hist = np.concatenate((test_change_precision_hist, prediction_of_change_precision_lst.reshape(prediction_window,1)), axis=1)
                     eval_loss_hist.append(average_loss)
-                    if change_precision > best_prediction: 
-                        has_improvement = True
-                        print(f'\nNEW BEST prediction: {change_precision:.4f}%\n')
-                        best_prediction = change_precision
-                        best_model_state = model.state_dict()
-                    else:
-                        print(f'\ncurrent change prediction precision: {change_precision:.4f}%\n')
+
+                    for k in range(-10,11):
+                        arr = np.ones(prediction_window)
+                        w_d = 0.0
+                        for i in range(1, prediction_window):
+                            w_d = pow(0.8,k)
+                            arr[i] = arr[i-1] * w_d
+                        weights = arr.reshape(1,prediction_window)
+                        change_precision = prediction_of_change_precision_lst.reshape(1,prediction_window)*weights
+                        change_precision = change_precision.sum()/np.sum(weights)
+                        if change_precision > best_prediction: 
+                            best_weight_decay = w_d
+                            has_improvement = True
+                            print(f'\nNEW BEST prediction: {change_precision:.4f}% at weight decay: {w_d}\n')
+                            best_prediction = change_precision
+                            best_model_state = model.state_dict()
+                        else:
+                            print(f'current change prediction precision: {change_precision:.4f}%')
                 
                     plt.clf()
                     for i in range(prediction_window):
                         accuracies = test_change_precision_hist[i,:]
                         plt.plot(accuracies, label=f'{i+1} min accuracy', linestyle='solid')
                     plt.plot(test_change_precision_hist.mean(axis=0), label=f'average accuracy', linestyle='dashed')
-                    plt.plot((test_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
+                    weighted_accuracy_lst = np.matmul(weights,test_change_precision_hist)/np.sum(weights)
+                    # print('weighted_accuracy_lst', weighted_accuracy_lst.shape) # shape (1, epoch)
+                    plt.plot(weighted_accuracy_lst[0], label=f'weighted accuracy', linestyle='dotted')
                 # plt.clf()
                 # plt.plot(moving_average(eval_loss_hist, 3), label=f'loss', linestyle='solid')
 
@@ -457,10 +474,9 @@ def main():
             average_loss = work(model, train_loader, optimizers, test_every_x_epoch, train = True, schedulers = schedulers)
                 # train_loss_hist.append(average_loss)
                 # plt.plot(train_loss_hist, label=f'train loss', linestyle='dotted')
-            if epoch == 0:
-                plt.legend() 
-                plt.pause(0.5)
-            plt.pause(0.1)
+            # if epoch == 0:
+            plt.legend() 
+            plt.pause(0.5)
         print(f'training completed in {time.time()-start_time:.2f} seconds')
         
         print('\n\n')
@@ -509,13 +525,13 @@ def main():
         #     plt.pause(1)
         # print(f'testing completed in {time.time()-start_time:.2f} seconds')
 
-        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_pth, last_model_pth, model_training_param_path, has_improvement) 
+        save_params(best_prediction, optimizers, model.state_dict(), last_model_pth, best_model_state, best_model_pth, model_training_param_path, has_improvement, best_weight_decay) 
         print('Normal exit. Model saved.')
         torch.cuda.empty_cache()
         gc.collect()
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
-        save_params(best_prediction, optimizers, model.state_dict(), best_model_state, model_pth, last_model_pth, model_training_param_path, has_improvement)
+        save_params(best_prediction, optimizers, model.state_dict(), last_model_pth, best_model_state, best_model_pth, model_training_param_path, has_improvement, best_weight_decay)
         torch.cuda.empty_cache()
         gc.collect()
 

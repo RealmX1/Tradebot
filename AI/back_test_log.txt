@@ -122,3 +122,16 @@ decision: n:    0, price: 198.06, long:  635, ? long:  429, ? long pct: 67.56%, 
 Account Value:  216126.66, accont growth: 116.13%, stock growth:  28.57%, pct growth diff:  68.10%, interval per trade: 183.81, i/t since last plot: 127.00, 
 
 These have high profit pct, but low trade rate.
+
+weight decay 0.3
+decision: n:    0, price: 198.06, long: 1338, ? long:  864, ? long pct: 64.57%, long profit pct: 0.0948%, occupancy rate: 55.48%, 
+Account Value:  331415.40, accont growth: 231.42%, stock growth:  28.57%, pct growth diff: 157.77%, interval per trade: 87.31, i/t since last plot: 112.06,
+
+
+Extreme right leaning weight: 9 decay!
+decision: n:    0, price: 198.06, long:  231, ? long:  142, ? long pct: 61.47%, long profit pct: 0.3171%, occupancy rate: 28.28%, 
+Account Value:  201764.45, accont growth: 101.76%, stock growth:  28.57%, pct growth diff:  56.93%, interval per trade: 503.90, i/t since last plot: 272.14,
+
+
+
+
