@@ -133,3 +133,18 @@ decision: n:    0, price: 198.06, long:  231, ? long:  142, ? long pct: 61.47%, 
 Account Value:  201764.45, accont growth: 101.76%, stock growth:  28.57%, pct growth diff:  56.93%, interval per trade: 503.90, i/t since last plot: 272.14,
 
 
+
+Block test: True
+purpose: test back_test_result_log.csv
+
+Block test: True
+purpose: test csv log
+
+Block test: True
+purpose: test csv log
+
+Block test: True
+purpose: test csv log
+
+Block test: True
+purpose: test csv log
