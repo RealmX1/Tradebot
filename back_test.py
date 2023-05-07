@@ -137,7 +137,7 @@ def time_analysis(start_time, timers):
     print_n_log(f'back test completed in {time.time()-start_time:.2f} seconds')    
         
 
-def back_test(policy, model, data_loader, col_names, weights, trade_df, num_epochs = 1, block_col = None, to_plot = True, to_print = True):
+def back_test(policy, model, data_loader, col_names, weights, trade_df = None, trade_data = False, num_epochs = 1, block_col = None, to_plot = True, to_print = True):
     account = policy.account
 
     timers = [0.0] * 10
@@ -219,43 +219,45 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df, num_epoc
                 # print_n_log(prediction.shape, weights.shape)
                 weighted_prediction = (prediction * weights).sum() / weights.sum()
                 decision = policy.decide('MSFT', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
-                    
-
+                
+                
                 #policy.decide('BABA', None, price, y_pred, account)
                 if policy.has_position():
                     zero_balance_timer += 1
                 decisions.append(decision)
                 if decision[0] == 'b':
-                    
-                    trade_rows = trade_df[trade_df.index == timestamp[0]]
-                    completed = False
-                    for index, row in trade_rows.iterrows():
-                        # print_n_log(row['price'], price)
-                        if row['price'] <= price:
-                            print_n_log('buy order filled')
-                            policy.complete_buy_order('MSFT', row['price'])
-                            completed = True
-                            break
-                    
-                    if not completed:
-                        print_n_log('buy order not filled; cancelling order...')
-                        policy.cancel_buy_order('MSFT', unfilled=True)
+                    if trade_data:
+                        trade_rows = trade_df[trade_df.index == timestamp[0]]
+                        completed = False
+                        for index, row in trade_rows.iterrows():
+                            # print_n_log(row['price'], price)
+                            if row['price'] <= price:
+                                print_n_log('buy order filled')
+                                policy.complete_buy_order('MSFT', row['price'])
+                                completed = True
+                                break
+                        
+                        if not completed:
+                            print_n_log('buy order not filled; cancelling order...')
+                            policy.cancel_buy_order('MSFT', unfilled=True)
                     
                     buy_decisions.append(1)
                     sell_decisions.append(0)
                 elif decision[0] == 's':
-                    trade_rows = trade_df[trade_df.index == timestamp[0]]
-                    completed = False
-                    for index, row in trade_rows.iterrows():
-                        if row['price'] >= price:
-                            print_n_log('sell order filled')
-                            policy.complete_sell_order('MSFT', row['price'])
-                            completed = True
-                            break
-                    
-                    if not completed:
-                        print_n_log('sell order not filled; cancelling order...')
-                        policy.cancel_sell_order('MSFT', unfilled=True)
+                    if trade_data:
+                        trade_rows = trade_df[trade_df.index == timestamp[0]]
+                        completed = False
+                        for index, row in trade_rows.iterrows():
+                            if row['price'] >= price:
+                                print_n_log('sell order filled')
+                                policy.complete_sell_order('MSFT', row['price'])
+                                completed = True
+                                break
+                        
+                        if not completed:
+                            print_n_log('sell order not filled; cancelling order...')
+                            policy.cancel_sell_order('MSFT', unfilled=True)
+
                     buy_decisions.append(0)
                     sell_decisions.append(1)
                 else:
@@ -271,6 +273,9 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df, num_epoc
                 st = time.time()
 
                 if (decision[0] != 'n' and to_print) or i == (len(data_loader)-1):
+                    first_print_str = f'decision: {decision[0]}:{decision[1]:>5}, timestamp: {timestamp[0]}'
+                    print_n_log(first_print_str)
+
                     long_count, profitable_long_count, unfilled_buy,\
                     short_count, profitable_short_count, unfilled_sell,\
                     mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
@@ -301,9 +306,8 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df, num_epoc
                             f'i/t since last plot: {(i-prev_interval)/(long_count+short_count-prev_long_count-prev_short_count + 1):>4.2f}, ' #+ \
                         #   f'past 1000 interval growth: '
 
-                    if to_print == True:
-                        print_n_log(prediction_stat_str)
-                        print_n_log(account_n_stock_str)
+                    print_n_log(prediction_stat_str)
+                    print_n_log(account_n_stock_str)
                         
                         # print_n_log(f'ram: {psutil.virtual_memory().percent:.2f}%, vram: {torch.cuda.memory_allocated()/1024**3:.2f}GB')
 
@@ -362,14 +366,24 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df, num_epoc
 def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
 
-def save_result(pkl_pth, block_str_lst = [], end_strs_lst = [], loss_lst = []):
-    print_n_log('saving results...')
+def save_result(pkl_pth, block_str_lst = [], test_strs_lst = [], loss_lst = []):
+    print_n_log(f'saving results to: {pkl_pth}')
     with open(pkl_pth, 'wb') as f:
-        pickle.dump((block_str_lst, end_strs_lst, loss_lst), f)
+        pickle.dump((block_str_lst, test_strs_lst, loss_lst), f)
     
     print_n_log('results saved')
 
 def main():
+    block_test = True
+    to_print = True
+    to_plot = True
+    trade_data = False
+
+    weight_decay = 9.31
+
+    if block_test:
+        to_print = False
+        to_plot = False
 
     # Make predictions
     start_time = time.time()
@@ -377,11 +391,15 @@ def main():
     # data_pth = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
     # data_pth = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
     time_str = '20200101_20200201'
-    name = 'MSFT'
+    symbol = 'MSFT'
     data_type = '16feature0'
-    data_name = f'bar_set_{time_str}_{name}_{data_type}_RAW'
+    data_name = f'bar_set_{time_str}_{symbol}_{data_type}_RAW'
     data_pth = f'data/csv/{data_name}.csv'
-    pkl_pth = 'lists_no_multithread_MSFT_noblock.pkl'
+
+    block_str = 'noblock'
+    if block_test:
+        block_str = 'block'
+    pkl_pth = f'lists_no_multithread_{symbol}_{block_str}.pkl'
 
     trade_data_pth = f'data/csv/trade_set_{time_str}_raw.csv'
     trade_df = pd.read_csv(trade_data_pth, index_col = ['symbol'])
@@ -416,7 +434,6 @@ def main():
         pic_pth = f'../TradebotGraph/{data_name}--{model_name}_{weight_decay}decay_{i}th_test.png'
     print_n_log(i)
 
-    weight_decay = 9.31
     arr = np.ones(prediction_window)
     for i in range(1, prediction_window):
         arr[i] = arr[i-1] * weight_decay
@@ -428,32 +445,40 @@ def main():
     model.load_state_dict(torch.load(model_pth))
 
     block_str_lst = []
-    end_strs_lst = []
+    test_strs_lst = []
     loss_lst = []
 
     try:
         with torch.no_grad():
-            # for x in range(feature_num):
-            x = []
-            
-            account = Account(initial_capital, ['MSFT'])
-            # policy = RandomPolicy(account) # back ground has 0.023% of long profit pct... but it is only to do so in a bull market, and can only follow stock price; while the algorithm 
-            policy = SimpleLongShort(account, buy_threshold=0.002 * pct_pred_multiplier, trade_data = True)
-            block_str = f'blocking column {x}:{col_names[x]}'
-            print_n_log(block_str)
-            try:
-                buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
-                    back_test(policy, model, test_loader, col_names, weights, trade_df, num_epochs = 1, block_col = x, to_plot = True, to_print = True)
+            n = 1
+            if block_test:
+                n = feature_num
+            for x in range(n+1):
+                block_str = f'blocking column {x}:{col_names[x]}'
+                if not block_test or x == n: 
+                    x = []
+                    block_str = f'blocking column {x}:N/A'
+                print_n_log(block_str)
                 
-                plt.savefig(pic_pth)
-                print_n_log(f'saving figure to {pic_pth}')
-            except KeyboardInterrupt:
-                plt.savefig(pic_pth)
-                print_n_log(f'saving figure to {pic_pth}')
-            
-            block_str_lst.append(block_str)
-            end_strs_lst.append(end_strs)
-            loss_lst.append(loss)
+                account = Account(initial_capital, ['MSFT'])
+                # policy = RandomPolicy(account) # back ground has 0.023% of long profit pct... but it is only to do so in a bull market, and can only follow stock price; while the algorithm 
+                policy = SimpleLongShort(account, buy_threshold=0.002 * pct_pred_multiplier, trade_data = False)
+                
+                try:
+                    if not trade_data:
+                        trade_df = None
+                    buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
+                        back_test(policy, model, test_loader, col_names, weights, trade_df, trade_data = trade_data, num_epochs = 1, block_col = x, to_plot = to_plot, to_print = to_print)
+                    
+                    plt.savefig(pic_pth)
+                    print_n_log(f'saving figure to {pic_pth}')
+                except KeyboardInterrupt:
+                    plt.savefig(pic_pth)
+                    print_n_log(f'saving figure to {pic_pth}')
+                
+                block_str_lst.append(block_str)
+                test_strs_lst.append(end_strs)
+                loss_lst.append(loss)
             # print_n_log(f'account value: {account_value_hist[-1]:.2f}')
             # print_n_log(f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
             # print_n_log(f'stock value change: {end_price/start_price*100 - 100:.2f}%')
@@ -462,11 +487,11 @@ def main():
 
             print_n_log(model_pth)
 
-        # save_result(pkl_pth, block_str_lst, end_strs_lst, loss_lst)
+        save_result(pkl_pth, block_str_lst, test_strs_lst, loss_lst)
         # plot(predictions, targets, test_size)
         # plot(raw_predictions, raw_targets, test_size)
     except KeyboardInterrupt or Exception or TypeError:
-        # save_result(pkl_pth, block_str_lst, end_strs_lst, loss_lst)
+        save_result(pkl_pth, block_str_lst, test_strs_lst, loss_lst)
         pass
 
 if __name__ == "__main__":

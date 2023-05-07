@@ -196,7 +196,7 @@ class SimpleLongShort(Policy):
             # print(f'placing buy order for {purchase_num} shares at {price}$')
             if purchase_num > 0:
                 if not self.trade_data:
-                    self.complete_buy_order(symbol)
+                    self.complete_buy_order(symbol, price)
                 # print(f'bought all! {purchase_num} shares at {price}$')
                 result = ('b',purchase_num)
             else:
@@ -209,7 +209,7 @@ class SimpleLongShort(Policy):
             # print(f'placing sell order for {purchase_num} shares at {price}$')
             if purchase_num > 0:
                 if not self.trade_data:
-                    self.complete_sell_order(symbol)
+                    self.complete_sell_order(symbol, price)
                 # print(f'bought all! {purchase_num} shares at {price}$')
                 result = ('s',purchase_num)
             else:
