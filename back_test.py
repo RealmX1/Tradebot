@@ -24,22 +24,18 @@ from policy import *
 from account import *
 from data_utils import *
 from model_structure_param import *
+from common import *
 
 
 loss_fn = nn.MSELoss(reduction = 'none')
 
-log_pth = 'default_log_pth.txt'
+complete_log_pth = 'log/complete_test_log/tmp.txt'
+result_log_pth = 'log/back_test_result_log.txt'
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def print_n_log(*args, **kwargs):
-    # Print to the terminal
-    print(*args, **kwargs)
-    
-    # Log to the file
-    global log_pth
-    with open(log_pth, "a") as log_file:
-        print(*args, **kwargs, file=log_file)
+
 
 def get_direction_diff(y_batch,y_pred):
     # true_direction = y_batch-x_batch[:,-1,close_idx:close_idx+1]
@@ -48,8 +44,8 @@ def get_direction_diff(y_batch,y_pred):
     # pred_direction = y_pred-x_batch[:,-1,close_idx:close_idx+1]
     pred_direction = np.clip(y_pred.clone().detach().cpu(),0,np.inf)
     pred_direction[pred_direction != 0] = 1
-    # print_n_log("True: ", true_direction.shape)
-    # print_n_log("Pred: ", pred_direction)
+    # print_n_log(complete_log_pth, "True: ", true_direction.shape)
+    # print_n_log(complete_log_pth, "Pred: ", pred_direction)
 
     instance_num =  true_direction.shape[0]
     prediction_min = true_direction.shape[1]
@@ -59,8 +55,8 @@ def get_direction_diff(y_batch,y_pred):
 
     total_cells_list = np.full((prediction_min,), instance_num)
     same_cells_list = np.count_nonzero(true_direction == pred_direction, axis = 0)
-    # print_n_log("total_cells: ",total_cells)
-    # print_n_log("same_cells.shape: ",same_cells.shape)
+    # print_n_log(complete_log_pth, "total_cells: ",total_cells)
+    # print_n_log(complete_log_pth, "same_cells.shape: ",same_cells.shape)
 
     return total_cells, same_cells, total_cells_list, same_cells_list
 
@@ -125,19 +121,22 @@ def plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_gr
     if show:
         plt.show()
 
-def time_analysis(start_time, timers):
-
-    print_n_log(f'Time spent on initialization: {timers[0]:.2f} seconds\n' + \
+def time_analysis(timers, pth = None):
+    global complete_log_pth
+    log_pth = complete_log_pth
+    # if pth:
+    #     log_pth = pth
+    print_n_log(log_pth, f'Time spent on initialization: {timers[0]:.2f} seconds\n' + \
         f'Time spent on data loading: {timers[1]:.2f} seconds\n' + \
         f'Time spent on prediction: {timers[2]:.2f} seconds\n' + \
         f'Time spent on decision making: {timers[3]:.2f} seconds\n' + \
         f'Time spent on printing: {timers[4]:.2f} seconds\n' + \
         f'Time spent on plotting: {timers[5]:.2f} seconds\n'
-        )
-    print_n_log(f'back test completed in {time.time()-start_time:.2f} seconds')    
+        )  
         
 
 def back_test(policy, model, data_loader, col_names, weights, trade_df = None, trade_data = False, num_epochs = 1, block_col = None, to_plot = True, to_print = True):
+    global complete_log_pth, result_log_pth
     account = policy.account
 
     timers = [0.0] * 10
@@ -175,176 +174,177 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df = None, t
     
     draw_interval = 5000  
     try:
-        for epoch in range(num_epochs):
-            i=0
-            annotations = []
-            for i, (x_batch, y_batch, x_raw_close, timestamp) in enumerate(data_loader):
-                
-                step_start = time.time()
-
-                timers[1] += time.time() - st # time spent using data_loader
-                st = time.time()
-
-                # print_n_log('x_batch.shape: ', x_batch.shape)
-                # print_n_log('y_batch.shape: ', y_batch.shape)
-                # x_batch   [N, hist_window, feature_num]
-                # y_batch & y_pred  [N, prediction_window]
-                # note here N = 1
-                if block_col != None:
-                    x_batch[:,:,block_col] = 0
-
-                x_batch = x_batch.float().to(device) 
-                # probably need to do numpy to pt tensor in the dataset; need testing on efficiency 
-                # !!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
-                # print_n_log("one input: ", x_batch[0:,:,:])
-                y_batch = y_batch.float().to(device)
+        annotations = []
+        for i, (x_batch, y_batch, x_raw_close, timestamp) in enumerate(data_loader):
             
-                y_pred = model(x_batch, None, teacher_forcing_ratio) # [N, prediction_window]
-                timers[2] += time.time() - st # time spent on prediction 
-                st = time.time()
+            step_start = time.time()
 
-                loss = loss_fn(y_pred, y_batch)
-                loss_val = loss.mean().item()
-                average_loss += loss_val
-                
-                price = x_raw_close.item()
-                if (epoch == 0 and i == 0):
-                    start_price = price
-                    start_balance = account.evaluate()
-                if (epoch == num_epochs-1 and i == len(data_loader)-1):
-                    end_price = price
+            timers[1] += time.time() - st # time spent using data_loader
+            st = time.time()
 
-                # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
-                prediction = y_pred.clone().detach().cpu().numpy()
-                # print_n_log(prediction.shape, weights.shape)
-                weighted_prediction = (prediction * weights).sum() / weights.sum()
-                decision = policy.decide('MSFT', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
-                
-                
-                #policy.decide('BABA', None, price, y_pred, account)
-                if policy.has_position():
-                    zero_balance_timer += 1
-                decisions.append(decision)
-                if decision[0] == 'b':
-                    if trade_data:
-                        trade_rows = trade_df[trade_df.index == timestamp[0]]
-                        completed = False
-                        for index, row in trade_rows.iterrows():
-                            # print_n_log(row['price'], price)
-                            if row['price'] <= price:
-                                print_n_log('buy order filled')
-                                policy.complete_buy_order('MSFT', row['price'])
-                                completed = True
-                                break
-                        
-                        if not completed:
-                            print_n_log('buy order not filled; cancelling order...')
-                            policy.cancel_buy_order('MSFT', unfilled=True)
+            # print_n_log(complete_log_pth, 'x_batch.shape: ', x_batch.shape)
+            # print_n_log(complete_log_pth, 'y_batch.shape: ', y_batch.shape)
+            # x_batch   [N, hist_window, feature_num]
+            # y_batch & y_pred  [N, prediction_window]
+            # note here N = 1
+            if block_col != None:
+                x_batch[:,:,block_col] = 0
+
+            x_batch = x_batch.float().to(device) 
+            # probably need to do numpy to pt tensor in the dataset; need testing on efficiency 
+            # !!! CAN"T BE DONE. before dataloarder they are numpy array, not torch tensor
+            # print_n_log(complete_log_pth, "one input: ", x_batch[0:,:,:])
+            y_batch = y_batch.float().to(device)
+        
+            y_pred = model(x_batch, None, teacher_forcing_ratio) # [N, prediction_window]
+            timers[2] += time.time() - st # time spent on prediction 
+            st = time.time()
+
+            loss = loss_fn(y_pred, y_batch)
+            loss_val = loss.mean().item()
+            average_loss += loss_val
+            
+            price = x_raw_close.item()
+            if i == 0:
+                start_price = price
+                start_balance = account.evaluate()
+            if i == len(data_loader)-1:
+                end_price = price
+
+            # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
+            prediction = y_pred.clone().detach().cpu().numpy()
+            # print_n_log(complete_log_pth, prediction.shape, weights.shape)
+            weighted_prediction = (prediction * weights).sum() / weights.sum()
+            decision = policy.decide('MSFT', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
+            
+            
+            #policy.decide('BABA', None, price, y_pred, account)
+            if policy.has_position():
+                zero_balance_timer += 1
+            decisions.append(decision)
+            if decision[0] == 'b':
+                if trade_data:
+                    trade_rows = trade_df[trade_df.index == timestamp[0]]
+                    completed = False
+                    for index, row in trade_rows.iterrows():
+                        # print_n_log(complete_log_pth, row['price'], price)
+                        if row['price'] <= price:
+                            print_n_log(complete_log_pth, 'buy order filled')
+                            policy.complete_buy_order('MSFT', row['price'])
+                            completed = True
+                            break
                     
-                    buy_decisions.append(1)
-                    sell_decisions.append(0)
-                elif decision[0] == 's':
-                    if trade_data:
-                        trade_rows = trade_df[trade_df.index == timestamp[0]]
-                        completed = False
-                        for index, row in trade_rows.iterrows():
-                            if row['price'] >= price:
-                                print_n_log('sell order filled')
-                                policy.complete_sell_order('MSFT', row['price'])
-                                completed = True
-                                break
-                        
-                        if not completed:
-                            print_n_log('sell order not filled; cancelling order...')
-                            policy.cancel_sell_order('MSFT', unfilled=True)
-
-                    buy_decisions.append(0)
-                    sell_decisions.append(1)
-                else:
-                    buy_decisions.append(0)
-                    sell_decisions.append(0)
-
-                account_value = account.evaluate()
+                    if not completed:
+                        print_n_log(complete_log_pth, 'buy order not filled; cancelling order...')
+                        policy.cancel_buy_order('MSFT', unfilled=True)
                 
-                account_value_hist.append(account_value)
-                price_hist.append(price)
+                buy_decisions.append(1)
+                sell_decisions.append(0)
+            elif decision[0] == 's':
+                if trade_data:
+                    trade_rows = trade_df[trade_df.index == timestamp[0]]
+                    completed = False
+                    for index, row in trade_rows.iterrows():
+                        if row['price'] >= price:
+                            print_n_log(complete_log_pth, 'sell order filled')
+                            policy.complete_sell_order('MSFT', row['price'])
+                            completed = True
+                            break
+                    
+                    if not completed:
+                        print_n_log(complete_log_pth, 'sell order not filled; cancelling order...')
+                        policy.cancel_sell_order('MSFT', unfilled=True)
 
-                timers[3] += time.time() - st # time spent on decision making
-                st = time.time()
+                buy_decisions.append(0)
+                sell_decisions.append(1)
+            else:
+                buy_decisions.append(0)
+                sell_decisions.append(0)
 
-                if (decision[0] != 'n' and to_print) or i == (len(data_loader)-1):
-                    first_print_str = f'decision: {decision[0]}:{decision[1]:>5}, timestamp: {timestamp[0]}'
-                    print_n_log(first_print_str)
+            account_value = account.evaluate()
+            
+            account_value_hist.append(account_value)
+            price_hist.append(price)
 
-                    long_count, profitable_long_count, unfilled_buy,\
-                    short_count, profitable_short_count, unfilled_sell,\
-                    mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
+            timers[3] += time.time() - st # time spent on decision making
+            st = time.time()
 
-                    prediction_stat_str = \
-                            f'decision: {decision[0]}:{decision[1]:>5}, ' + \
-                            f'price: {price:>6.2f}, ' + \
-                            f'unfilled buy & sell: {unfilled_buy:>4}, {unfilled_sell:>4}, ' + \
-                            f'long: {long_count:>4}, ' + \
-                            f'\u2713 long: {profitable_long_count:>4}, ' + \
-                            f'\u2713 long pct: {profitable_long_count/long_count*100:>5.2f}%, ' + \
-                            f'long profit pct: {mean_long_profit_pct:>6.4f}%, ' + \
-                            f'occupancy rate: {zero_balance_timer/(i+1)*100:>5.2f}%, ' # + \
-                            # f'short: {short_count:>3}, ' + \
-                            # f'\u2713 short: {profitable_short_count:>3}, ' + \
-                            # f'\u2713 short pct: {profitable_short_count/short_count*100:>5.2f}%, ' + \
-                            # f'short profit pct: {mean_short_profit_pct:>5.3f}%'  
+            if (decision[0] != 'n' and to_print) or i == (len(data_loader)-1):
+                # first_print_str = f'decision: {decision[0]}:{decision[1]:>5}, timestamp: {timestamp[0]}'
+                # print_n_log(complete_log_pth, first_print_str)
 
-                    account_growth = account_value/start_balance*100-100
-                    stock_growth = price/start_price*100-100
-                    pct_growth_diff = (account_growth+100)/(stock_growth+100)*100-100
-                    account_n_stock_str = \
-                            f'Account Value: {account_value:>10.2f}, ' + \
-                            f'accont growth: {account_growth:>6.2f}%, ' + \
-                            f'stock growth: {stock_growth:>6.2f}%, ' +  \
-                            f'pct growth diff: {pct_growth_diff:>6.2f}%, ' + \
-                            f'interval per trade: {i/(long_count+short_count):>4.2f}, ' + \
-                            f'i/t since last plot: {(i-prev_interval)/(long_count+short_count-prev_long_count-prev_short_count + 1):>4.2f}, ' #+ \
-                        #   f'past 1000 interval growth: '
+                long_count, profitable_long_count, unfilled_buy,\
+                short_count, profitable_short_count, unfilled_sell,\
+                mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
 
-                    print_n_log(prediction_stat_str)
-                    print_n_log(account_n_stock_str)
-                        
-                        # print_n_log(f'ram: {psutil.virtual_memory().percent:.2f}%, vram: {torch.cuda.memory_allocated()/1024**3:.2f}GB')
+                prediction_stat_str = \
+                        f'decision: {decision[0]}:{decision[1]:>5}, ' + \
+                        f'timestamp: {timestamp[0]}, ' + \
+                        f'price: {price:>6.2f}, ' + \
+                        f'unfilled buy & sell: {unfilled_buy:>4}, {unfilled_sell:>4}, ' + \
+                        f'long: {long_count:>4}, ' + \
+                        f'\u2713 long: {profitable_long_count:>4}, ' + \
+                        f'\u2713 long pct: {profitable_long_count/long_count*100:>5.2f}%, ' + \
+                        f'long profit pct: {mean_long_profit_pct:>6.4f}%, ' + \
+                        f'occupancy rate: {zero_balance_timer/(i+1)*100:>5.2f}%, ' # + \
+                        # f'short: {short_count:>3}, ' + \
+                        # f'\u2713 short: {profitable_short_count:>3}, ' + \
+                        # f'\u2713 short pct: {profitable_short_count/short_count*100:>5.2f}%, ' + \
+                        # f'short profit pct: {mean_short_profit_pct:>5.3f}%'  
 
+                account_growth = account_value/start_balance*100-100
+                stock_growth = price/start_price*100-100
+                pct_growth_diff = (account_growth+100)/(stock_growth+100)*100-100
+                account_n_stock_str = \
+                        f'Account Value: {account_value:>10.2f}, ' + \
+                        f'accont growth: {account_growth:>6.2f}%, ' + \
+                        f'stock growth: {stock_growth:>6.2f}%, ' +  \
+                        f'pct growth diff: {pct_growth_diff:>6.2f}%, ' + \
+                        f'interval per trade: {i/(long_count+short_count):>4.2f}, ' + \
+                        f'i/t since last plot: {(i-prev_interval)/(long_count+short_count-prev_long_count-prev_short_count + 1):>4.2f}, ' #+ \
+                    #   f'past 1000 interval growth: '
+
+                print_n_log(complete_log_pth, prediction_stat_str, '\n', account_n_stock_str)
+                    
+                    # print_n_log(complete_log_pth, f'ram: {psutil.virtual_memory().percent:.2f}%, vram: {torch.cuda.memory_allocated()/1024**3:.2f}GB')
+
+            
+            timers[4] += time.time() - st # time spent on printing
+            st = time.time()
+
+            if (i%draw_interval == 0) and (i != 0) and to_plot == True:
                 
-                timers[4] += time.time() - st # time spent on printing
-                st = time.time()
+                # start_time_plot = time.time()
+                plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations)
 
-                if (i%draw_interval == 0) and (i != 0) and to_plot == True:
-                    
-                    # start_time_plot = time.time()
-                    plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations)
+                # print_n_log(complete_log_pth, f'plotting completed in {time.time()-start_time_plot:.2f} seconds')
+                
+                prev_long_count = long_count
+                prev_short_count = short_count
+                prev_interval = i
+            # print_n_log(complete_log_pth, account.evaluate())
 
-                    # print_n_log(f'plotting completed in {time.time()-start_time_plot:.2f} seconds')
-                    
-                    prev_long_count = long_count
-                    prev_short_count = short_count
-                    prev_interval = i
-                # print_n_log(account.evaluate())
+            timers[5] += time.time() - st # time spent on plotting
+            st = time.time()
 
-                timers[5] += time.time() - st # time spent on plotting
-                st = time.time()
-
-                step_per_sec = step_per_sec * 0.9 + 0.1 * (1/(st-step_start))
-                # print_n_log(st-step_start)
+            step_per_sec = step_per_sec * 0.9 + 0.1 * (1/(st-step_start))
+            # print_n_log(complete_log_pth, st-step_start)
 
 
-        time_analysis(start_time, timers)
+        time_analysis(timers)
+        print_n_log(log_pth, f'back test completed in {time.time()-start_time:.2f} seconds')  
         plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
         average_loss /= i
     except KeyboardInterrupt:
-        time_analysis(start_time, timers)
-        # plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
+        time_analysis(timers)
+        print_n_log(log_pth, f'back test completed in {time.time()-start_time:.2f} seconds')  
+        plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
+        
         average_loss /= i
         
         
 
-        # print_n_log(f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
+        # print_n_log(complete_log_pth, f'Epoch {epoch+1:3}/{num_epochs:3}, ' +
         #       f'Time per epoch: {(time.time()-start_time)/(epoch+1):.2f} seconds, ')
         
         
@@ -367,14 +367,15 @@ def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
 
 def save_result(pkl_pth, block_str_lst = [], test_strs_lst = [], loss_lst = []):
-    print_n_log(f'saving results to: {pkl_pth}')
+    global complete_log_pth
+    print_n_log(complete_log_pth, f'saving results to: {pkl_pth}')
     with open(pkl_pth, 'wb') as f:
         pickle.dump((block_str_lst, test_strs_lst, loss_lst), f)
     
-    print_n_log('results saved')
+    print_n_log(complete_log_pth, 'results saved')
 
 def main():
-    block_test = True
+    block_test = False
     to_print = True
     to_plot = True
     trade_data = False
@@ -385,31 +386,70 @@ def main():
         to_print = False
         to_plot = False
 
-    # Make predictions
+# dataname and model name are produced first, as they are used to make the log file paths.
+    # data source
     start_time = time.time()
-    # data_pth = '../data/csv/bar_set_huge_20200101_20230417_AAPL_macd_n_time_only.csv'
-    # data_pth = '../data/csv/bar_set_huge_20230418_20230501_AAPL_23feature.csv'
-    # data_pth = '../data/csv/bar_set_huge_20200101_20230417_AAPL_indicator.csv'
-    time_str = '20200101_20200201'
+    time_str = '20200101_20200701'
     symbol = 'MSFT'
     data_type = '16feature0'
     data_name = f'bar_set_{time_str}_{symbol}_{data_type}_RAW'
     data_pth = f'data/csv/{data_name}.csv'
+    #
+    model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
+    model_name = f'last_model_{config_name}'
+    model_pth = f'model/{model_name}.pt'
+    model.load_state_dict(torch.load(model_pth))
 
+
+
+    if trade_data:
+        trade_data_pth = f'data/csv/trade_set_{time_str}_raw.csv'
+        trade_df = pd.read_csv(trade_data_pth, index_col = ['symbol'])
+        # print_n_log(complete_log_pth, trade_df.head(3))
+        trade_df['timestamp'] = pd.to_datetime(trade_df['timestamp'])
+        trade_df['rounded_timestamp'] = trade_df['timestamp'].dt.round('1min')
+        trade_df.set_index('rounded_timestamp', inplace=True)
+    else:
+        trade_df = None
+    # print_n_log(complete_log_pth, trade_df.head(3))
+
+
+    
     block_str = 'noblock'
     if block_test:
         block_str = 'block'
-    pkl_pth = f'lists_no_multithread_{symbol}_{block_str}.pkl'
+    pkl_pth_template = f'log/block_test_stat_log/lists_{data_name}--{model_name}_{block_str}_{{i_th_attmpt}}.pkl'
 
-    trade_data_pth = f'data/csv/trade_set_{time_str}_raw.csv'
-    trade_df = pd.read_csv(trade_data_pth, index_col = ['symbol'])
-    # print_n_log(trade_df.head(3))
+    # log_pth and pic_pth_template
+    global complete_log_pth, result_log_pth
+    complete_log_pth_template = f'log/complete_test_log/{data_name}--{model_name}_{{}}.txt'
+    pic_pth_template = f'TradebotGraph/{data_name}--{model_name}_{{i_th_attempt}}_block_{{block_col_name}}.png'
 
-    trade_df['timestamp'] = pd.to_datetime(trade_df['timestamp'])
-    trade_df['rounded_timestamp'] = trade_df['timestamp'].dt.round('1min')
-    trade_df.set_index('rounded_timestamp', inplace=True)
+    i = 0
+    while True:
+        pic_pth_template_2 = pic_pth_template.format(i_th_attempt = i, block_col_name = '{block_col_name}')
+        pkl_pth = pkl_pth_template.format(i_th_attmpt = i)
 
-    # print_n_log(trade_df.head(3))
+        if not os.path.exists(complete_log_pth := complete_log_pth_template.format(i)): break
+        i += 1
+
+    # Weights
+    arr = np.ones(prediction_window)
+    for i in range(1, prediction_window):
+        arr[i] = arr[i-1] * weight_decay
+    weights = arr.reshape(1, prediction_window)
+    
+    #
+    while True:
+        tolog = input("Do you want to log the result? (y/n) ")
+        if tolog == 'y':
+            purpose = input("What is the purpose of this back_test? ")
+            print_n_log(result_log_pth, f'\npurpose: {purpose}')
+            break
+        elif tolog == 'n':
+            result_log_pth = None
+            break
+
 
     test_loader, col_names = \
         load_n_split_data(data_pth, 
@@ -419,73 +459,51 @@ def main():
                           train_ratio = 0, 
                           normalize = True,
                           test = True)
-    model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
-    model_name = f'last_model_{config_name}'
-    model_pth = f'model/{model_name}.pt'
 
-    
-    i = 0
-    global log_pth
-    log_pth = f'../TradebotGraph/{data_name}--{model_name}_{i}.txt'
-    pic_pth = f'../TradebotGraph/{data_name}--{model_name}_{i}.png'
-    while os.path.exists(pic_pth):
-        i += 1
-        log_pth = f'../TradebotGraph/{data_name}--{model_name}_{i}.txt'
-        pic_pth = f'../TradebotGraph/{data_name}--{model_name}_{weight_decay}decay_{i}th_test.png'
-    print_n_log(i)
-
-    arr = np.ones(prediction_window)
-    for i in range(1, prediction_window):
-        arr[i] = arr[i-1] * weight_decay
-    weights = arr.reshape(1, prediction_window)
-    
-    
-
-    
-    model.load_state_dict(torch.load(model_pth))
-
-    block_str_lst = []
-    test_strs_lst = []
-    loss_lst = []
-
+    # str logger
     try:
+        block_str_lst = []
+        test_strs_lst = []
+        loss_lst = []
         with torch.no_grad():
-            n = 1
+            n = 0
             if block_test:
                 n = feature_num
+
             for x in range(n+1):
-                block_str = f'blocking column {x}:{col_names[x]}'
+                col_name = 'None'
                 if not block_test or x == n: 
-                    x = []
-                    block_str = f'blocking column {x}:N/A'
-                print_n_log(block_str)
+                    x = None
+                else:
+                    col_name = col_names[x]
+                block_str = f'blocking column {x}:{col_name}'
+
+                pic_pth = pic_pth_template_2.format(block_col_name = col_name)
+                print_n_log(complete_log_pth, block_str)
                 
                 account = Account(initial_capital, ['MSFT'])
                 # policy = RandomPolicy(account) # back ground has 0.023% of long profit pct... but it is only to do so in a bull market, and can only follow stock price; while the algorithm 
                 policy = SimpleLongShort(account, buy_threshold=0.002 * pct_pred_multiplier, trade_data = False)
                 
                 try:
-                    if not trade_data:
-                        trade_df = None
                     buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
                         back_test(policy, model, test_loader, col_names, weights, trade_df, trade_data = trade_data, num_epochs = 1, block_col = x, to_plot = to_plot, to_print = to_print)
                     
                     plt.savefig(pic_pth)
-                    print_n_log(f'saving figure to {pic_pth}')
+                    print_n_log(complete_log_pth, f'saving figure to {pic_pth}')
                 except KeyboardInterrupt:
                     plt.savefig(pic_pth)
-                    print_n_log(f'saving figure to {pic_pth}')
+                    print_n_log(complete_log_pth, f'saving figure to {pic_pth}')
                 
                 block_str_lst.append(block_str)
                 test_strs_lst.append(end_strs)
                 loss_lst.append(loss)
-            # print_n_log(f'account value: {account_value_hist[-1]:.2f}')
-            # print_n_log(f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
-            # print_n_log(f'stock value change: {end_price/start_price*100 - 100:.2f}%')
+            # print_n_log(complete_log_pth, f'account value: {account_value_hist[-1]:.2f}')
+            # print_n_log(complete_log_pth, f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
+            # print_n_log(complete_log_pth, f'stock value change: {end_price/start_price*100 - 100:.2f}%')
 
-            print_n_log(f'Test completed in {time.time()-start_time:.2f} seconds')
-
-            print_n_log(model_pth)
+        print_n_log(complete_log_pth, f'Test completed in {time.time()-start_time:.2f} seconds')
+        print_n_log(complete_log_pth, model_pth)
 
         save_result(pkl_pth, block_str_lst, test_strs_lst, loss_lst)
         # plot(predictions, targets, test_size)

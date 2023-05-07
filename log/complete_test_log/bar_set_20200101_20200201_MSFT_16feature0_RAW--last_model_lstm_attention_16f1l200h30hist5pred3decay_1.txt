@@ -1,0 +1,181 @@
+1
+blocking column 0:close
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.19 seconds
+Time spent on data loading: 1.54 seconds
+Time spent on prediction: 46.34 seconds
+Time spent on decision making: 13.48 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 61.65 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 1:vwap
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 2.07 seconds
+Time spent on prediction: 83.94 seconds
+Time spent on decision making: 91.48 seconds
+Time spent on printing: 0.09 seconds
+Time spent on plotting: 0.01 seconds
+
+back test completed in 177.70 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 2:EMA_14
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.94 seconds
+Time spent on prediction: 61.89 seconds
+Time spent on decision making: 45.00 seconds
+Time spent on printing: 0.08 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 109.02 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 3:DEMA_10
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.77 seconds
+Time spent on prediction: 60.33 seconds
+Time spent on decision making: 44.17 seconds
+Time spent on printing: 0.07 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 106.46 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 4:TEMA_10
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.09 seconds
+Time spent on data loading: 1.62 seconds
+Time spent on prediction: 39.07 seconds
+Time spent on decision making: 4.90 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 45.78 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 5:BBL_5_2.0
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.37 seconds
+Time spent on prediction: 38.19 seconds
+Time spent on decision making: 5.24 seconds
+Time spent on printing: 0.05 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 44.97 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 6:BBM_5_2.0
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.76 seconds
+Time spent on prediction: 55.94 seconds
+Time spent on decision making: 36.00 seconds
+Time spent on printing: 0.07 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 93.89 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 7:BBU_5_2.0
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.63 seconds
+Time spent on prediction: 39.10 seconds
+Time spent on decision making: 5.43 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 46.34 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 8:BBB_5_2.0
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.53 seconds
+Time spent on prediction: 38.99 seconds
+Time spent on decision making: 5.78 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 46.47 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 9:BBP_5_2.0
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.51 seconds
+Time spent on prediction: 38.86 seconds
+Time spent on decision making: 5.41 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 45.95 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 10:RSI_14
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.47 seconds
+Time spent on prediction: 38.00 seconds
+Time spent on decision making: 4.95 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 44.58 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 11:CCI_14_0.015
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.53 seconds
+Time spent on prediction: 38.19 seconds
+Time spent on decision making: 4.49 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 44.39 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 12:ADX_14
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.64 seconds
+Time spent on prediction: 40.01 seconds
+Time spent on decision making: 7.05 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 48.88 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 13:edt_dayofweek
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.09 seconds
+Time spent on data loading: 1.68 seconds
+Time spent on prediction: 39.02 seconds
+Time spent on decision making: 5.53 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 46.41 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 14:edt_scaled
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 1.61 seconds
+Time spent on prediction: 41.88 seconds
+Time spent on decision making: 10.33 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 54.01 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 15:is_core_time
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+Time spent on initialization: 0.09 seconds
+Time spent on data loading: 1.56 seconds
+Time spent on prediction: 38.50 seconds
+Time spent on decision making: 4.82 seconds
+Time spent on printing: 0.06 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 45.06 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+Test completed in 1078.72 seconds
+model/last_model_lstm_attention_16f1l200h30hist5pred3decay.pt
+saving results to: lists_no_multithread_MSFT_block.pkl
+results saved

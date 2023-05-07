@@ -1,0 +1,9 @@
+blocking column 0:close
+Time spent on initialization: 0.20 seconds
+Time spent on data loading: 0.31 seconds
+Time spent on prediction: 7.35 seconds
+Time spent on decision making: 0.88 seconds
+Time spent on printing: 0.01 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 8.76 seconds

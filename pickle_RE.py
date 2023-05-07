@@ -3,7 +3,7 @@ import re
 import numpy as np
 import pandas as pd
 
-with open('lists_no_multithread_MSFT_block.pkl', 'rb') as f:
+with open('lists_no_multithread_MSFT_block_tmp.pkl', 'rb') as f:
     loaded_lists = pickle.load(f)
 
 block_str_lst, test_strs_lst, loss_lst = loaded_lists
@@ -152,7 +152,7 @@ df_sorted = df.sort_values('account_growth')
 print(df_sorted)
 
 
-# df_sorted.to_csv('../data/feature_efficacy_test_AAPL_FULL.csv', index=False)
+df_sorted.to_csv('data/feature_efficacy_test_MSFT_FULL.csv', index=False)
 
 
 

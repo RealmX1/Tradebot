@@ -1,0 +1,226 @@
+1
+blocking column 0:close
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4711, ✓ long: 3150, ✓ long pct: 66.86%, long profit pct: 0.0296%, occupancy rate: 55.34%, 
+Account Value:  346630.89, accont growth: 246.63%, stock growth:  27.92%, pct growth diff: 170.98%, interval per trade: 18.84, i/t since last plot: 18.84, 
+Time spent on initialization: 0.17 seconds
+Time spent on data loading: 10.67 seconds
+Time spent on prediction: 309.49 seconds
+Time spent on decision making: 122.88 seconds
+Time spent on printing: 0.43 seconds
+Time spent on plotting: 0.03 seconds
+
+back test completed in 443.84 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 1:vwap
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4648, ✓ long: 3148, ✓ long pct: 67.73%, long profit pct: 0.0293%, occupancy rate: 54.32%, 
+Account Value:  335895.77, accont growth: 235.90%, stock growth:  27.92%, pct growth diff: 162.58%, interval per trade: 19.10, i/t since last plot: 19.09, 
+Time spent on initialization: 0.09 seconds
+Time spent on data loading: 10.13 seconds
+Time spent on prediction: 267.91 seconds
+Time spent on decision making: 51.63 seconds
+Time spent on printing: 0.40 seconds
+Time spent on plotting: 0.03 seconds
+
+back test completed in 330.35 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 2:EMA_14
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4603, ✓ long: 3130, ✓ long pct: 68.00%, long profit pct: 0.0315%, occupancy rate: 54.08%, 
+Account Value:  367558.11, accont growth: 267.56%, stock growth:  27.92%, pct growth diff: 187.34%, interval per trade: 19.28, i/t since last plot: 19.28, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.88 seconds
+Time spent on prediction: 257.40 seconds
+Time spent on decision making: 42.24 seconds
+Time spent on printing: 0.35 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 309.12 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 3:DEMA_10
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4624, ✓ long: 3140, ✓ long pct: 67.91%, long profit pct: 0.0310%, occupancy rate: 54.18%, 
+Account Value:  361597.16, accont growth: 261.60%, stock growth:  27.92%, pct growth diff: 182.68%, interval per trade: 19.20, i/t since last plot: 19.19, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 10.13 seconds
+Time spent on prediction: 255.78 seconds
+Time spent on decision making: 30.00 seconds
+Time spent on printing: 0.41 seconds
+Time spent on plotting: 0.03 seconds
+
+back test completed in 296.59 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 4:TEMA_10
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4622, ✓ long: 3134, ✓ long pct: 67.81%, long profit pct: 0.0301%, occupancy rate: 54.33%, 
+Account Value:  347047.86, accont growth: 247.05%, stock growth:  27.92%, pct growth diff: 171.30%, interval per trade: 19.20, i/t since last plot: 19.20, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 9.51 seconds
+Time spent on prediction: 249.77 seconds
+Time spent on decision making: 28.31 seconds
+Time spent on printing: 0.39 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 288.25 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 5:BBL_5_2.0
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4657, ✓ long: 3148, ✓ long pct: 67.60%, long profit pct: 0.0278%, occupancy rate: 54.36%, 
+Account Value:  314073.01, accont growth: 214.07%, stock growth:  27.92%, pct growth diff: 145.52%, interval per trade: 19.06, i/t since last plot: 19.06, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 9.60 seconds
+Time spent on prediction: 250.50 seconds
+Time spent on decision making: 27.33 seconds
+Time spent on printing: 0.39 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 288.09 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 6:BBM_5_2.0
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4627, ✓ long: 3138, ✓ long pct: 67.82%, long profit pct: 0.0303%, occupancy rate: 54.32%, 
+Account Value:  349980.87, accont growth: 249.98%, stock growth:  27.92%, pct growth diff: 173.59%, interval per trade: 19.18, i/t since last plot: 19.18, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.41 seconds
+Time spent on prediction: 242.34 seconds
+Time spent on decision making: 25.32 seconds
+Time spent on printing: 0.34 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 276.66 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 7:BBU_5_2.0
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4574, ✓ long: 3115, ✓ long pct: 68.10%, long profit pct: 0.0282%, occupancy rate: 51.79%, 
+Account Value:  314145.83, accont growth: 214.15%, stock growth:  27.92%, pct growth diff: 145.58%, interval per trade: 19.41, i/t since last plot: 19.40, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.79 seconds
+Time spent on prediction: 244.91 seconds
+Time spent on decision making: 25.74 seconds
+Time spent on printing: 0.36 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 280.05 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 8:BBB_5_2.0
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4587, ✓ long: 3099, ✓ long pct: 67.56%, long profit pct: 0.0284%, occupancy rate: 54.22%, 
+Account Value:  317691.33, accont growth: 217.69%, stock growth:  27.92%, pct growth diff: 148.35%, interval per trade: 19.35, i/t since last plot: 19.35, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.99 seconds
+Time spent on prediction: 248.44 seconds
+Time spent on decision making: 26.06 seconds
+Time spent on printing: 0.36 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 284.11 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 9:BBP_5_2.0
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 3968, ✓ long: 2647, ✓ long pct: 66.71%, long profit pct: 0.0348%, occupancy rate: 59.83%, 
+Account Value:  347064.43, accont growth: 247.06%, stock growth:  27.92%, pct growth diff: 171.31%, interval per trade: 22.37, i/t since last plot: 22.36, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 10.16 seconds
+Time spent on prediction: 255.28 seconds
+Time spent on decision making: 28.41 seconds
+Time spent on printing: 0.39 seconds
+Time spent on plotting: 0.03 seconds
+
+back test completed in 294.51 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 10:RSI_14
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 3830, ✓ long: 2569, ✓ long pct: 67.08%, long profit pct: 0.0285%, occupancy rate: 54.62%, 
+Account Value:  262310.09, accont growth: 162.31%, stock growth:  27.92%, pct growth diff: 105.06%, interval per trade: 23.18, i/t since last plot: 23.17, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 9.59 seconds
+Time spent on prediction: 263.15 seconds
+Time spent on decision making: 28.44 seconds
+Time spent on printing: 0.38 seconds
+Time spent on plotting: 0.03 seconds
+
+back test completed in 301.83 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 11:CCI_14_0.015
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 3002, ✓ long: 1941, ✓ long pct: 64.66%, long profit pct: 0.0462%, occupancy rate: 58.75%, 
+Account Value:  357219.75, accont growth: 257.22%, stock growth:  27.92%, pct growth diff: 179.25%, interval per trade: 29.57, i/t since last plot: 29.56, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.95 seconds
+Time spent on prediction: 245.70 seconds
+Time spent on decision making: 25.19 seconds
+Time spent on printing: 0.36 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 280.45 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 12:ADX_14
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4726, ✓ long: 3203, ✓ long pct: 67.77%, long profit pct: 0.0275%, occupancy rate: 52.16%, 
+Account Value:  316645.17, accont growth: 216.65%, stock growth:  27.92%, pct growth diff: 147.53%, interval per trade: 18.78, i/t since last plot: 18.78, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.76 seconds
+Time spent on prediction: 245.98 seconds
+Time spent on decision making: 25.10 seconds
+Time spent on printing: 0.36 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 280.45 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 13:edt_dayofweek
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4741, ✓ long: 3237, ✓ long pct: 68.28%, long profit pct: 0.0289%, occupancy rate: 51.02%, 
+Account Value:  337979.22, accont growth: 237.98%, stock growth:  27.92%, pct growth diff: 164.21%, interval per trade: 18.72, i/t since last plot: 18.72, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.10 seconds
+Time spent on prediction: 242.42 seconds
+Time spent on decision making: 23.56 seconds
+Time spent on printing: 0.33 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 274.66 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 14:edt_scaled
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4665, ✓ long: 3151, ✓ long pct: 67.55%, long profit pct: 0.0266%, occupancy rate: 53.83%, 
+Account Value:  298028.88, accont growth: 198.03%, stock growth:  27.92%, pct growth diff: 132.98%, interval per trade: 19.03, i/t since last plot: 19.02, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.82 seconds
+Time spent on prediction: 242.32 seconds
+Time spent on decision making: 23.72 seconds
+Time spent on printing: 0.33 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 275.43 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column 15:is_core_time
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4671, ✓ long: 3183, ✓ long pct: 68.14%, long profit pct: 0.0296%, occupancy rate: 54.98%, 
+Account Value:  344543.63, accont growth: 244.54%, stock growth:  27.92%, pct growth diff: 169.34%, interval per trade: 19.00, i/t since last plot: 19.00, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.28 seconds
+Time spent on prediction: 244.54 seconds
+Time spent on decision making: 23.85 seconds
+Time spent on printing: 0.33 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 277.24 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+blocking column None:N/A
+decision: n:    0, timestamp: 2020-06-30 23:46:00+00:00
+decision: n:    0, price: 203.20, unfilled buy & sell:    0,    0, long: 4642, ✓ long: 3149, ✓ long pct: 67.84%, long profit pct: 0.0304%, occupancy rate: 54.19%, 
+Account Value:  353035.39, accont growth: 253.04%, stock growth:  27.92%, pct growth diff: 175.98%, interval per trade: 19.12, i/t since last plot: 19.12, 
+Time spent on initialization: 0.08 seconds
+Time spent on data loading: 8.20 seconds
+Time spent on prediction: 242.97 seconds
+Time spent on decision making: 23.70 seconds
+Time spent on printing: 0.33 seconds
+Time spent on plotting: 0.02 seconds
+
+back test completed in 275.44 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200701_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_1th_test.png
+Test completed in 5091.86 seconds
+model/last_model_lstm_attention_16f1l200h30hist5pred3decay.pt
+saving results to: lists_no_multithread_MSFT_block_tmp.pkl
+results saved

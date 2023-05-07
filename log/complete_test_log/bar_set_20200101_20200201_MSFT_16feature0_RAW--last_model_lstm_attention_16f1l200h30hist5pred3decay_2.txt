@@ -1,0 +1,19 @@
+2
+2
+blocking column None:N/A
+decision: n:    0, timestamp: 2020-01-31 23:40:00+00:00
+decision: n:    0, price: 170.10, unfilled buy & sell:    0,    0, long:  722, ✓ long:  514, ✓ long pct: 71.19%, long profit pct: 0.0269%, occupancy rate: 50.33%, 
+Account Value:  119292.17, accont growth:  19.29%, stock growth:   7.08%, pct growth diff:  11.40%, interval per trade: 18.49, i/t since last plot: 18.46, 
+Time spent on initialization: 0.20 seconds
+Time spent on data loading: 1.60 seconds
+Time spent on prediction: 41.60 seconds
+Time spent on decision making: 4.90 seconds
+Time spent on printing: 0.07 seconds
+Time spent on plotting: 0.00 seconds
+
+back test completed in 48.40 seconds
+saving figure to ../TradebotGraph/bar_set_20200101_20200201_MSFT_16feature0_RAW--last_model_lstm_attention_16f1l200h30hist5pred3decay_9.31decay_2th_test.png
+Test completed in 54.47 seconds
+model/last_model_lstm_attention_16f1l200h30hist5pred3decay.pt
+saving results to: lists_no_multithread_MSFT_block_tmp.pkl
+results saved
