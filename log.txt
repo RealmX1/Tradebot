@@ -1,0 +1,2 @@
+log.txt only
+log.txt and all_action_log.txt

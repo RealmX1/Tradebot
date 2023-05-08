@@ -41,11 +41,11 @@ post = 'raw'
 data_path = '../data/'
     
 
-def get_bars(symbol_or_symbols, timeframe, start, end, limit):
+def get_bars(symbol_or_symbols, timeframe, start, end, limit, adjustment = 'all'):
     # Test single symbol request
     
     request = StockBarsRequest(
-        symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit, adjustment='raw', feed = data_source
+        symbol_or_symbols=symbol_or_symbols, timeframe=timeframe, start=start, end=end, limit=limit, adjustment=adjustment, feed = data_source
     )
 
     print('Start request')
@@ -54,7 +54,7 @@ def get_bars(symbol_or_symbols, timeframe, start, end, limit):
 
     return bar_set
 
-def get_trades(symbol_or_symbols, timeframe, start, end, limit):
+def get_trades(symbol_or_symbols, timeframe, start, end, limit, adjustment = None):
     # Test single symbol request
     
     request = StockTradesRequest(
@@ -129,7 +129,7 @@ def concat_symbols(df):
     return df_concat
 
 # saves pkl to 
-def get_and_process_data(symbols, timeframe, start, end, limit = None, download=False, pre = '', post = post, dp = data_path, type = 'bars'):
+def get_and_process_data(symbols, timeframe, start, end, limit = None, download=False, pre = '', post = post, dp = data_path, type = 'bars', adjustment ='all'):
     if type == 'bars':
         get_data = get_bars
         pre = pre + 'bar_set'
@@ -147,7 +147,7 @@ def get_and_process_data(symbols, timeframe, start, end, limit = None, download=
     start_time = time.time()
     if download:
         print(f'Start getting {type}:')
-        dataset = get_data(symbols, timeframe, start, end, limit)
+        dataset = get_data(symbols, timeframe, start, end, limit, adjustment = adjustment)
         with open(pkl_pth, 'wb') as f:
             pickle.dump(dataset, f)
         print(f'pkl download completed in {time.time()-start_time:.2f} seconds')
@@ -359,20 +359,20 @@ def main():
     start = datetime(2020,1,1) # 2020-01-01 is wednesday
     end = datetime(2020,7,1) 
     # end = datetime.now() 
-    time_strs = ['20200101_20200201', '20200201_20200301', '20200301_20200701']
-    dfs = read_multiple_raw_data(time_strs, type = 'trades')
+    # time_strs = ['20200101_20200201', '20200201_20200301', '20200301_20200701']
+    # dfs = read_multiple_raw_data(time_strs, type = 'trades')
 
-    df = combine_bars(dfs, type = 'trades')
+    # df = combine_bars(dfs, type = 'trades')
 
-    start_str = start.strftime('%Y%m%d')
-    end_str = end.strftime('%Y%m%d')
-    df.to_csv(f'{data_path}csv/trade_set_{start_str}_{end_str}_{post}.csv', index=True, index_label=['symbol', 'timestamp'])
+    # start_str = start.strftime('%Y%m%d')
+    # end_str = end.strftime('%Y%m%d')
+    # df.to_csv(f'{data_path}csv/trade_set_{start_str}_{end_str}_{post}.csv', index=True, index_label=['symbol', 'timestamp'])
     
     # get_load_of_data(symbols, timeframe, start, end, limit = None, download=False, type = 'trades')
     # thread = threading.Thread(target=thread_function(time.time()))
     # thread.start()
     print('start getting data\n')
-    # get_and_process_data(symbols, timeframe, start, end, limit = None, download=True, pre = '', post = post, type = 'bars')
+    get_and_process_data(symbols, timeframe, start, end, limit = None, download=True, pre = '', post = post, type = 'bars', adjustment = 'raw')
 
 
     # thread.join()

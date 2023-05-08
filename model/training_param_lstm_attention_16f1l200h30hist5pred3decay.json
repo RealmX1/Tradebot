@@ -1,1 +1,1 @@
-{"encoder_learning_rate": 1.516442372491721e-05, "decoder_learning_rate": 1.516442372491721e-05, "best_prediction": 75.65889515098397, "best_weight_decay": 0.0}
+{"encoder_learning_rate": 9.768307577765995e-06, "decoder_learning_rate": 9.768307577765995e-06, "best_prediction": 77.36452616758943, "best_k": 0, "epoch_num": 19}

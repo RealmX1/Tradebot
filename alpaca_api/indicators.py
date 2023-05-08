@@ -73,23 +73,39 @@ def append_indicators(df):
 
     # df.ta.macd(append=True)
 
+    df['next_high'] = df['high'].shift(-1)
+    df['next_fall'] = df['low'].shift(-1)
+
     df.dropna(inplace = True)
-    columns_2_drop_lst = ['open', 'high', 'low', 'volume', 'trade_count', \
-                     f"DMN_{IndicatorParam.ADX.value['length']}", f"DMP_{IndicatorParam.ADX.value['length']}"]
-    
+    df_reset = df.reset_index()
+    new_df = df_reset[['symbol','timestamp', 'next_high', 'next_fall']]
+    mock_trade_df = pd.melt(new_df, id_vars=['symbol','timestamp'], value_vars=['next_high', 'next_fall'], var_name='price_type', value_name='price')
+    mock_trade_df.set_index('timestamp', inplace=True)
+    mock_trade_df.sort_index(inplace=True)
+    columns_2_drop_lst =    ['open', 'high', 'low', 'volume', 'trade_count', \
+                            f"DMN_{IndicatorParam.ADX.value['length']}", f"DMP_{IndicatorParam.ADX.value['length']}", \
+                            'next_fall', 'next_high']
+    # next_high and next_fall columns can be used to approximate minute level trade action. 
+    # will delete them after creating new dataframe and saving it.
+
     for column in columns_2_drop_lst:
         if column in df.columns:
             df.drop(columns=column, inplace=True)
-    col_list = list(df.columns)
-    
-    return col_list
+    feature_list = list(df.columns)
 
+    # print("col_list: ", feature_list)
+    return feature_list, mock_trade_df
 
 
 def main():
-    features_hist_pth = 'features_hist.json'
-    with open(features_hist_pth, 'r') as f:
-        feature_hist_dict = json.load(f)
+    import os
+    import ast
+    from datetime import datetime
+    features_hist_pth = 'features_hist.csv'
+    if os.path.exists(features_hist_pth):
+        feature_hist_df = pd.read_csv(features_hist_pth)
+    else:
+        feature_hist_df = pd.DataFrame(columns=['feature_num', 'timestamp','feature_lst', 'id'])
     # print(feature_hist_dict)
     
     # time_str = '20200101_20230417'
@@ -116,58 +132,70 @@ def main():
     start_time = time.time()
     print('start calculating indicators...')
 
-    col_lst = []
-    col_num_str = ''
-    for name, df in groups:
+    feature_lst = []
+    for symbol, df in groups:
         start_time2 = time.time()
-        # name: the name of the group (in this case, the unique values in 'index_1')
+        # symbol: the symbol of the group (in this case, the unique values in 'index_1')
         # group_df: the dataframe containing the group data
         
         # Do something with the group dataframe, for example:
-        print(f'Group {name}:')
+        print(f'Group {symbol}:')
         
-        col_lst = append_indicators(df)
-        col_num_str = str(len(col_lst))
+        feature_lst, mock_trade_df = append_indicators(df)
+        assert 2*df.shape[0] == mock_trade_df.shape[0]
         
         calculation_time = time.time() - start_time2
         total_calculation_time += calculation_time
-        print(f'finished calculating indicators for {name} in {calculation_time} seconds')
+        print(f'finished calculating indicators for {symbol} in {calculation_time} seconds')
         start_time2 = time.time()
 
-        if not (col_num_str in feature_hist_dict):
-            feature_hist_dict[col_num_str] = [col_lst]
-        else:
-            exist = False
-            for lst in feature_hist_dict[col_num_str]:
-                if set(lst) == set(col_lst):
-                    exist = True
-            
-            if not exist: 
-                feature_hist_dict[col_num_str].append(col_lst)
+        
+        feature_num = len(feature_lst)
+        exist_row = False
+        id = 0
+        for index, row in feature_hist_df.iterrows():
+            feature_set = set(ast.literal_eval(row['feature_lst']))
+            row_feature_num = int(row['feature_num'])
+            row_id = int(row['id'])
+            print('row: ',feature_set)
+            print('features: ', set(feature_lst))
+            if row_feature_num == feature_num:
+                id = max(id, row_id)
+                if feature_set == set(feature_lst):
+                    exist_row = True
+                    id = row_id
+                    print('found existing feature_hist')
+                    break
 
-        id = feature_hist_dict[col_num_str].index(col_lst)
-        data_type = f'{col_num_str}feature{id}' # later used to construct save_path
+        # If no existing record found, insert a new row
+        if not exist_row:
+            current_timestamp = datetime.now()
+            new_row = {'feature_num': feature_num, 'timestamp': current_timestamp, 'feature_lst': feature_lst, 'id': id}
+            feature_hist_df = feature_hist_df.append(new_row, ignore_index=True)
 
-        save_path = f'../data/csv/bar_set_{time_str}_{name}_{data_type}.csv'
+        data_type = f'{feature_num}feature{id}' # later used to construct save_path
+
+        save_path = f'../data/csv/bar_set_{time_str}_{symbol}_{data_type}.csv'
+        mock_trade_path = f'../data/csv/mock_trade_{time_str}_{symbol}.csv'
         print('start saving to: ', save_path)
         df.to_csv(save_path, index=True, index_label=['symbol', 'timestamp'])
+        mock_trade_df.to_csv(mock_trade_path)
         csv_saving_time = time.time() - start_time2
         total_csv_saving_time += csv_saving_time
-        print(f'finished calculating indicators for {name} in {csv_saving_time:4.2f} seconds')
+        print(f'finished calculating indicators for {symbol} in {csv_saving_time:4.2f} seconds')
         # df.to_csv(f'data/csv/test.csv', index=True, index_label=['symbol', 'timestamp'])
 
     print(f'finished calculating indicators for all symbols in {time.time() - start_time} seconds')
-    print(col_lst)
-    print(f'col num: {col_num_str}')
+    print(feature_lst)
+    print(f'feature num: {feature_num}')
 
     # data = df.values
     # plot close_price
     # plt.plot(data[:,3])
     # plt.show()
     
-    print(feature_hist_dict)
-    with open(features_hist_pth, 'w') as f:
-        json.dump(feature_hist_dict, f)
+    # print(feature_hist_dict)
+    feature_hist_df.to_csv(features_hist_pth, index=False)
 
 if __name__ == '__main__':
     main()

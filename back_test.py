@@ -12,6 +12,7 @@ import torch
 import torch.nn as nn 
 import pandas as pd
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 # np.set_printoptions(precision=4, suppress=True) 
 
@@ -281,14 +282,19 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df = None, t
 
             timers[3] += time.time() - st # time spent on decision making
             st = time.time()
-
+            
+            long_count, profitable_long_count, unfilled_buy,\
+                short_count, profitable_short_count, unfilled_sell,\
+                mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
+            
+            account_growth = account_value/start_balance*100-100
+            stock_growth = price/start_price*100-100
+            pct_growth_diff = (account_growth+100)/(stock_growth+100)*100-100
             if (decision[0] != 'n' and to_print) or i == (len(data_loader)-1):
                 # first_print_str = f'decision: {decision[0]}:{decision[1]:>5}, timestamp: {timestamp[0]}'
                 # print_n_log(complete_log_pth, first_print_str)
 
-                long_count, profitable_long_count, unfilled_buy,\
-                short_count, profitable_short_count, unfilled_sell,\
-                mean_long_profit_pct, mean_short_profit_pct = policy.get_trade_stat()
+                
 
                 profitable_long_pct = profitable_long_count/long_count*100
                 
@@ -308,9 +314,9 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df = None, t
                         # f'\u2713 short pct: {profitable_short_count/short_count*100:>5.2f}%, ' + \
                         # f'short profit pct: {mean_short_profit_pct:>5.3f}%'  
 
-                account_growth = account_value/start_balance*100-100
-                stock_growth = price/start_price*100-100
-                pct_growth_diff = (account_growth+100)/(stock_growth+100)*100-100
+                # account_growth = account_value/start_balance*100-100
+                # stock_growth = price/start_price*100-100
+                # pct_growth_diff = (account_growth+100)/(stock_growth+100)*100-100
                 interval_per_trade = i/(long_count+short_count)
                 ipt_since_last_plot = (i-prev_interval)/(long_count+short_count-prev_long_count-prev_short_count + 1)
                 account_n_stock_str = \
@@ -356,7 +362,6 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df = None, t
         average_loss /= i
 
         global result_csv_pth, csv_header, model_pth, data_pth
-        # ['test_time', 'model_pth', 'data_pth', 'symbol', 'account_value', 'account_growth', 'stock_growth', 'pct_growth_diff', 'interval_per_trade', 'long_count', 'profitable_long_count', 'mean_long_profit_pct', 'occupancy_rate']
         row_dict = {
             'symbol': None,
             'blocked_col_name': blocked_col_name,
@@ -392,7 +397,7 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df = None, t
         print_n_log(complete_log_pth, f'back test completed in {back_test_time:.2f} seconds')  
         plot(price_hist, account_value_hist, buy_decisions, sell_decisions, stock_growth, account_growth, ax1, ax2, annotations, show = to_plot)
         
-        average_loss /= i
+        raise KeyboardInterrupt
         
         
 
@@ -418,31 +423,41 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df = None, t
 def locate_cols(strings_list, substring):
     return [i for i, string in enumerate(strings_list) if substring in string]
 
-def save_result(pkl_pth, block_str_lst = [], test_strs_lst = [], loss_lst = []):
-    global complete_log_pth
-    print_n_log(complete_log_pth, f'saving results to: {pkl_pth}')
-    with open(pkl_pth, 'wb') as f:
-        pickle.dump((block_str_lst, test_strs_lst, loss_lst), f)
-    
-    print_n_log(complete_log_pth, 'results saved')
-
 def main():
     global data_pth, model_pth, complete_log_pth, result_log_pth
-    block_test = True
+    
+    block_test = False
     to_print = True
     to_plot = True
-    trade_data = False
+    trade_data = True
+    mock_trade = True
 
     weight_decay = 9.31
 
     if block_test:
-        to_print = False
-        to_plot = False
+        to_print = True
+        to_plot = True
 
+
+    should_log_result = False
+    while True:
+        tolog = input("Do you want to log the result? (y/n) ")
+        if tolog == 'y':
+            print_n_log(result_log_pth, f'\nBlock test: {block_test}')
+            print_n_log(result_log_pth, f'\n{datetime.now()}Block test: {block_test}')
+            purpose = input("What is the purpose of this back_test? ")
+            print_n_log(result_log_pth, f'purpose: {purpose}')
+            should_log_result = True
+            break
+        elif tolog == 'n':
+            result_log_pth = None
+            break
+    
+    
 # dataname and model name are produced first, as they are used to make the log file paths.
     # data source
     start_time = time.time()
-    time_str = '20200101_20200201'
+    time_str = '20200101_20200701'
     symbol = 'MSFT'
     data_type = '16feature0'
     data_name = f'bar_set_{time_str}_{symbol}_{data_type}_RAW'
@@ -456,12 +471,17 @@ def main():
 
 
     if trade_data:
-        trade_data_pth = f'data/csv/trade_set_{time_str}_raw.csv'
-        trade_df = pd.read_csv(trade_data_pth, index_col = ['symbol'])
-        # print_n_log(complete_log_pth, trade_df.head(3))
+        if mock_trade:
+            mock_trade_data_pth = f'data/csv/mock_trade_{time_str}_{symbol}.csv'
+            trade_df = pd.read_csv(mock_trade_data_pth)
+        else:
+            trade_data_pth = f'data/csv/trade_set_{time_str}_raw.csv'
+            trade_df = pd.read_csv(trade_data_pth)
+            # print_n_log(complete_log_pth, trade_df.head(3))
         trade_df['timestamp'] = pd.to_datetime(trade_df['timestamp'])
         trade_df['rounded_timestamp'] = trade_df['timestamp'].dt.round('1min')
         trade_df.set_index('rounded_timestamp', inplace=True)
+        print(trade_df.head(5))
     else:
         trade_df = None
     # print_n_log(complete_log_pth, trade_df.head(3))
@@ -471,7 +491,6 @@ def main():
     block_str = 'noblock'
     if block_test:
         block_str = 'block'
-    pkl_pth_template = f'log/block_test_stat_log/lists_{data_name}--{model_name}_{block_str}_{{i_th_attmpt}}.pkl'
 
     # log_pth and pic_pth_template
     complete_log_pth_template = f'log/complete_test_log/{data_name}--{model_name}_{{}}.txt'
@@ -480,7 +499,6 @@ def main():
     i = 0
     while True:
         pic_pth_template_2 = pic_pth_template.format(i_th_attempt = i, blocked_col_name = '{blocked_col_name}')
-        pkl_pth = pkl_pth_template.format(i_th_attmpt = i)
 
         if not os.path.exists(complete_log_pth := complete_log_pth_template.format(i)): break
         i += 1
@@ -492,16 +510,7 @@ def main():
     weights = arr.reshape(1, prediction_window)
     
     #
-    while True:
-        tolog = input("Do you want to log the result? (y/n) ")
-        if tolog == 'y':
-            print_n_log(result_log_pth, f'\nBlock test: {block_test}')
-            purpose = input("What is the purpose of this back_test? ")
-            print_n_log(result_log_pth, f'purpose: {purpose}')
-            break
-        elif tolog == 'n':
-            result_log_pth = None
-            break
+    
 
 
     test_loader, col_names = \
@@ -514,56 +523,47 @@ def main():
                           test = True)
 
     # str logger
-    try:
-        block_str_lst = []
-        test_strs_lst = []
-        loss_lst = []
-        with torch.no_grad():
-            n = 0
-            if block_test:
-                n = feature_num
 
-            for x in range(n+1):
-                col_name = 'None'
-                if not block_test or x == n: 
-                    x = None
-                else:
-                    col_name = col_names[x]
-                block_str = f'blocking column {x}:{col_name}'
+    block_str_lst = []
+    test_strs_lst = []
+    loss_lst = []
+    with torch.no_grad():
+        n = 0
+        if block_test:
+            n = feature_num
 
-                pic_pth = pic_pth_template_2.format(blocked_col_name = col_name)
-                print_n_log(complete_log_pth, block_str)
+        for x in range(n+1):
+            col_name = 'None'
+            if not block_test or x == n: 
+                x = None
+            else:
+                col_name = col_names[x]
+            block_str = f'blocking column {x}:{col_name}'
+
+            pic_pth = pic_pth_template_2.format(blocked_col_name = col_name)
+            print_n_log(complete_log_pth, block_str)
+            
+            account = Account(initial_capital, ['MSFT'])
+            # policy = RandomPolicy(account) # back ground has 0.023% of long profit pct... but it is only to do so in a bull market, and can only follow stock price; while the algorithm 
+            policy = SimpleLongShort(account, buy_threshold=0.002 * pct_pred_multiplier, trade_data = trade_data)
+            
+            try:
+                buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
+                    back_test(policy, model, test_loader, col_names, weights, trade_df, trade_data = trade_data, num_epochs = 1, blocked_col = x, blocked_col_name = col_name, to_plot = to_plot, to_print = to_print)
                 
-                account = Account(initial_capital, ['MSFT'])
-                # policy = RandomPolicy(account) # back ground has 0.023% of long profit pct... but it is only to do so in a bull market, and can only follow stock price; while the algorithm 
-                policy = SimpleLongShort(account, buy_threshold=0.002 * pct_pred_multiplier, trade_data = False)
-                
-                try:
-                    buy_decisions, sell_decisions, account_value_hist, price_hist, start_price, end_price, end_strs, loss= \
-                        back_test(policy, model, test_loader, col_names, weights, trade_df, trade_data = trade_data, num_epochs = 1, blocked_col = x, blocked_col_name = col_name, to_plot = to_plot, to_print = to_print)
-                    
-                    plt.savefig(pic_pth)
-                    print_n_log(complete_log_pth, f'saving figure to {pic_pth}')
-                except KeyboardInterrupt:
-                    plt.savefig(pic_pth)
-                    print_n_log(complete_log_pth, f'saving figure to {pic_pth}')
-                
-                block_str_lst.append(block_str)
-                test_strs_lst.append(end_strs)
-                loss_lst.append(loss)
-            # print_n_log(complete_log_pth, f'account value: {account_value_hist[-1]:.2f}')
-            # print_n_log(complete_log_pth, f'account growth: {account_value_hist[-1]/initial_capital*100 - 100:.2f}%')
-            # print_n_log(complete_log_pth, f'stock value change: {end_price/start_price*100 - 100:.2f}%')
+                plt.savefig(pic_pth)
+                print_n_log(complete_log_pth, f'saving figure to {pic_pth}')
+            except KeyboardInterrupt:
+                plt.savefig(pic_pth)
+                print_n_log(complete_log_pth, f'saving figure to {pic_pth}')
+            
+            # block_str_lst.append(block_str)
+            # test_strs_lst.append(end_strs)
+            # loss_lst.append(loss)
 
-        print_n_log(complete_log_pth, f'Test completed in {time.time()-start_time:.2f} seconds')
-        print_n_log(complete_log_pth, model_pth)
+    print_n_log(complete_log_pth, f'Test completed in {time.time()-start_time:.2f} seconds')
+    print_n_log(complete_log_pth, model_pth)
 
-        save_result(pkl_pth, block_str_lst, test_strs_lst, loss_lst)
-        # plot(predictions, targets, test_size)
-        # plot(raw_predictions, raw_targets, test_size)
-    except KeyboardInterrupt or Exception or TypeError:
-        save_result(pkl_pth, block_str_lst, test_strs_lst, loss_lst)
-        pass
 
 if __name__ == "__main__":
     main()

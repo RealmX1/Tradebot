@@ -55,13 +55,35 @@ row_dict = {
 }
 
 # Check if the CSV file exists
-if not os.path.exists(csv_file_path):
-    # If not, create the file with the header
-    with open(csv_file_path, 'w', newline='') as csvfile:
-        csv_writer = csv.DictWriter(csvfile, fieldnames=header)
-        csv_writer.writeheader()
+# if not os.path.exists(csv_file_path):
+#     # If not, create the file with the header
+#     with open(csv_file_path, 'w', newline='') as csvfile:
+#         csv_writer = csv.DictWriter(csvfile, fieldnames=header)
+#         csv_writer.writeheader()
 
-# Append the new row to the CSV file
-with open(csv_file_path, 'a', newline='') as csvfile:
-    csv_writer = csv.DictWriter(csvfile, fieldnames=header)
-    csv_writer.writerow(row_dict)
+# # Append the new row to the CSV file
+# with open(csv_file_path, 'a', newline='') as csvfile:
+#     csv_writer = csv.DictWriter(csvfile, fieldnames=header)
+#     csv_writer.writerow(row_dict)
+
+import pandas as pd
+
+# Create a sample DataFrame
+data = {'close': [110, 120, 130, 140, 150],
+        'high': [115, 125, 135, 145, 155],
+        'low': [105, 115, 125, 135, 145]}
+df = pd.DataFrame(data)
+
+# Shift 'high' and 'low' columns up one row
+df['shifted_high'] = df['high'].shift(-1)
+df['shifted_low'] = df['low'].shift(-1)
+print(df)
+
+# Create 'fall' and 'rise' columns based on conditions
+df['fall'] = df['shifted_high'] < df['close']
+df['rise'] = df['shifted_low'] > df['close']
+
+# Drop the temporary 'shifted_high' and 'shifted_low' columns
+df.drop(['shifted_high', 'shifted_low'], axis=1, inplace=True)
+
+print(df)
