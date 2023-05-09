@@ -563,6 +563,10 @@ def main():
 
     print_n_log(complete_log_pth, f'Test completed in {time.time()-start_time:.2f} seconds')
     print_n_log(complete_log_pth, model_pth)
+    if(should_log_result):
+        purpose = input("Do you want to log the result?")
+        print_n_log(result_log_pth, f'Result Interpretation: {purpose}')
+    
 
 
 if __name__ == "__main__":

@@ -164,10 +164,11 @@ import pytz
 
 
 # import pandas_ta as ta
-
-df = pd.read_csv('../data/csv/trade_set_20200101_20200201_raw.csv', index_col = ['symbol', 'timestamp'])
-print(df.columns.tolist())
-df = df.drop(['exchange', 'id', 'conditions', 'tape'], axis = 1)
-print(df.columns.tolist())
-df_sorted = df.sort_index(level='timestamp')
-df.to_csv('../data/csv/trade_set_20200101_20200201_raw.csv', index=True, index_label=['symbol', 'timestamp'])
+TimeFrame.Minute
+print(type(TimeFrame.Minute.value))
+# df = pd.read_csv('../data/csv/trade_set_20200101_20200201_raw.csv', index_col = ['symbol', 'timestamp'])
+# print(df.columns.tolist())
+# df = df.drop(['exchange', 'id', 'conditions', 'tape'], axis = 1)
+# print(df.columns.tolist())
+# df_sorted = df.sort_index(level='timestamp')
+# df.to_csv('../data/csv/trade_set_20200101_20200201_raw.csv', index=True, index_label=['symbol', 'timestamp'])

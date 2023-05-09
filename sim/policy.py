@@ -261,7 +261,7 @@ class SimpleLongShort(Policy):
         result = (result[0], int(result[1]))
         return result
 
-    def get_trade_stat(self):
+    def get_trade_stat(self): # probably should track of each trade executed. timestamp should be included. Trade is defined as a buy followed sell off (or the reverse for short)
         # print("long profit pct list: ", self.long_profit_pct_list)
         # print("short profit pct list: ", self.short_profit_pct_list)
         mean_long_profit_pct = np.mean(self.long_profit_pct_list)

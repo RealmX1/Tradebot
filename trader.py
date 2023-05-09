@@ -27,12 +27,12 @@ from alpaca_trade import *
 from alpaca_api_param import * # API_KEY, SECRET_KEY
 from policy import *
 from account import *
+from symbols import *
 
 
 
 # stream parmeters
 trading_client = TradingClient(PAPER_API_KEY, PAPER_SECRET_KEY, paper=True)
-symbols = ['AAPL','BABA','TSLA']
 BAR_MAPPING = {
     "t": "timestamp",
     "o": "open",
@@ -74,6 +74,7 @@ for i in range(1, prediction_window):
     weights[i][0] = weights[i-1][0] * 1.5
 policy = AlpacaSimpleLong(trading_client)
 
+
 async def on_receive_bar(bar): # even with multiple subscritions, bars come in one by one.
     # how to handle aftermarket, when not all symbol bars are received?
     # maybe not doing data processing in this handler
@@ -89,7 +90,7 @@ async def on_receive_bar(bar): # even with multiple subscritions, bars come in o
     }
     # print(mapped_bar)
     dt = mapped_bar['timestamp'].to_datetime()
-    print(dt)
+    print('dt: ', dt)
     formatted = dt.strftime('%Y-%m-%d %H:%M:%S+00:00')
     del mapped_bar['timestamp']
 
@@ -102,7 +103,7 @@ async def on_receive_bar(bar): # even with multiple subscritions, bars come in o
         current_time_stamp = dt        
 
     if dt != current_time_stamp: 
-        assert rows_buffer == [], "Warning: buffer should be empty!"
+        assert rows_buffer == [], f"Warning: buffer should be empty! instead it is {len(rows_buffer)}"
         current_time_stamp = dt
     rows_buffer.append(new_row)
 
@@ -119,11 +120,7 @@ async def on_receive_bar(bar): # even with multiple subscritions, bars come in o
 
 
 
-    # stream_df.to_csv(stream_csv_path)
-def account_update(): 
-    
-    pass
-    # update status to policy when account status changes.
+
 
 def my_function():
     global decision_making_flag
@@ -149,19 +146,31 @@ def my_function():
         global stream_df
         if stream_df is None:
             global df
-            stream_df = df.tail(200)
+            stream_df = df.groupby('symbol').tail(100)
             
         stream_df = pd.concat([stream_df] + rows_buffer)
         print(stream_df.shape)
+
+        symbol_lst = []
+        for new_row in rows_buffer:
+            # print(new_row)
+            symbol = new_row.index.get_level_values('symbol')[0]
+            symbol_lst.append(symbol)
+
         rows_buffer = []
 
-        symbol_num = len(symbols)
+        # for each symbol that got updated, get their data in real_time_df
+        symbol_num = len(symbol_lst)
+        real_time_hist_window = 100
+        filtered_stream_df = stream_df[stream_df.index.get_level_values('symbol').isin(symbol_lst)]
+        real_time_df = filtered_stream_df.groupby('symbol').tail(real_time_hist_window)
         
-        df = stream_df.tail(3*symbol_num*hist_window).copy()
-        col_lst = append_indicators(df)
+        print('real_time_df.shape: ', real_time_df.shape)
+        assert real_time_df.shape[0] == real_time_hist_window * symbol_num
+
+        col_lst = append_indicators(real_time_df, mock_trade = False)  #mock_trade is removed
         col_num = len(col_lst)
         close_idx = col_lst.index('close')
-        print('close_idx: ', close_idx)
 
         # start making prediction
         
@@ -170,16 +179,17 @@ def my_function():
             np2i_dict = {}
             
             x_batch_buffer = []
-            col_names = df.columns.str
-            groups = df.groupby('symbol')
+            col_names = real_time_df.columns.str
+            groups = real_time_df.groupby('symbol')
             for symbol, df_single_symbol in groups:
-                np2i_dict = norm_param_2_idx(col_names).copy()
-                
+                np2i_dict = norm_param_2_idx(col_names)
+
                 # print('dict: ',np2i_dict)
-                x_df = df_single_symbol.tail(hist_window).copy()
+                x_df = df_single_symbol.tail(hist_window)
+                print(f'{symbol} x_df.shape: ', x_df.shape)
+                print(x_df.tail(5))
                 timestamp, x_normalized_np = normalize_data(x_df, np2i_dict)
                 timestamp.reshape(1,-1,1) # z_continuous makes it
-                # print(timestamp)
                 x_batch = x_normalized_np.reshape(1, hist_window, input_size)
 
 
@@ -217,20 +227,6 @@ def my_function():
                 print('decision: ', decision)
 
         
-
-
-            
-                
-
-
-        
-        
-
-
-        if alpaca_account.trading_blocked:
-            print('Account is currently restricted from trading.')
-        # market_order_data = create_limit_order(symbol = "AAPL", price = price, qty = 1, order_side = OrderSide.BUY, tif = TimeInForce.DAY)
-
         # Check how much money we can use to open new positions.
         print(f'${alpaca_account.buying_power} is available as buying power.')
 
@@ -239,18 +235,21 @@ def my_function():
 
 
 def thread_function():
-    global policy
+    global policy, decision_making_flag
     while True:
         t = threading.Thread(target=my_function)
         t.start()
         time.sleep(.5)
-        if ()
-        policy.update_account_status()
+        if (decision_making_flag):
+            t.join() # wait for the thread to finish
+            print('updating account status')
+            policy.update_account_status()
 
 
 def main():
     global df
-    df = last_week_bars(symbols, dp = data_path, download = True)
+    forever_stream_pth = 'data/forever_stream.csv'
+    df = pd.read_csv(forever_stream_pth, index_col = ['symbol', 'timestamp'])
     df.sort_index(level=1, inplace=True)
 
     stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data, feed=DataFeed.SIP)
@@ -261,8 +260,9 @@ def main():
         print(f'subscribed to {symbol}')
 
     thread = threading.Thread(target=thread_function)
+    print('starting thread')
     thread.start()
-
+    print('starting stream')
     stream.run()
 
     thread.join()

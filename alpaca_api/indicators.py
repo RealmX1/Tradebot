@@ -26,7 +26,7 @@ def func(x):
 
 def add_time_embedding(df):
     # First, make sure the index is timezone aware (in UTC)
-    df['timestamps_col'] = pd.to_datetime(df.index.get_level_values(1))
+    df.loc[:, 'timestamps_col'] = pd.to_datetime(df.index.get_level_values(1), utc=True)
 #     /mnt/c/Users/zhang/OneDrive/desktop/Tradebot/alpaca_api/indicators.py:29: FutureWarning: Inferring datetime64[ns, UTC] from data containing strings is deprecated and will be removed in a future version. To retain the old behavior explicitly pass Series(data, dtype=datetime64[ns, UTC])
 #   df['timestamps_col'] = pd.to_datetime(df.index.get_level_values(1))
     # df['timestamps_col'] = pd.to_datetime(df['timestamps_col'], utc=True)
@@ -35,22 +35,23 @@ def add_time_embedding(df):
     # Set the timestamps_col column as the index of the DataFrame
 
     # Convert the index to Eastern timezone
-    df['edt_time'] = df['timestamps_col'].dt.tz_convert('US/Eastern')
+    df.loc[:, 'edt_time'] = df['timestamps_col'].dt.tz_convert('US/Eastern')
     # print(df.head(5))
 
     # Extract the time of day (in hours) as a new column
-    df['edt_hour'] = df['edt_time'].dt.hour + df['edt_time'].dt.minute / 60
-    df['edt_dayofweek'] = df['edt_time'].dt.dayofweek
+    df.loc[:, 'edt_hour'] = df['edt_time'].dt.hour + df['edt_time'].dt.minute / 60
+    df.loc[:, 'edt_dayofweek'] = df['edt_time'].dt.dayofweek
+    
     # print(df.head(5))
 
     # Create a new column with the time of day scaled from 0.0 (9:30 am) to 1.0 (1:00 pm)
     start_hour, end_hour = 9.5, 16.0
-    df['edt_scaled'] = (df['edt_hour'] - start_hour) / (end_hour - start_hour)
-    df['is_core_time'] = ((df['edt_scaled'] >= 0) & (df['edt_scaled'] <= 1)).astype(int)
+    df.loc[:, 'edt_scaled'] = (df['edt_hour'] - start_hour) / (end_hour - start_hour)
+    df.loc[:, 'is_core_time'] = ((df['edt_scaled'] >= 0) & (df['edt_scaled'] <= 1)).astype(int)
 
     df.drop(columns=['timestamps_col', 'edt_time', 'edt_hour'], inplace=True)
 
-def append_indicators(df):
+def append_indicators(df, mock_trade = True):  # note that the mocktrade version removes the final row -- becuase it becomes NaN in rise and fall
     # Add EMA
     df.ta.ema(append=True, length = 14)
     # Add DEMA
@@ -73,28 +74,33 @@ def append_indicators(df):
 
     # df.ta.macd(append=True)
 
-    df['next_high'] = df['high'].shift(-1)
-    df['next_fall'] = df['low'].shift(-1)
+    if mock_trade:
+        df['next_high'] = df['high'].shift(-1)
+        df['next_fall'] = df['low'].shift(-1)
 
-    df.dropna(inplace = True)
-    df_reset = df.reset_index()
-    new_df = df_reset[['symbol','timestamp', 'next_high', 'next_fall']]
-    mock_trade_df = pd.melt(new_df, id_vars=['symbol','timestamp'], value_vars=['next_high', 'next_fall'], var_name='price_type', value_name='price')
-    mock_trade_df.set_index('timestamp', inplace=True)
-    mock_trade_df.sort_index(inplace=True)
+        df.dropna(inplace = True)
+        df_reset = df.reset_index()
+        new_df = df_reset[['symbol','timestamp', 'next_high', 'next_fall']]
+        mock_trade_df = pd.melt(new_df, id_vars=['symbol','timestamp'], value_vars=['next_high', 'next_fall'], var_name='price_type', value_name='price')
+        mock_trade_df.set_index('timestamp', inplace=True)
+        mock_trade_df.sort_index(inplace=True)
+        df.drop(columns=['next_high', 'next_fall'], inplace=True)
+
     columns_2_drop_lst =    ['open', 'high', 'low', 'volume', 'trade_count', \
-                            f"DMN_{IndicatorParam.ADX.value['length']}", f"DMP_{IndicatorParam.ADX.value['length']}", \
-                            'next_fall', 'next_high']
+                            f"DMN_{IndicatorParam.ADX.value['length']}", f"DMP_{IndicatorParam.ADX.value['length']}"]
     # next_high and next_fall columns can be used to approximate minute level trade action. 
     # will delete them after creating new dataframe and saving it.
 
-    for column in columns_2_drop_lst:
-        if column in df.columns:
-            df.drop(columns=column, inplace=True)
+    # for column in columns_2_drop_lst:
+    #     if column in df.columns:
+    df.drop(columns=columns_2_drop_lst, inplace=True)
     feature_list = list(df.columns)
 
     # print("col_list: ", feature_list)
-    return feature_list, mock_trade_df
+    if mock_trade:
+        return feature_list, mock_trade_df
+    else:
+        return feature_list
 
 
 def main():

@@ -142,7 +142,7 @@ def normalize_data(df, np2i_dict): # takes df, return np.
 
     # timestamp_data = np.array(data[:,0:1], dtype='datetime64')
     timestamp_data = df.index.get_level_values('timestamp').to_numpy()
-    print('timestamp type: ', type(timestamp_data[0]))
+    # print('timestamp type: ', type(timestamp_data[0]))
 
     data_mean = np.mean(data, axis = 0)
     data_std = np.std(data, axis = 0)

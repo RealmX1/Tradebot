@@ -1,0 +1,1 @@
+symbols = ['AAPL', 'TSLA', 'NVDA', 'PDD', 'DQ', 'ARBB']
