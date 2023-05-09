@@ -194,3 +194,110 @@ Block test: False
 
 2023-05-08 11:35:12.476280Block test: False
 purpose: mock trade data first test
+
+Block test: False
+
+2023-05-09 08:51:22.757435Block test: False
+purpose: small model after 26 iterations
+Result Interpretation: underperforms; 40 is probably too small
+
+Block test: False
+
+2023-05-09 09:06:27.942825Block test: False
+purpose: large 200 hl, 60hw, 10pw model after 2 epoches
+Result Interpretation: [Avery reserved policy; not trading much at all; need to test on other testset to prove efficacy.
+
+Block test: False
+
+2023-05-09 10:06:28.931828Block test: False
+purpose: test the symbol iteration automation; also, test the stocks that I'm currently watching.
+
+Block test: False
+
+2023-05-09 10:07:57.560543Block test: False
+purpose: same
+
+Block test: False
+
+2023-05-09 10:09:19.809488Block test: False
+purpose: 
+Result Interpretation: did pretty poorly.
+
+Block test: False
+
+2023-05-09 11:17:12.494333Block test: False
+purpose: large model after 10 poch
+
+Block test: False
+
+2023-05-09 11:19:43.900205Block test: False
+purpose: same
+
+Block test: False
+
+2023-05-09 11:37:54.438396Block test: False
+purpose: debug; it seems that mean profit is positive while account value is negative; why?
+
+Block test: False
+
+2023-05-09 12:01:23.043908Block test: False
+purpose: debugging regulatory fee problem
+
+Block test: False
+
+2023-05-09 12:03:52.799922Block test: False
+purpose: same
+
+Block test: False
+
+2023-05-09 12:31:38.416682Block test: False
+purpose: 
+
+Block test: False
+
+2023-05-09 12:32:58.354168Block test: False
+purpose: debug profit pct
+
+Block test: False
+
+2023-05-09 12:34:22.535405Block test: False
+purpose: 
+
+Block test: False
+
+2023-05-09 12:36:05.389996Block test: False
+purpose: 
+
+Block test: False
+
+2023-05-09 12:36:22.877556Block test: False
+purpose: 
+
+Block test: False
+
+2023-05-09 12:37:00.152432Block test: False
+purpose: 
+
+Block test: False
+
+2023-05-09 12:38:50.601462Block test: False
+purpose: 
+
+Block test: False
+
+2023-05-09 12:46:35.773413Block test: False
+purpose: 
+
+Block test: False
+
+2023-05-09 12:50:08.103317Block test: False
+
+Block test: False
+
+2023-05-09 12:51:08.640919Block test: False
+purpose: much of previous test with trade data will be nullified since a bug was found in completeting trade using min max valof trade value
+
+Block test: False
+
+2023-05-09 13:39:31.527526Block test: False
+purpose: dynamic weight decay during training.

@@ -252,6 +252,9 @@ def prepare_data_alpaca(df, type = "bar"):
     # assumes that it is of 2 index levels: symbols and timestamps
     pass
 
+def load_randomized_training_set():
+
+    return train_loader, val_loader
 
 def main():
     tmp, tmp2 = load_n_split_data(training_data_path, hist_window, prediction_window, batch_size, train_ratio = 0.1, normalize = True, test = False)

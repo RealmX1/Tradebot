@@ -74,6 +74,11 @@ for i in range(1, prediction_window):
     weights[i][0] = weights[i-1][0] * 1.5
 policy = AlpacaSimpleLong(trading_client)
 
+manual_policies = {}
+for symbol in symbols:
+    manual_policies[symbol] = SimpleLongShort(trading_client)
+
+
 
 async def on_receive_bar(bar): # even with multiple subscritions, bars come in one by one.
     # how to handle aftermarket, when not all symbol bars are received?
@@ -247,10 +252,24 @@ def thread_function():
 
 
 def main():
-    global df
-    forever_stream_pth = 'data/forever_stream.csv'
-    df = pd.read_csv(forever_stream_pth, index_col = ['symbol', 'timestamp'])
-    df.sort_index(level=1, inplace=True)
+    wait_threshold = 2
+    file_path = 'data/forever_stream.csv'
+
+    prev_mtime = os.path.getmtime(file_path)
+
+    while True:
+        print('')
+        curr_mtime = os.path.getmtime(file_path)
+        if curr_mtime - prev_mtime < wait_threshold:
+            # file has been modified, update the prev_mtime
+            prev_mtime = curr_mtime
+        else:
+            # file hasn't been modified in the last wait_threshold seconds
+            print(curr_mtime, prev_mtime)
+            print('Latest update is complete')
+            prev_mtime = curr_mtime
+        time.sleep(0.1)
+
 
     stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data, feed=DataFeed.SIP)
     

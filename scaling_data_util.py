@@ -10,8 +10,12 @@ from indicators import *
 from datetime import datetime, timedelta
 import yfinance as yf
 import pandas as pd
+from alpaca.data.timeframe import TimeFrame
 
 sp100_info_pth = 'data/sp100_info.csv'
+
+
+# save_template = "{data_pth}/{data_type}/{pre}_{symbol_str}_{time_str}_{timeframe_str}_{post}.{data_type}"
 
 def get_sp100_symbols():
     url = "https://en.wikipedia.org/wiki/S%26P_100"
@@ -89,11 +93,28 @@ def main():
     # remove the pkl that already exist.
     train_symbol_lst = remove_existing_data('training', train_symbol_lst, timeframe, train_start, train_end)
 
-    download = True
-    for symbol in test_symbol_lst:
-        get_load_of_data([symbol], timeframe, train_start, train_end, limit = None, download = download, type = 'bars', data_pth = 'data')
-    
 
+
+    symbols = ['AAPL', 'TSLA', 'NVDA', 'PDD', 'DQ', 'ARBB', 'VZ', 'JYD', 'MGIH']
+        
+        df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
+
+    download = True
+    # for symbol in symbols:
+    #     get_and_process_data([symbol], timeframe, test_start, test_end, limit = None, download = download, type = 'bars', data_pth = 'data')
+        # get_load_of_data([symbol], timeframe, train_start, train_end, limit = None, download = download, type = 'bars', data_pth = 'data')
+    
+    
+    for symbol in symbols:
+        start_str = test_start.strftime('%Y%m%d')
+        end_str = test_end.strftime('%Y%m%d')
+        time_str = f"{start_str}_{end_str}"
+        symbol = 'AAPL'
+        timeframe = TimeFrame.Minute.value
+        input_path = f'../data/csv/testing/bar_set_{symbol}_{time_str}_{timeframe}_raw.csv'
+
+        df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
+        df, mock_trade_df = append_indicators(df)
         
     
 

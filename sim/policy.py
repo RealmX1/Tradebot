@@ -16,6 +16,9 @@ from alpaca.trading.enums import *
 from alpaca.trading.requests import *
 from alpaca.trading.client import *
 from account import Account
+import functools
+import operator
+
 
 
 class Policy(object):
@@ -183,7 +186,7 @@ class SimpleLongShort(Policy):
         if weighted_prediction < self.threshold and weighted_prediction > -self.threshold:
             pred = 0
 
-        if edt_scale > 1.6:
+        if edt_scale > 100:
             pred = -2 # end of day signal # maybe limit start of day as well?
         
         result = ('n',0) # by default don't do anything
@@ -264,11 +267,16 @@ class SimpleLongShort(Policy):
     def get_trade_stat(self): # probably should track of each trade executed. timestamp should be included. Trade is defined as a buy followed sell off (or the reverse for short)
         # print("long profit pct list: ", self.long_profit_pct_list)
         # print("short profit pct list: ", self.short_profit_pct_list)
+
         mean_long_profit_pct = np.mean(self.long_profit_pct_list)
         mean_short_profit_pct = np.mean(self.short_profit_pct_list)
+        long_profit_pct = np.array(self.long_profit_pct_list)
+        long_profit_pct = (long_profit_pct/100+1-1/100000)
+        expected_value = functools.reduce(operator.mul, long_profit_pct, 1)
+        # print("total trade profit pct: ", expected_value)
         return self.long_count, self.profitable_long_count, self.unfilled_buy, \
                 self.short_count, self.profitable_short_count, self.unfilled_sell,\
-                mean_long_profit_pct, mean_short_profit_pct
+                mean_long_profit_pct, mean_short_profit_pct, expected_value
 
     def complete_buy_order(self,symbol, price):
         if self.short == True:
@@ -293,6 +301,7 @@ class SimpleLongShort(Policy):
     def complete_sell_order(self,symbol, price):
         if self.bought == True:
             profit_pct = (price - self.prev_action_price) / self.prev_action_price * 100
+            # print(f'prev action price: {self.prev_action_price}, current price: {price}, profit pct: {profit_pct}')
             self.long_profit_pct_list.append(profit_pct)
             self.long_count += 1
             if self.prev_action_price < price:

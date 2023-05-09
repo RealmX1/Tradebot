@@ -6,6 +6,7 @@ import json
 import matplotlib.pyplot as plt
 
 from indicator_param import *
+from alpaca.data.timeframe import TimeFrame
 # pd.set_option('display.max_columns', None)
 
 '''
@@ -93,6 +94,7 @@ def append_indicators(df, mock_trade = True):  # note that the mocktrade version
 
     # for column in columns_2_drop_lst:
     #     if column in df.columns:
+    # df.dropna(inplace = True)?
     df.drop(columns=columns_2_drop_lst, inplace=True)
     feature_list = list(df.columns)
 
@@ -116,79 +118,87 @@ def main():
     
     # time_str = '20200101_20230417'
     # input_path = f'../data/csv/bar_set_huge_{time_str}_raw.csv'
-    time_str = '20200101_20200701'
-    input_path = f'../data/csv/{pre}_{time_str}_{post}.csv'
+
+    testing_time_str = '20230101_20230501'
+    training_time_str = '20200101_20230101'
+    input_symbols = ['AAPL', 'PDD', 'DQ', 'VZ']
+    timeframe = TimeFrame.Minute.value
+
+    training = True
+    if training == True:
+        time_str = training_time_str
+        input_template = '../data/csv/training/{pre}_{symbol}_{time_str}_{timeframe}_{post}.csv'
+        mock_trade = False
+    else:
+        time_str = testing_time_str
+        input_template = '../data/csv/testing/{pre}_{symbol}_{time_str}_{timeframe}_{post}.csv'
+        mock_trade = True
+
     
-    df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
-    # df = pd.read_csv('data/csv/test_ bar_set_20230101_20230412_baba.csv', index_col = ['symbol', 'timestamp'])
-    # df = df.drop(df.index[:144])
-    print(df.shape)
+    for input_symbol in input_symbols:
+        input_path = input_template.format(pre = 'bar_set', symbol = input_symbol, time_str = time_str, timeframe = timeframe, post = 'raw')
+        df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
+        print(df.shape)
 
-    # create column for new indicators
+        groups = df.groupby('symbol')
 
-    # Apply rolling window function to create new column
-    # df['C'] = df.rolling(window=3).apply(func)
+        total_calculation_time = 0
+        total_csv_saving_time = 0
+        # Create a new dataframe for each group
+        start_time = time.time()
+        print('start calculating indicators...')
 
+        feature_lst = []
+        for symbol, df in groups:
+            start_time2 = time.time()
+            # symbol: the symbol of the group (in this case, the unique values in 'index_1')
+            # group_df: the dataframe containing the group data
+            
+            # Do something with the group dataframe, for example:
+            print(f'Group {symbol}:')
+            
+            feature_lst, mock_trade_df = append_indicators(df, mock_trade = mock_trade)
+            assert 2*df.shape[0] == mock_trade_df.shape[0]
+            
+            calculation_time = time.time() - start_time2
+            total_calculation_time += calculation_time
+            print(f'finished calculating indicators for {symbol} in {calculation_time} seconds')
+            start_time2 = time.time()
 
-    groups = df.groupby('symbol')
+            
+            feature_num = len(feature_lst)
+            exist_row = False
+            id = 0
+            for index, row in feature_hist_df.iterrows():
+                feature_set = set(ast.literal_eval(row['feature_lst']))
+                row_feature_num = int(row['feature_num'])
+                row_id = int(row['id'])
+                print('row: ',feature_set)
+                print('features: ', set(feature_lst))
+                if row_feature_num == feature_num:
+                    id = max(id, row_id)
+                    if feature_set == set(feature_lst):
+                        exist_row = True
+                        id = row_id
+                        print('found existing feature_hist')
+                        break
 
-    total_calculation_time = 0
-    total_csv_saving_time = 0
-    # Create a new dataframe for each group
-    start_time = time.time()
-    print('start calculating indicators...')
+            # If no existing record found, insert a new row
+            if not exist_row:
+                current_timestamp = datetime.now()
+                new_row = {'feature_num': feature_num, 'timestamp': current_timestamp, 'feature_lst': feature_lst, 'id': id}
+                feature_hist_df = feature_hist_df.append(new_row, ignore_index=True)
 
-    feature_lst = []
-    for symbol, df in groups:
-        start_time2 = time.time()
-        # symbol: the symbol of the group (in this case, the unique values in 'index_1')
-        # group_df: the dataframe containing the group data
-        
-        # Do something with the group dataframe, for example:
-        print(f'Group {symbol}:')
-        
-        feature_lst, mock_trade_df = append_indicators(df)
-        assert 2*df.shape[0] == mock_trade_df.shape[0]
-        
-        calculation_time = time.time() - start_time2
-        total_calculation_time += calculation_time
-        print(f'finished calculating indicators for {symbol} in {calculation_time} seconds')
-        start_time2 = time.time()
-
-        
-        feature_num = len(feature_lst)
-        exist_row = False
-        id = 0
-        for index, row in feature_hist_df.iterrows():
-            feature_set = set(ast.literal_eval(row['feature_lst']))
-            row_feature_num = int(row['feature_num'])
-            row_id = int(row['id'])
-            print('row: ',feature_set)
-            print('features: ', set(feature_lst))
-            if row_feature_num == feature_num:
-                id = max(id, row_id)
-                if feature_set == set(feature_lst):
-                    exist_row = True
-                    id = row_id
-                    print('found existing feature_hist')
-                    break
-
-        # If no existing record found, insert a new row
-        if not exist_row:
-            current_timestamp = datetime.now()
-            new_row = {'feature_num': feature_num, 'timestamp': current_timestamp, 'feature_lst': feature_lst, 'id': id}
-            feature_hist_df = feature_hist_df.append(new_row, ignore_index=True)
-
-        data_type = f'{feature_num}feature{id}' # later used to construct save_path
-
-        save_path = f'../data/csv/bar_set_{time_str}_{symbol}_{data_type}.csv'
-        mock_trade_path = f'../data/csv/mock_trade_{time_str}_{symbol}.csv'
-        print('start saving to: ', save_path)
-        df.to_csv(save_path, index=True, index_label=['symbol', 'timestamp'])
-        mock_trade_df.to_csv(mock_trade_path)
-        csv_saving_time = time.time() - start_time2
-        total_csv_saving_time += csv_saving_time
-        print(f'finished calculating indicators for {symbol} in {csv_saving_time:4.2f} seconds')
+            data_type = f'{feature_num}feature{id}' # later used to construct save_path
+            save_path = f'../data/csv/testing/bar_set_{time_str}_{symbol}_{data_type}.csv'
+            df.to_csv(save_path, index=True, index_label=['symbol', 'timestamp'])
+            print('start saving to: ', save_path)
+            if mock_trade:
+                mock_trade_path = f'../data/csv/testing/mock_trade_{time_str}_{symbol}.csv'
+                mock_trade_df.to_csv(mock_trade_path)
+            csv_saving_time = time.time() - start_time2
+            total_csv_saving_time += csv_saving_time
+            print(f'finished calculating indicators for {symbol} in {csv_saving_time:4.2f} seconds')
         # df.to_csv(f'data/csv/test.csv', index=True, index_label=['symbol', 'timestamp'])
 
     print(f'finished calculating indicators for all symbols in {time.time() - start_time} seconds')

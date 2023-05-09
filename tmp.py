@@ -26,11 +26,6 @@
 import os
 import csv
 import datetime
-
-import os
-import csv
-import datetime
-
 # Define the CSV file path
 csv_file_path = "log/back_test_log.csv"
 
@@ -66,24 +61,45 @@ row_dict = {
 #     csv_writer = csv.DictWriter(csvfile, fieldnames=header)
 #     csv_writer.writerow(row_dict)
 
-import pandas as pd
+# import pandas as pd
 
-# Create a sample DataFrame
-data = {'close': [110, 120, 130, 140, 150],
-        'high': [115, 125, 135, 145, 155],
-        'low': [105, 115, 125, 135, 145]}
-df = pd.DataFrame(data)
+# # Create a sample DataFrame
+# data = {'close': [110, 120, 130, 140, 150],
+#         'high': [115, 125, 135, 145, 155],
+#         'low': [105, 115, 125, 135, 145]}
+# df = pd.DataFrame(data)
 
-# Shift 'high' and 'low' columns up one row
-df['shifted_high'] = df['high'].shift(-1)
-df['shifted_low'] = df['low'].shift(-1)
-print(df)
+# # Shift 'high' and 'low' columns up one row
+# df['shifted_high'] = df['high'].shift(-1)
+# df['shifted_low'] = df['low'].shift(-1)
+# print(df)
 
-# Create 'fall' and 'rise' columns based on conditions
-df['fall'] = df['shifted_high'] < df['close']
-df['rise'] = df['shifted_low'] > df['close']
+# # Create 'fall' and 'rise' columns based on conditions
+# df['fall'] = df['shifted_high'] < df['close']
+# df['rise'] = df['shifted_low'] > df['close']
 
-# Drop the temporary 'shifted_high' and 'shifted_low' columns
-df.drop(['shifted_high', 'shifted_low'], axis=1, inplace=True)
+# # Drop the temporary 'shifted_high' and 'shifted_low' columns
+# df.drop(['shifted_high', 'shifted_low'], axis=1, inplace=True)
 
-print(df)
+# print(df)
+
+import time
+from time import sleep
+
+
+wait_threshold = 2
+file_path = 'data/forever_stream.csv'
+
+prev_mtime = os.path.getmtime(file_path)
+
+while True:
+    curr_mtime = os.path.getmtime(file_path)
+    if curr_mtime - prev_mtime < wait_threshold:
+        # file has been modified, update the prev_mtime
+        prev_mtime = curr_mtime
+    else:
+        # file hasn't been modified in the last wait_threshold seconds
+        print(curr_mtime, prev_mtime)
+        print('Latest update is complete')
+        prev_mtime = curr_mtime
+    time.sleep(0.1)

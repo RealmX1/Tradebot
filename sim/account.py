@@ -1,10 +1,15 @@
 import math
 just_one_more_constant = 0.375 # https://www.youtube.com/watch?v=_FuuYSM7yOo&list=TLPQMjkwNDIwMjOTFJtp1wN2Pg&index=3
 
-SEC = 22.90 / 1000000 # SEC regulation fee is applied at 22.90 dollars per million dollars in sale.
+#https://alpaca.markets/support/regulatory-fees
+SEC = 8.00 / 1000000 # SEC regulation fee is applied at 22.90 dollars per million dollars in sale.
+# which is 0.000008 dollars per dollar, or 0.0008% of each trade
 # IT NEED TO BE ROUNDED TO NEAREST CENT
 
-FINRA = 0.000119 # FINRA Trading Activity Fee (TAF) is applied at 0.000119 dollars per share.
+TAF = 0.000145 # TAF Trading Activity Fee (TAF) from FINRA is applied at 0.000145 dollars per share. no greater than $7.27.
+TAF_CEIL = 7.27
+# for a 500$ share it is 0.000145 / 500 = 2.9E-7 which is 0.000029%
+# for a 1$ share it is 0.000145 / 1 = 0.000145 which is 0.0145%
 # IT NEED TO BE ROUNDED TO NEAREST CENT
 # It can be no greater than $5.95
 
@@ -83,10 +88,11 @@ class Account:
         shares = self.orders[symbol][order_id][0]
         price = self.orders[symbol][order_id][1]
         value = shares * price
-        FINRA_FEE = math.ceil(shares * FINRA * 100) / 100
-        FINRA_FEE = min (5.95, FINRA_FEE)
         SEC_FEE = math.ceil(value * SEC * 100) / 100
-        self.balance += value - FINRA_FEE - SEC_FEE
+        TAF_FEE = math.ceil(shares * TAF * 100) / 100
+        TAF_FEE = min (TAF_CEIL, TAF_FEE)
+        print(f'TAF_FEE: {TAF_FEE}, SEC_FEE: {SEC_FEE}')
+        self.balance += value - TAF_FEE - SEC_FEE
         del self.orders[symbol][order_id]
         return shares
     
@@ -128,10 +134,10 @@ class Account:
         shares = -self.orders[symbol][order_id][0]
         price = self.orders[symbol][order_id][1]
         value = shares * price
-        FINRA_FEE = math.ceil(shares * FINRA * 100) / 100
-        FINRA_FEE = min (5.95, FINRA_FEE)
+        TAF_FEE = math.ceil(shares * TAF * 100) / 100
+        TAF_FEE = min (TAF_CEIL, TAF_FEE)
         SEC_FEE = math.ceil(value * SEC * 100) / 100
-        self.balance = self.balance - FINRA_FEE - SEC_FEE
+        self.balance = self.balance - TAF_FEE - SEC_FEE
         del self.orders[symbol][order_id]
         return shares # positive shares
 

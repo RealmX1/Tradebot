@@ -179,7 +179,6 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
 
         inverse_mask = torch.linspace(1, 11, 10)
         # print ('inverse_mask.shape: ', inverse_mask.shape)
-        global weights
         # print(weights)
         # ([1.0000, 0.8000, 0.6400, 0.5120, 0.4096, 0.3277, 0.2621, 0.2097, 0.1678,0.1342])
         # weights = torch.linspace(1, 0.1, steps=prediction_window)
@@ -230,6 +229,7 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
                 loss_val = loss.clone().detach().cpu().mean().item()
 
                 weighted_loss = loss * train_weights
+                # print("train_weights: ", train_weights)
                 # print(weighted_loss.shape)
                 # print(f"loss: {loss.shape}, weighted loss: {weighted_loss.shape}")
                 final_loss = weighted_loss.mean()
@@ -437,12 +437,12 @@ def get_current_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def save_params(best_prediction, optimizers, model_state, last_model_pth, best_model_state, best_model_pth, model_training_param_path, has_improvement, best_k, epoch_num):
+def save_params(best_prediction, optimizers, model_state, last_model_pth, best_model_state, best_model_pth, model_training_param_pth, has_improvement, best_k, epoch_num):
     print('saving params...')
 
     encoder_lr = get_current_lr(optimizers[0])
     decoder_lr = get_current_lr(optimizers[1])
-    with open(model_training_param_path, 'w') as f:
+    with open(model_training_param_pth, 'w') as f:
         json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction, 'best_k':best_k, 'epoch_num':epoch_num}, f)
     print('saving model to: ', last_model_pth)
     torch.save(model_state, last_model_pth)
@@ -462,7 +462,7 @@ def main():
         tolog = input("Do you want to log the result? (y/n) ")
         if tolog == 'y':
             print_n_log(train_purporse_log_pth, f'{datetime.now()}')
-            purpose = input("What is the purpose of this back_test? ")
+            purpose = input("What is the purpose/target of this training? ")
             print_n_log(train_purporse_log_pth, f'purpose: {purpose}')
             should_log_result = True
             break
@@ -475,7 +475,7 @@ def main():
     data_pth = training_data_path
     best_model_pth = f'../model/model_{config_name}.pt'
     last_model_pth = f'../model/last_model_{config_name}.pt'
-    model_training_param_path = f'../model/training_param_{config_name}.json'
+    model_training_param_pth = f'../model/training_param_{config_name}.json'
 
     csv_file_path = "../log/training_log.csv"
     print('loaded in ', time.time()-start_time, ' seconds')
@@ -492,7 +492,7 @@ def main():
         print('Loading existing model')
         model.load_state_dict(torch.load(last_model_pth))
         best_model.load_state_dict(torch.load(best_model_pth))
-        with open(model_training_param_path, 'r') as f:
+        with open(model_training_param_pth, 'r') as f:
             saved_data = json.load(f)
             encoder_lr = saved_data['encoder_learning_rate']
             decoder_lr = saved_data['decoder_learning_rate']
@@ -501,6 +501,7 @@ def main():
             epoch_num = saved_data['epoch_num']
             print('best_k: ', best_k)
             start_best_prediction = best_prediction
+    # elif os.path.exists(best_model_pth):
     else:
         print('No existing model')
         encoder_lr = learning_rate
@@ -573,6 +574,7 @@ def main():
 
         has_improvement = False
         
+        ma_weight_decay = weight_decay
         for epoch in range(num_epochs):
             print(f'Epoch {epoch+1}/{num_epochs}')
             if test_every_x_epoch != 0 and epoch % test_every_x_epoch == 0:
@@ -600,27 +602,33 @@ def main():
                         csv_writer.writerow(row_dict)
 
 
-                    best_weights = weights_lst[0]
+                    epoch_best_weights = weights_lst[0]
                     highest_change_precision = 0.0
                     improved = False
+                    epoch_best_k = -100
                     for k, weights in enumerate(weights_lst):
                         # print(weights)
                         change_precision = true_change_direction_pred_precision_lst.reshape(1,prediction_window)*weights
                         change_precision = change_precision.sum()/np.sum(weights)
                         if change_precision > highest_change_precision:
                             highest_change_precision = change_precision
-                            best_weights = weights
+                            epoch_best_k = k
+                            epoch_best_weights = weights
                         if change_precision > best_prediction: 
                             best_k = k
                             has_improvement = True
                             improved = True
-                            print(weights)
+                            print(epoch_best_weights)
                             print(f'\nNEW BEST prediction: {change_precision:.4f}% at k: {best_k}\n')
                             best_prediction = change_precision
                             best_model_state = model.state_dict()
+                    tmp_weight_decay = pow(0.8, epoch_best_k)
+                    ma_weight_decay = tmp_weight_decay * 0.1 + ma_weight_decay * 0.9
+                    global train_weights
+                    train_weights = torch.pow(torch.tensor(ma_weight_decay), torch.arange(prediction_window).float()).to(device)
                     if not improved:
-                        print(best_weights)
-                        print(f'\ncurrent best change prediction precision: {highest_change_precision:.4f}% at k: {best_k}\n')
+                        print(epoch_best_weights)
+                        print(f'\ncurrent best change prediction precision: {highest_change_precision:.4f}% at k: {epoch_best_k}\n')
 
 
                     '''
@@ -701,14 +709,14 @@ def main():
         #     plt.pause(1)
         # print(f'testing completed in {time.time()-start_time:.2f} seconds')
         last_model_state = model.state_dict()
-        save_params(best_prediction, optimizers, last_model_state, last_model_pth, best_model_state, best_model_pth, model_training_param_path, has_improvement, best_k, epoch_num) 
+        save_params(best_prediction, optimizers, last_model_state, last_model_pth, best_model_state, best_model_pth, model_training_param_pth, has_improvement, best_k, epoch_num) 
         print('Normal exit. Model saved.')
         torch.cuda.empty_cache()
         gc.collect()
     except KeyboardInterrupt or Exception or TypeError:
         # save the model if the training was interrupted by keyboard input
         last_model_state = model.state_dict()
-        save_params(best_prediction, optimizers, last_model_state, last_model_pth, best_model_state, best_model_pth, model_training_param_path, has_improvement, best_k, epoch_num)
+        save_params(best_prediction, optimizers, last_model_state, last_model_pth, best_model_state, best_model_pth, model_training_param_pth, has_improvement, best_k, epoch_num)
         torch.cuda.empty_cache()
         gc.collect()
 
