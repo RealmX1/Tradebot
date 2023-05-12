@@ -75,7 +75,7 @@ for episode in range (num_episodes):
         
         # Update the critic model
         critic_loss = td_error.pow(2).mean()
-        optimizer.zero_grad()
+        optimizer.zero_grad()  
         critic_loss.backward()
         optimizer.step()
         

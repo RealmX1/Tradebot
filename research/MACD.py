@@ -1,1 +1,0 @@
-# testing whether MACD works    

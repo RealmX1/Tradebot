@@ -74,7 +74,7 @@ def append_indicators(df, mock_trade = True):  # note that the mocktrade version
     # # the previous indicators in total used 0.025 seconds on a week's data, this one took 0.065 seconds
 
     # df.ta.macd(append=True)
-
+    mock_trade_df = None
     if mock_trade:
         df['next_high'] = df['high'].shift(-1)
         df['next_fall'] = df['low'].shift(-1)
@@ -99,10 +99,7 @@ def append_indicators(df, mock_trade = True):  # note that the mocktrade version
     feature_list = list(df.columns)
 
     # print("col_list: ", feature_list)
-    if mock_trade:
-        return feature_list, mock_trade_df
-    else:
-        return feature_list
+    return feature_list, mock_trade_df
 
 
 def main():
@@ -127,16 +124,19 @@ def main():
     training = True
     if training == True:
         time_str = training_time_str
-        input_template = '../data/csv/training/{pre}_{symbol}_{time_str}_{timeframe}_{post}.csv'
+        input_pth_template = '../data/csv/training/training_raw/{pre}_{time_str}_{symbol}_{timeframe}_{post}.csv'
+        save_pth_template =  '../data/csv/training/{pre}_{time_str}_{symbol}_{timeframe}_{data_type}.csv'
         mock_trade = False
     else:
         time_str = testing_time_str
-        input_template = '../data/csv/testing/{pre}_{symbol}_{time_str}_{timeframe}_{post}.csv'
+        input_pth_template = '../data/csv/testing/testinging_raw/{pre}_{time_str}_{symbol}_{timeframe}_{post}.csv'
+        save_pth_template =  '../data/csv/testing/{pre}_{time_str}_{symbol}_{timeframe}_{data_type}.csv'
         mock_trade = True
 
     
     for input_symbol in input_symbols:
-        input_path = input_template.format(pre = 'bar_set', symbol = input_symbol, time_str = time_str, timeframe = timeframe, post = 'raw')
+        input_path = input_pth_template.format(pre = 'bar_set', symbol = input_symbol, time_str = time_str, timeframe = timeframe, post = 'raw')
+        save_pth_template_2 = save_pth_template.format(pre = 'bar_set', symbol = input_symbol, time_str = time_str, timeframe = timeframe, data_type = '{data_type}')
         df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
         print(df.shape)
 
@@ -158,7 +158,6 @@ def main():
             print(f'Group {symbol}:')
             
             feature_lst, mock_trade_df = append_indicators(df, mock_trade = mock_trade)
-            assert 2*df.shape[0] == mock_trade_df.shape[0]
             
             calculation_time = time.time() - start_time2
             total_calculation_time += calculation_time
@@ -189,11 +188,12 @@ def main():
                 new_row = {'feature_num': feature_num, 'timestamp': current_timestamp, 'feature_lst': feature_lst, 'id': id}
                 feature_hist_df = feature_hist_df.append(new_row, ignore_index=True)
 
-            data_type = f'{feature_num}feature{id}' # later used to construct save_path
-            save_path = f'../data/csv/testing/bar_set_{time_str}_{symbol}_{data_type}.csv'
-            df.to_csv(save_path, index=True, index_label=['symbol', 'timestamp'])
-            print('start saving to: ', save_path)
+            data_type = f'{feature_num}feature{id}' # later used to construct save_pth
+            save_pth = save_pth_template_2.format(data_type = data_type)
+            df.to_csv(save_pth, index=True, index_label=['symbol', 'timestamp'])
+            print('start saving to: ', save_pth)
             if mock_trade:
+                assert 2*df.shape[0] == mock_trade_df.shape[0]
                 mock_trade_path = f'../data/csv/testing/mock_trade_{time_str}_{symbol}.csv'
                 mock_trade_df.to_csv(mock_trade_path)
             csv_saving_time = time.time() - start_time2

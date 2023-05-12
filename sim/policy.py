@@ -159,13 +159,14 @@ class SimpleLongShort(Policy):
 
         self.continuous_unfilled_buy_count = 0
         self.continuous_unfilled_sell_count = 0
-        self.additional_buy_price = 0.0
-        self.additional_sell_price = 0.0
+        self.additional_buy_price = 0.01
+        self.additional_sell_price = 0.01
+
 
     def has_position(self):
         return self.bought or self.short
     
-    def decide(self, symbol:str, hist, price, weighted_prediction, col_names):
+    def decide(self, symbol:str, hist, price, weighted_prediction, col_names): # need trade/quote data input to decide what price to place the order at effectively.
         
         last_hist = hist[0,-1,:]
 
@@ -186,12 +187,13 @@ class SimpleLongShort(Policy):
         if weighted_prediction < self.threshold and weighted_prediction > -self.threshold:
             pred = 0
 
-        if edt_scale > 100:
+        if edt_scale > 1.6:
             pred = -2 # end of day signal # maybe limit start of day as well?
         
         result = ('n',0) # by default don't do anything
 
         if pred == 1:
+            price = price + self.additional_buy_price
             if self.bought == True:
                 # print("Already bought!")
                 return result
@@ -208,11 +210,12 @@ class SimpleLongShort(Policy):
             #     self.account.cancel_buy_order(symbol, 0)
             #     result = ('n',0)
         elif pred == -1: # (and prediction[0][0] < 0)
-            purchase_num = self.account.place_sell_max_order(symbol, price, 0)
+            sell_price = price - self.additional_sell_price
+            purchase_num = self.account.place_sell_max_order(symbol, sell_price, 0)
             # print(f'placing sell order for {purchase_num} shares at {price}$')
             if purchase_num > 0:
                 if not self.trade_data:
-                    self.complete_sell_order(symbol, price)
+                    self.complete_sell_order(symbol, sell_price)
                 # print(f'bought all! {purchase_num} shares at {price}$')
                 result = ('s',purchase_num)
             else:
@@ -233,7 +236,8 @@ class SimpleLongShort(Policy):
                         self.account.cancel_short_order(symbol,0)
                         # result not changed
         elif pred == -2: # end all short position/sell all long position at the end of day.
-            purchase_num = self.account.place_reverse_short_order(symbol, price,0)
+            buy_price = price + self.additional_buy_price
+            purchase_num = self.account.place_reverse_short_order(symbol, buy_price,0)
             if purchase_num > 0: # has short position to reverse.
                 if not self.trade_data:
                     self.complete_reverse_short_order(symbol)
@@ -244,7 +248,8 @@ class SimpleLongShort(Policy):
                 # result is default result
 
                 # since no need to reverse short position -- we might have positive hold position; sell all of them.
-                purchase_num = self.account.place_sell_max_order(symbol, price, 0)
+                sell_price = price - self.additional_sell_price
+                purchase_num = self.account.place_sell_max_order(symbol, sell_price, 0)
                 if purchase_num > 0:
                     if not self.trade_data:
                         self.complete_sell_order(symbol)

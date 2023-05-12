@@ -1,3 +1,5 @@
+from datetime import datetime
+
 all_action_log_pth = 'log/all_action_log.txt'
 
 def print_n_log(log_pth, *args, **kwargs):
@@ -17,6 +19,22 @@ def print_n_log(log_pth, *args, **kwargs):
             print(*args, **kwargs, file=log_file)
     else: # log_pth is not None, nor str, nor list
         raise TypeError("log_pth must be a string, a list of strings, or None")
+
+def log_purpose(log_pth, type_str):
+    while True:
+        tolog = input(f"Do you want to log the {type_str} result? (y/n) ")
+        if tolog == 'y':
+            print_n_log(log_pth, f'{datetime.now()}')
+            purpose = input(f"What is the purpose/target of this {type_str}ing? ")
+            print_n_log(log_pth, f'purpose: {purpose}')
+            return True
+        elif tolog == 'n':
+            return False
+
+def log_review(log_pth, type_str):
+    
+    pass
+
 
 def main():
     from datetime import datetime

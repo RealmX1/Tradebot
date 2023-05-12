@@ -301,3 +301,55 @@ Block test: False
 
 2023-05-09 13:39:31.527526Block test: False
 purpose: dynamic weight decay during training.
+
+Block test: False
+
+2023-05-10 10:10:46.622398Block test: False
+purpose: test without mock_trade
+
+Block test: False
+
+2023-05-10 10:11:40.630531Block test: False
+purpose: same
+
+Block test: False
+
+2023-05-10 10:48:21.095990Block test: False
+purpose: not doing trade during extended trading time.
+
+2023-05-11 15:31:53.943883
+Block test: False
+purpose: first transformer test
+
+2023-05-11 15:33:17.369062
+Block test: False
+purpose: same
+
+2023-05-11 15:34:15.694086
+Block test: False
+
+2023-05-11 15:34:20.002730
+Block test: False
+purpose: transformer
+
+2023-05-11 15:34:57.760783
+Block test: False
+purpose: 
+
+2023-05-11 16:32:13.180662
+Block test: False
+purpose: 
+
+2023-05-11 19:58:57.902355
+Block test: False
+purpose: no attention
+2023-05-11 20:01:12.180176
+purpose: y
+2023-05-11 20:02:05.135385
+2023-05-11 20:02:27.100841
+purpose: no attention
+2023-05-11 20:03:13.713325
+purpose: no attention
+2023-05-12 00:15:42.369533
+purpose: crazy high precision, low pred count model
+Result Interpretation: not good. will try training "Up spotting" and "Down spotting" model seperately.

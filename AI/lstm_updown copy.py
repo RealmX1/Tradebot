@@ -458,9 +458,10 @@ def get_current_lr(optimizer):
 def save_params(best_prediction, optimizers, model_state, last_model_pth, best_model_state, best_model_pth, model_training_param_pth, has_improvement, best_k, epoch_num):
     print('saving params...')
 
-    model_lr = get_current_lr(optimizers[0])
+    encoder_lr = get_current_lr(optimizers[0])
+    decoder_lr = get_current_lr(optimizers[1])
     with open(model_training_param_pth, 'w') as f:
-        json.dump({'learning_rate': model_lr, 'best_prediction': best_prediction, 'best_k':best_k, 'epoch_num':epoch_num}, f)
+        json.dump({'encoder_learning_rate': encoder_lr, 'decoder_learning_rate': decoder_lr, 'best_prediction': best_prediction, 'best_k':best_k, 'epoch_num':epoch_num}, f)
     print('saving model to: ', last_model_pth)
     torch.save(model_state, last_model_pth)
     if has_improvement:
@@ -507,7 +508,7 @@ def main():
     print('loaded in ', time.time()-start_time, ' seconds')
     
     # Loading model and parameters:
-    # model, best_model, model_lr, best_prediction, best_k, epoch_nu
+    # model, best_model, encoder_lr, decoder_lr, best_prediction, best_k, epoch_nu
     print('loading model')
     start_time = time.time()
     if model_type == 'transformer':
@@ -529,7 +530,7 @@ def main():
             max_length=hist_window,
         ).to(device)
     elif model_type == 'lstm':
-        model = Seq2SeqDirectionClassification(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device, attention = True).to(device)
+        model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device, attention = True).to(device)
     best_model = copy.deepcopy(model)
 
     if os.path.exists(last_model_pth):
@@ -538,7 +539,8 @@ def main():
         best_model.load_state_dict(torch.load(best_model_pth))
         with open(model_training_param_pth, 'r') as f:
             saved_data = json.load(f)
-            model_lr = saved_data['learning_rate']
+            encoder_lr = saved_data['encoder_learning_rate']
+            decoder_lr = saved_data['decoder_learning_rate']
             best_prediction = saved_data['best_prediction']
             best_k = saved_data['best_k']
             epoch_num = saved_data['epoch_num']
@@ -547,7 +549,8 @@ def main():
     # elif os.path.exists(best_model_pth):
     else:
         print('No existing model')
-        model_lr = learning_rate
+        encoder_lr = learning_rate
+        decoder_lr = learning_rate
         best_prediction = 0.0
         best_k = 0.0
         epoch_num = 0
@@ -559,10 +562,13 @@ def main():
 
 
     # optimizer = SGD(model.parameters(), lr=learning_rate)
-    optimizer = AdamW(model.parameters(),weight_decay=1e-5, lr=model_lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=scheduler_factor, patience=scheduler_patience, threshold=scheduler_threshold)
-    optimizers = [optimizer]
-    schedulers = [scheduler]
+    encoder_optimizer = AdamW(model.encoder.parameters(),weight_decay=1e-5, lr=encoder_lr)
+    decoder_optimizer = AdamW(model.decoder.parameters(),weight_decay=1e-5, lr=decoder_lr)
+    encoder_scheduler = ReduceLROnPlateau(encoder_optimizer, mode='min', factor=scheduler_factor, patience=scheduler_patience, threshold=scheduler_threshold)
+    decoder_scheduler = ReduceLROnPlateau(decoder_optimizer, mode='min', factor=scheduler_factor, patience=scheduler_patience, threshold=scheduler_threshold)
+
+    optimizers = [encoder_optimizer, decoder_optimizer]
+    schedulers = [encoder_scheduler, decoder_scheduler]
     
 
     
@@ -697,8 +703,9 @@ def main():
         # plt.clf()
         # plt.ioff()
 
-        model_lr = get_current_lr(optimizer)
-        lrs = [model_lr]
+        encoder_lr = get_current_lr(encoder_optimizer)
+        decoder_lr = get_current_lr(decoder_optimizer)
+        lrs = [encoder_lr, decoder_lr]
 
         # Test the model
         # start_time = time.time()

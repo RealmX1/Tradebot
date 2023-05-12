@@ -65,4 +65,4 @@ for i in range(10000):
         # Update the model's parameters
         next_state_tensor = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0)
         target = reward + gamma * torch.max(model(next_state_tensor))
-        action_tensor = torch.tensor([action], dtype=torch
+        action_tensor = torch.tensor([action], dtype=torch)

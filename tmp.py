@@ -93,6 +93,7 @@ file_path = 'data/forever_stream.csv'
 prev_mtime = os.path.getmtime(file_path)
 
 while True:
+    print('')
     curr_mtime = os.path.getmtime(file_path)
     if curr_mtime - prev_mtime < wait_threshold:
         # file has been modified, update the prev_mtime

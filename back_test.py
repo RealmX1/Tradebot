@@ -16,12 +16,14 @@ from datetime import datetime
 
 from alpaca.data.timeframe import TimeFrame
 
+
 # np.set_printoptions(precision=4, suppress=True) 
 
 import sys
 sys.path.append('AI')  # add the path to my_project
 sys.path.append('alpaca_api') 
 sys.path.append('sim')
+sys.path.append('research/transformer')
 
 
 # import custom files
@@ -31,6 +33,7 @@ from account import *
 from data_utils import *
 from model_structure_param import *
 from common import *
+from transformer import *
 
 
 loss_fn = nn.MSELoss(reduction = 'none')
@@ -151,7 +154,7 @@ def time_analysis(timers, pth = None):
         )  
         
 
-def back_test(policy, model, data_loader, col_names, weights, trade_df = None, trade_data = False, num_epochs = 1, blocked_col = None, blocked_col_name = 'None', to_plot = True, to_print = True, symbol = None):
+def back_test(policy, model, data_loader, col_names, weights, trade_df = None, trade_data = False, mock_data = False, num_epochs = 1, blocked_col = None, blocked_col_name = 'None', to_plot = True, to_print = True, symbol = None):
     global complete_log_pth, result_log_pth
     account = policy.account
 
@@ -214,7 +217,12 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df = None, t
             
             timers[6] += time.time() - st # time spent on data prep
             st = time.time()
-            y_pred = model(x_batch, None, teacher_forcing_ratio) # [N, prediction_window]
+            if model_type == 'lstm':
+                y_pred = model(x_batch, y_batch, teacher_forcing_ratio)
+            elif model_type == 'transformer':
+                # print(y_batch.shape)
+                y_batch_None = torch.zeros_like(y_batch).to(device)
+                y_pred = model.predict(x_batch, y_batch_None)
             timers[2] += time.time() - st # time spent on prediction 
             st = time.time()
 
@@ -230,9 +238,10 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df = None, t
                 end_price = price
 
             # decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, None, account, col_names) # naivemacd
-            prediction = y_pred.clone().detach().cpu().numpy()
+            prediction = y_pred.clone().detach().cpu().numpy().squeeze(2)
             # print_n_log(complete_log_pth, prediction.shape, weights.shape)
             weighted_prediction = (prediction * weights).sum() / weights.sum()
+            # print(f'{timestamp} {weighted_prediction:4.2f}')
             decision = policy.decide('MSFT', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names)
             
             
@@ -359,6 +368,7 @@ def back_test(policy, model, data_loader, col_names, weights, trade_df = None, t
             step_per_sec = step_per_sec * 0.9 + 0.1 * (1/(st-step_start))
             # print_n_log(complete_log_pth, st-step_start)
 
+        print(result_log_pth, prediction_stat_str, '\n', account_n_stock_str)
         time_analysis(timers)
         back_test_time = time.time()-start_time
         print_n_log(complete_log_pth, f'back test completed in {back_test_time:.2f} seconds')  
@@ -443,36 +453,46 @@ def main():
         to_plot = True
 
 
-    should_log_result = False
-    while True:
-        tolog = input("Do you want to log the result? (y/n) ")
-        if tolog == 'y':
-            print_n_log(result_log_pth, f'\nBlock test: {block_test}')
-            print_n_log(result_log_pth, f'\n{datetime.now()}Block test: {block_test}')
-            purpose = input("What is the purpose of this back_test? ")
-            print_n_log(result_log_pth, f'purpose: {purpose}')
-            should_log_result = True
-            break
-        elif tolog == 'n':
-            result_log_pth = None
-            break
+    should_log_result = log_purpose(result_log_pth, 'testing')
     
     
 # dataname and model name are produced first, as they are used to make the log file paths.
     # data source
     start_time = time.time()
     time_str = '20230101_20230501'
-    symbols = ['NVDA', 'PDD', 'DQ', 'ARBB', 'JYD', 'MGIH']
+    symbols = ['PDD', 'DQ', 'ARBB', 'JYD', 'MGIH', 'NVDA']
     data_type = '16feature0'
     timeframe_str = TimeFrame.Minute.value
     post = 'raw'
     
-    model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
+    if model_type == 'transformer':
+        src_pad_idx = -1e20
+        trg_pad_idx = -1e20
+        src_vocab_size = 10
+        trg_vocab_size = 1
+        model = Transformer(
+        src_vocab_size,
+        trg_vocab_size,
+        src_pad_idx,
+        trg_pad_idx,
+        feature_num=feature_num,
+        num_layers=num_layers,
+        forward_expansion=2, # 4
+        heads=4, # 8
+        dropout=0,
+        device="cuda",
+        max_length=hist_window,
+    ).to(device)
+    else:
+        model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device).to(device)
     model_name = f'last_model_{config_name}'
     model_pth = f'model/{model_name}.pt'
-    model_training_param_pth = f'../model/training_param_{config_name}.json'
     model.load_state_dict(torch.load(model_pth))
-    weight_decay = 0.8**20
+    model_training_param_pth = f'model/training_param_{config_name}.json'
+    with open(model_training_param_pth, 'r') as f:
+        saved_data = json.load(f)
+        best_k = saved_data['best_k']
+        weight_decay = 0.8**best_k
     
     for symbol in symbols:
         data_name = f'bar_set_{time_str}_{symbol}_{data_type}'
@@ -539,6 +559,7 @@ def main():
             if block_test:
                 n = feature_num
 
+            interrupted = False
             for x in range(n+1):
                 col_name = 'None'
                 if not block_test or x == n: 
@@ -563,21 +584,23 @@ def main():
                 except KeyboardInterrupt:
                     plt.savefig(pic_pth)
                     print_n_log(complete_log_pth, f'saving figure to {pic_pth}')
-                    raise KeyboardInterrupt
+                    interrupted = True
                 
                 # block_str_lst.append(block_str)
                 # test_strs_lst.append(end_strs)
                 # loss_lst.append(loss)
+            if interrupted:
+                break
 
         print_n_log(complete_log_pth, f'Test completed in {time.time()-start_time:.2f} seconds')
         print_n_log(complete_log_pth, model_pth)
         # if(should_log_result):
         #     purpose = input(f"How would you interpret this test on symbol {symbol}?")
         #     print_n_log(result_log_pth, f'Result Interpretation: {purpose}')
-    
     if(should_log_result):
         purpose = input("Please summarize the result of all tests: \n")
         print_n_log(result_log_pth, f'Result Interpretation: {purpose}')
+        # enter empty line to complete logging; put it in for loop
 
 if __name__ == "__main__":
     main()

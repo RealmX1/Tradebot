@@ -41,7 +41,7 @@ stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
 post = 'raw'
 default_local_data_pth = '../data'
 
-save_template = "{data_pth}/{data_type}/{pre}_{symbol_str}_{time_str}_{timeframe_str}_{post}.{data_type}"
+save_template = "{data_pth}/{data_type}/{pre}_{time_str}_{symbol_str}_{timeframe_str}_{post}.{data_type}"
     
 
 def get_bars(symbol_lst, timeframe, start, end, limit, adjustment = 'all'):

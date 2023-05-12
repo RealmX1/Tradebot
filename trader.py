@@ -269,15 +269,7 @@ def main():
             print('Latest update is complete')
             prev_mtime = curr_mtime
         time.sleep(0.1)
-
-
-    stream = StockDataStream(api_key = API_KEY, secret_key = SECRET_KEY, raw_data=raw_data, feed=DataFeed.SIP)
-    
-    for symbol in symbols:
-        stream.subscribe_bars(on_receive_bar, symbol)
-        # subscribe_quote
-        print(f'subscribed to {symbol}')
-
+        
     thread = threading.Thread(target=thread_function)
     print('starting thread')
     thread.start()

@@ -250,22 +250,30 @@ import pandas as pd
 # print(df.columns.tolist())
 # # print(df.head(20))
 
-# a = np.array([True, False, True])
-# b = np.array([False, True, True])
+import os
+import io
+import sys
+import tailer
+sys.path.append('../')
+from symbols import *
 
-# c = a & b
+max_line_num = len(symbols)+1
+print(max_line_num)
 
-# print(c)
+def get_last_lines(file_name, n_lines):
+    last_lines = []
+    with open(file_name, 'rb') as f:
+        f.seek(-2, os.SEEK_END)  # Jump to the second last byte.
+        for i in range(n_lines):
+            while f.read(1) != b'\n':  # Until EOL is found...
+                f.seek(-2, io.SEEK_CUR)  # ...jump back the read byte plus one more.
+            last_lines.append(f.readlines())  # Read all the lines till the end.
+    return last_lines[-n_lines:]
 
-data_path = '../data/csv/last_week_bar_set_20230410_20230417_raw.csv'
-df = pd.read_csv(data_path, index_col = ['symbol', 'timestamp'])    
-print(df.head(5))
-
-
-
-# testing capbility of github-copiolet
-# this is a piece of code that calculates the number of miss match between two lists
-a = np.array([1,2,3,4,5,6,7,8,9,10])
-b = np.array([1,2,3,4,5,6,7,8,9,10])
-
-c = a == b
+# Use it like this:
+file_name = '../data/forever_stream.csv'
+last_lines = get_last_lines(file_name, 10)
+print(len(last_lines))
+print(last_lines)
+# df = pd.read_csv(io.StringIO('\n'.join(last_lines)), header=None)
+# print 

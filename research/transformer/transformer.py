@@ -1,9 +1,5 @@
 """
-A from scratch implementation of Transformer network,
-following the paper Attention is all you need with a
-few minor differences. I tried to make it as clear as
-possible to understand and also went through the code
-on my youtube channel!
+Taken from a git-repo
 """
 
 import torch
@@ -31,7 +27,7 @@ class SelfAttention(nn.Module):
         N = query.shape[0]
 
         value_len, key_len, query_len = values.shape[1], keys.shape[1], query.shape[1]
-        print(values.shape, keys.shape, query.shape)
+        # print(values.shape, keys.shape, query.shape)
         values = self.values(values)  # (N, value_len, feature_num)
         keys = self.keys(keys)  # (N, key_len, feature_num)
         queries = self.queries(query)  # (N, query_len, feature_num)
@@ -51,13 +47,22 @@ class SelfAttention(nn.Module):
         # energy: (N, heads, query_len, key_len)
 
         # Mask padded indices so their weights become 0
+        # print('energy.shape: ', energy.shape)
+        
         if mask is not None:
+            
+            # print('mask.shape: ', mask.shape)
+            # print(mask[0])
             energy = energy.masked_fill(mask == 0, float("-1e20")) # set to negative infinity becuase the ensuing softmax will make it 0
+        
+        # print(energy[0])
 
         # Normalize energy values similarly to seq2seq + attention
         # so that they sum to 1. Also divide by scaling factor for
         # better stability
         attention = torch.softmax(energy / (self.feature_num ** (1 / 2)), dim=3)
+        # print('attention.shape: ', attention.shape)
+        # print(attention[0])
         # attention shape: (N, heads, query_len, key_len)
 
         out = torch.einsum("nhql,nlhd->nqhd", [attention, values]).reshape(
@@ -218,7 +223,7 @@ class Transformer(nn.Module):
         trg_vocab_size,
         src_pad_idx,
         trg_pad_idx,
-        feature_num=22,
+        feature_num,
         num_layers=4,
         forward_expansion=1, # 4
         heads=2, # 8
@@ -266,16 +271,23 @@ class Transformer(nn.Module):
     def make_trg_mask(self, trg):
         N, trg_len, trg_feature_num = trg.shape
         assert trg_feature_num == 1
-        trg_mask = torch.tril(torch.ones((trg_len, trg_len))).expand(
+        trg_mask = torch.tril(torch.ones((trg_len, trg_len)),diagonal=0).expand(
             N, 1, trg_len, trg_len
         )
 
         return trg_mask.to(self.device)
 
     def forward(self, src, trg):
+        # shift_padding = torch.zeros((trg.shape[0], 1, trg.shape[2])).to(self.device)
+        # trg = torch.cat([shift_padding, trg], dim=1)
+        # there are two options, either padd one empty timestamp, or chagne the mask to start with full zero first row.
+
+        feature_num = src.shape[2]
         # src_mask = self.make_src_mask(src)
         # (N, 1, 1, src_len)
         trg_mask = self.make_trg_mask(trg)
+        # print('target mask shape: ', trg_mask.shape)
+        # print('target mask: ', trg_mask[0])
 
         padding = torch.zeros((trg.shape[0], trg.shape[1], feature_num-trg.shape[2])).to(self.device)
         padded_trg = torch.cat([trg, padding], dim=2)
@@ -283,21 +295,44 @@ class Transformer(nn.Module):
         enc_src = self.encoder(src, None)
         out = self.decoder(padded_trg, enc_src, None, trg_mask)
         return out
+    
+    def predict(self, src, trg):
+        feature_num = src.shape[2]
+        batch_size = trg.shape[0]
+        pred_window = trg.shape[1]
+        out_dim = trg.shape[2]
+        # src_mask = self.make_src_mask(src)
+        # (N, 1, 1, src_len)
+        trg_mask = self.make_trg_mask(trg)
+        # print('target mask shape: ', trg_mask.shape)
+        # print('target mask: ', trg_mask[0])
+
+        padding = torch.zeros((batch_size, pred_window, feature_num-out_dim)).to(self.device)
+        padded_trg = torch.cat([trg, padding], dim=2)
+        # (N, 1, trg_len, trg_len)
+        enc_src = self.encoder(src, None)
+        out = self.decoder(padded_trg, enc_src, None, trg_mask)
+
+        for i in range (pred_window):
+            padded_out = torch.cat([out, padding], dim=2)
+            out = self.decoder(padded_out, enc_src, None, trg_mask)
+        # print('out shape: ', out.shape)
+        return out
 
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(device)
 
     N = 100
     seq_len = 32
-    feature_num = 22
+    feature_num = 16
+    num_layers = 2
 
     # Generate random tensor with values between 0 and 1
     x = torch.rand((N, seq_len, feature_num)).to(device)
 
     trg = torch.rand(N, seq_len, 1).to(device)
-    print('x.shape', x.shape)
+    print('x.shape: ', x.shape)
     # x.shape (N, src_len)
     # trg.shape (N, trg_len)
 
@@ -305,7 +340,18 @@ if __name__ == "__main__":
     trg_pad_idx = -1e20
     src_vocab_size = 10
     trg_vocab_size = 1
-    model = Transformer(src_vocab_size, trg_vocab_size, src_pad_idx, trg_pad_idx, device=device).to(device)
+    model = Transformer(
+        src_vocab_size,
+        trg_vocab_size,
+        src_pad_idx,
+        trg_pad_idx,
+        feature_num=feature_num,
+        num_layers=num_layers,
+        forward_expansion=2, # 4
+        heads=4, # 8
+        dropout=0,
+        device="cuda",
+        max_length=100,
+    ).to(device)
     out = model(x, trg)
     # out = model(x, trg[:, :-1])
-    print(out.shape)

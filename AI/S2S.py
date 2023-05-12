@@ -154,12 +154,61 @@ class Seq2Seq(nn.Module):
         # softmax_outputs = self.softmax(outputs.squeeze(2))
         # print("softmax_outputs: ", softmax_outputs[0])
 
-        return outputs.squeeze(2) # note that squeeze is used since y_batch is 2d, yet y_pred is 3d. (if output size sin't 1, then y_batch will be 3d.)            
+        return outputs # note that squeeze is used since y_batch is 2d, yet y_pred is 3d. (if output size sin't 1, then y_batch will be 3d.)            
         # return -1* torch.ones(batch_size, self.prediction_window).to(self.device) # test if get_diff_direction is fucntional
 
+class Seq2SeqDirectionClassification(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device, attention = True):
+        super().__init__()
+        
+        self.encoder = Encoder(input_size, hidden_size, num_layers, dropout).to(device)
+        self.decoder = Decoder(output_size, hidden_size, num_layers, output_size, dropout, attention).to(device)
+        self.softmax = nn.Softmax(dim=2) # third dimension is the classification dimension
+        self.device = device
+
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.output_size = output_size
+        
+        self.prediction_window = prediction_window
+        # self.bn1 = nn.BatchNorm1d(1)
+        
+        assert self.encoder.hidden_size == self.decoder.hidden_size, \
+            "Hidden dimensions of encoder and decoder must be equal!"
+        assert self.encoder.num_layers == self.decoder.num_layers, \
+            "Encoder and decoder must have equal number of layers!"
+
+    # use teacher forcing ratio to balance between using predicted result vs. true result in generating next prediction
+    def forward(self, input, target, teacher_forcing_ratio = 0.1):
+        batch_size = input.shape[0]
+
+        encoder_output, hidden, cell = self.encoder(input)
+        # print("hidden.shape: ",hidden.shape)
+        # expected: ?????(batch_size, hidden_size)
+
+        outputs = torch.zeros_like(target).to(self.device)
+        # x = input[:,-1:,close_idx:close_idx+1]
+        x = torch.ones_like(target).to(self.device) 
+        x = self.softmax(x)
+        for t in range (self.prediction_window):
+            # if t == 0:
+            #     pass
+            # else:
+            if teacher_forcing_ratio:
+                if random.random() < teacher_forcing_ratio:
+                    x = target[:,t:t+1,:]
+            x, hidden, cell = self.decoder(x, encoder_output, hidden, cell)
+            outputs[:,t:t+1,:] = x
+        
+        # softmax_outputs = self.softmax(outputs.squeeze(2))
+        # print("softmax_outputs: ", softmax_outputs[0])
+
+        return outputs # (N, pred_window, output features)
 
 
-
+# TODO: try the use of two seperate models for classifying down and up change?
+# what is the benefit from this?
 
 
 
