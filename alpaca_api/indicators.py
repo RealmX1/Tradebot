@@ -75,10 +75,10 @@ def append_indicators(df, mock_trade = True):  # note that the mocktrade version
 
     # df.ta.macd(append=True)
     mock_trade_df = None
+    df.dropna(inplace = True)
     if mock_trade:
         df['next_high'] = df['high'].shift(-1)
         df['next_fall'] = df['low'].shift(-1)
-
         df.dropna(inplace = True)
         df_reset = df.reset_index()
         new_df = df_reset[['symbol','timestamp', 'next_high', 'next_fall']]
@@ -117,11 +117,14 @@ def main():
     # input_path = f'../data/csv/bar_set_huge_{time_str}_raw.csv'
 
     testing_time_str = '20230101_20230501'
-    training_time_str = '20200101_20230101'
-    input_symbols = ['AAPL', 'PDD', 'DQ', 'VZ']
+    # training_time_str = '20200101_20230101'
+    training_time_str = '20200101_20200701'
+    # input_symbols = ['AAPL', 'PDD', 'DQ', 'VZ']
+    input_symbols = ['PDD', 'DQ', 'ARBB', 'JYD', 'MGIH', 'NVDA']
     timeframe = TimeFrame.Minute.value
 
-    training = True
+    training = False # HYPERPARAMETER
+    # "bar_set_20200101_20200601_MSFT_1Min_raw.csv"
     if training == True:
         time_str = training_time_str
         input_pth_template = '../data/csv/training/training_raw/{pre}_{time_str}_{symbol}_{timeframe}_{post}.csv'
@@ -164,7 +167,8 @@ def main():
             print(f'finished calculating indicators for {symbol} in {calculation_time} seconds')
             start_time2 = time.time()
 
-            
+            # Check if the feature_lst already exists in feature_hist_df; if so use the id of the existing row; if not, create a new row
+            # this is to avoid saving the same feature set multiple times and mixing them up.
             feature_num = len(feature_lst)
             exist_row = False
             id = 0
@@ -186,7 +190,7 @@ def main():
             if not exist_row:
                 current_timestamp = datetime.now()
                 new_row = {'feature_num': feature_num, 'timestamp': current_timestamp, 'feature_lst': feature_lst, 'id': id}
-                feature_hist_df = feature_hist_df.append(new_row, ignore_index=True)
+                feature_hist_df = feature_hist_df._append(new_row, ignore_index=True)
 
             data_type = f'{feature_num}feature{id}' # later used to construct save_pth
             save_pth = save_pth_template_2.format(data_type = data_type)

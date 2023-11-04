@@ -491,25 +491,33 @@ def get_pth(pth_to_main):
 
 
 def main():
+    """
+        steps:
+        1. log the training purpose
+        2. load data and model
+
+    """
+
+    ############################## 1. log the training purpose ##############################
     pth_to_main = '..'
     train_purporse_log_pth = f'{pth_to_main}/log/train_purpose_log.txt'
     should_log_result = ask_for_log(train_purporse_log_pth)
 
     
-    
-    # CHANGE CONFIG NAME to save a new model
+    ############################## 2. load data and model ##############################
+    # CHANGE CONFIG NAME to save a new model; normally, CONFIG NAME is created autometically in model_structure_param.py
     start_time = time.time()
+
     print('loading data & model')
-    # data_pth = 'data/cdl_test_2.csv'
     best_model_pth, last_model_pth, model_training_param_pth = get_pth(pth_to_main)
 
     training_log_pth = f"{pth_to_main}/log/training_log.csv"
-    print('loaded in ', time.time()-start_time, ' seconds')
-    
-    # Loading model and parameters:
+
     # model, best_model, model_lr, best_prediction, best_k, epoch_nu
     print('loading model')
     start_time = time.time()
+
+    # initalize empty model given model_type (modify in model_structure_param.py)
     if model_type == 'transformer':
         src_pad_idx = -1e20
         trg_pad_idx = -1e20
@@ -529,7 +537,8 @@ def main():
             max_length=hist_window,
         ).to(device)
     elif model_type == 'lstm':
-        model = Seq2SeqDirectionClassification(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device, attention = True).to(device)
+        model = Seq2Seq(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device, attention = True).to(device)
+        # model = Seq2SeqDirectionClassification(input_size, hidden_size, num_layers, output_size, prediction_window, dropout, device, attention = True).to(device)
     best_model = copy.deepcopy(model)
 
     if os.path.exists(last_model_pth):
@@ -604,7 +613,7 @@ def main():
             symbol = random.choice(training_symbols)
             print("Symbol for the epoch: ", symbol)
             data_load_start_time = time.time()
-            data_pth = f'{pth_to_main}/data/csv/training/bar_set_{symbol}_20200101_20230101_1Min_{feature_num}feature0.csv'
+            data_pth = f'{pth_to_main}/data/csv/training/bar_set_20200101_20200701_{symbol}_1Min_{feature_num}feature0.csv'
             train_loader, test_loader = load_n_split_data(data_pth, hist_window, prediction_window, batch_size, train_ratio)
             print(f'data loading completed in {time.time()-data_load_start_time:.2f} seconds')
             print(f'Epoch {epoch+1}/{num_epochs}')

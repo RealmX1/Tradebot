@@ -353,3 +353,5 @@ purpose: no attention
 2023-05-12 00:15:42.369533
 purpose: crazy high precision, low pred count model
 Result Interpretation: not good. will try training "Up spotting" and "Down spotting" model seperately.
+2023-10-31 19:24:30.966073
+purpose: first backtest

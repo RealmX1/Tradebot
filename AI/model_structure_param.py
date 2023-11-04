@@ -63,4 +63,5 @@ testing_time_str = f'{testing_start_str}_{testing_end_str}'
 
 
 
-training_symbols = ['AAPL','DQ', 'PDD', 'VZ']
+# training_symbols = ['AAPL','DQ', 'PDD', 'VZ']
+training_symbols = ['MSFT']

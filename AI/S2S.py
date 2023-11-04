@@ -95,7 +95,6 @@ class Decoder(nn.Module):
             # print("context_vector: ", context_vector.shape)
 
             # v*tanh(hencoder*w1+hdecoder*w2)
-            
             lstm_input = torch.cat([context_vector, x], dim=2)
             # lstm_input: (batch_size, 1, embedding_size + hidden_size)
             # print("lstm_input: ", lstm_input.shape)
@@ -134,7 +133,9 @@ class Seq2Seq(nn.Module):
         batch_size = input.shape[0]
 
         encoder_output, hidden, cell = self.encoder(input)
-        # print("hidden.shape: ",hidden.shape)
+        print("encoder_output.shape: ",encoder_output.shape)
+        print("hidden.shape: ",hidden.shape)
+        print("cell.shape: ",cell.shape)
         # expected: ?????(batch_size, hidden_size)
 
         outputs = torch.zeros(batch_size, self.prediction_window, self.output_size).to(self.device)
@@ -189,7 +190,10 @@ class Seq2SeqDirectionClassification(nn.Module):
 
         outputs = torch.zeros_like(target).to(self.device)
         # x = input[:,-1:,close_idx:close_idx+1]
-        x = torch.ones_like(target).to(self.device) 
+        x = torch.ones_like(target).to(self.device)
+        print("x.shape: ", x.shape)
+        # x = x.permute(0,2,1).to(self.device) 
+        
         x = self.softmax(x)
         for t in range (self.prediction_window):
             # if t == 0:

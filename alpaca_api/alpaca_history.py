@@ -26,14 +26,28 @@ from alpaca.data.requests import (
 from alpaca.data.timeframe import TimeFrame
 from alpaca.data.enums import Exchange, DataFeed
 from alpaca.data.models import BarSet, QuoteSet, TradeSet
-API_KEY = "AKOZFEX5F94X2SD7HQOQ"
-SECRET_KEY =  '3aNqjtbPlkJv09NicPgYFXC3KUhNOR16JGGdiLet'
+
+# Read the API key and secret from environment variables and store them in variables.
+def parse_keys(filename):
+    keys = {}
+    with open(filename, 'r') as file:
+        for line in file:
+            if '=' in line:
+                key, value = line.strip().split('=', 1)
+                keys[key.strip()] = value.strip()
+    return keys
+
+keys = parse_keys("_alpaca_api_key.key")
+
+API_KEY = keys.get('API_KEY')
+SECRET_KEY = keys.get('SECRET_KEY')
+#############################################
 
 
 
 
 pd.set_option('display.max_rows', None)
-data_source = DataFeed.SIP
+data_source = DataFeed.SIP # DataFeed.IEX is default/free; SIP & OTC are available through paid subscription
 
 stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
 
@@ -44,23 +58,18 @@ default_local_data_pth = '../data'
 save_template = "{data_pth}/{data_type}/{pre}_{time_str}_{symbol_str}_{timeframe_str}_{post}.{data_type}"
     
 
-def get_bars(symbol_lst, timeframe, start, end, limit, adjustment = 'all'):
-    # print(symbol_lst)
-    # Test single symbol request
-    
+def get_bars(symbol_lst, timeframe, start, end, limit, adjustment = 'all'):    
     request = StockBarsRequest(
         symbol_or_symbols=symbol_lst, timeframe=timeframe, start=start, end=end, limit=limit, adjustment=adjustment, feed = data_source
     )
-
+    
     print('Start request')
     bar_set = stock_client.get_stock_bars(request_params=request)
     print('End request')
 
     return bar_set
 
-def get_trades(symbol_or_symbol_lst, timeframe, start, end, limit, adjustment = None):
-    # Test single symbol request
-    
+def get_trades(symbol_or_symbol_lst, timeframe, start, end, limit, adjustment = None):    
     request = StockTradesRequest(
         symbol_or_symbols=symbol_or_symbol_lst, start=start, end=end, limit=limit, feed = data_source
     )
@@ -186,6 +195,7 @@ def combine_bars(df_bars, type = 'bars'):
     print(f'multiple df combined in {time.time()-start_time:.2f} seconds')
     return combined_df
 
+# TODO: what is the default behavior of this?
 def get_latest_bars(symbol_or_symbol_lst):
     request = StockLatestBarRequest(
         symbol_or_symbol_lst=symbol_or_symbol_lst, feed = data_source
@@ -209,8 +219,41 @@ def last_week_bars(symbol_lst, timeframe = TimeFrame.Minute, data_pth = default_
 def get_and_process_quotes(symbol, timeframe, start, limit):
     pass
 
-# get data for symbol_lst from start to end in a single attempt
-def get_and_process_data(symbol_lst, timeframe, start, end, limit = None, download=False, pre = '', post = post, data_pth = default_local_data_pth, type = 'bars', adjustment ='all'):
+############################################################################################################
+
+'''
+Get data for symbol_lst from start to end in a single attempt TODO: autometically determine what new data to download; instead of downloading everything, only download the new dataXXXXXXXXXXXXXXXXXXXX Trerrible idea? 
+
+    Expected Input:
+        Request Parameters: 
+            symbol_lst
+            timeframe
+            start: datetime object
+            end  : datetime object
+            limit: None by default
+        download          : if true download new data, otherwise read from existing csv
+        pre               : prefix of the csv file name. Default "". This is before "bar_set" or "trade_set", should have a trailing "_" if not empty
+        post              : postfix of the csv file name. Default "raw". This is after the timeframe, should have a leading "_" if not empty
+        data_pth          : path to the data folder
+        type              : 'bars' or 'trades' # TODO: add 'quotes'
+        adjustment        : 'all', 'raw', 'split_only', 'dividend_only', 'none' # FIXME: look up alpaca API for exact possible inputs
+    
+    Expected Result:
+        1) return: 
+            a pandas dataframe with multi-level index (symbol, timestamp), with the following features/columns: 
+                symbol, timestamp,                    open, high, low,  close,  volume,   trade_count, vwap
+                ARBB,   2023-04-05 15: 14: 00+00: 00, 3.6,  3.75, 3.55, 3.6,    297401.0, 213.0,       3.615044
+                ARBB,   2023-04-05 15: 15: 00+00: 00, 3.6,  3.85, 3.55, 3.85,   63472.0,  336.0,       3.708484
+                ARBB,   2023-04-05 15: 16: 00+00: 00, 3.8,  3.9,  3.75, 3.7925, 44114.0,  231.0,       3.835715
+        2) a saved raw .pkl file according to the save_template
+        3) a saved .csv file of the returned pandas dataframe, according to the save_template
+'''
+def get_and_process_data(symbol_lst, timeframe, start, end, limit = None, adjustment ='all',
+                         download=False, 
+                         pre = '', post = post, 
+                         data_pth = default_local_data_pth, 
+                         type = 'bars'):
+    # Begin: Format Save Path
     if type == 'bars':
         get_data = get_bars
         pre = pre + 'bar_set'
@@ -219,19 +262,24 @@ def get_and_process_data(symbol_lst, timeframe, start, end, limit = None, downlo
         pre = pre + 'trade_set'
 
     symbol_str = '_'.join(symbol_lst)
-    start_str = start.strftime('%Y%m%d')
-    end_str = end.strftime('%Y%m%d')
-    time_str = f'{start_str}_{end_str}'
+    start_str  = start.strftime('%Y%m%d')
+    end_str    = end.strftime('%Y%m%d')
+    time_str   = f'{start_str}_{end_str}'
+    # print('time_str: ', time_str)
     pth_format = save_template.format(data_pth = data_pth, data_type = '{data_type}', pre = pre, symbol_str = symbol_str, time_str = time_str, timeframe_str = timeframe.value, post = post)
 
     pkl_pth = pth_format.format(data_type = 'pkl')
     csv_pth = pth_format.format(data_type = 'csv')
-
+    # End: Format Save Path
     
     start_time = time.time()
     if download:
         print(f'Start getting {type}:')
         dataset = get_data(symbol_lst, timeframe, start, end, limit, adjustment = adjustment)
+
+        # DEBUG
+        print("dataset type: ", dataset)
+
         with open(pkl_pth, 'wb') as f:
             pickle.dump(dataset, f)
         print(f'pkl download completed in {time.time()-start_time:.2f} seconds')
@@ -256,9 +304,12 @@ def get_and_process_data(symbol_lst, timeframe, start, end, limit = None, downlo
 
     return df
 
-# for long timeframe and large symbol num, it might be necessary to split up the request, thus this function is needed
-def get_load_of_data(symbol_lst, timeframe, start, end, \
-                     limit = None, download = False, type = 'bars', data_pth = default_local_data_pth, adjustment = 'all'):
+# for long timeframe and large symbol num, it might be necessary to split up the request, thus this function is needed TODO: autometically split up the request
+def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, 
+                     download = False, 
+                     type = 'bars', 
+                     data_pth = default_local_data_pth, 
+                     adjustment = 'all'):
     if type == 'bars':
         pre = 'bar_set'
     elif type == 'trades':
@@ -293,6 +344,7 @@ def get_load_of_data(symbol_lst, timeframe, start, end, \
             else:
                 end = datetime(i+1,1,1)
         elif type == 'trades':
+            # note that this is only the first half of the month for trade data.
             if (i == raw_start.month):
                 start = raw_start
             else:
@@ -305,8 +357,13 @@ def get_load_of_data(symbol_lst, timeframe, start, end, \
         time_str = f'{start_str}_{end_str}'
         print('getting data with time_str: ', time_str)
         time_strs.append(time_str)
-        if download: get_and_process_data(symbol_lst = symbol_lst, timeframe = timeframe, start = start, end = end, limit = limit, download=download, type = type, data_pth = data_pth, adjustment = adjustment)
+        if download: 
+            get_and_process_data(symbol_lst = symbol_lst, timeframe = timeframe, start = start, end = end, limit = limit, adjustment = adjustment, 
+                                 download=download, 
+                                 type = type, 
+                                 data_pth = data_pth)
 
+        # the other half of the month; note that trade data takes much more space than candle bar; for frequently traded stock(s), Alpaca API struggles to even get half a month of data downloaded at a time.
         if type == 'trades':
             start = datetime(raw_start.year,i,16)
             end = datetime(raw_start.year,i+1,1)
@@ -315,7 +372,10 @@ def get_load_of_data(symbol_lst, timeframe, start, end, \
             time_str = f'{start_str}_{end_str}'
             print('getting data with time_str: ', time_str)
             time_strs.append(time_str)
-            if download: get_and_process_data(symbol_lst = symbol_lst, timeframe = timeframe, start = start, end = end, limit = limit, download=download, type = type, data_pth = data_pth, adjustment = adjustment)
+            if download: get_and_process_data(symbol_lst = symbol_lst, timeframe = timeframe, start = start, end = end, limit = limit, adjustment = adjustment, 
+                                              download=download, 
+                                              type = type, 
+                                              data_pth = data_pth)
 
     print(f'All files downloaded and processed in {time.time()-start_time:.2f} seconds')
 
@@ -347,10 +407,11 @@ def main():
 
 
 
-    symbol_lst = ['MSFT'] #['AAPL','MSFT','TSLA','GOOG','SPY']
+    # symbol_lst = ['PDD', 'DQ', 'ARBB', 'JYD', 'MGIH', 'NVDA']
+    symbol_lst = ["MSFT"]
     timeframe = TimeFrame.Minute
-    start = datetime(2020,1,1) # 2020-01-01 is wednesday
-    end = datetime(2020,7,1) 
+    start = datetime(2023,1,1) # 2020-01-01 is wednesday
+    end = datetime(2023,2,1) 
     # end = datetime.now() 
     # time_strs = ['20200101_20200201', '20200201_20200301', '20200301_20200701']
     # dfs = read_multiple_raw_data(time_strs, type = 'trades')

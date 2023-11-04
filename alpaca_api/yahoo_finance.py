@@ -2,7 +2,7 @@ import yfinance as yf
 import pandas as pd
 import os
 
-ticker_name = 
+# ticker_name = []
 
 if os.path.exists("sp500.csv"):
     sp500 = pd.read_csv("sp500.csv", index_col=0)
