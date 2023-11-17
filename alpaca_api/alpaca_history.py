@@ -35,7 +35,7 @@ def parse_keys(filename):
                 keys[key.strip()] = value.strip()
     return keys
 
-keys = parse_keys("_alpaca_api_key.key")
+keys = parse_keys("alpaca_api/_alpaca_api_key.key")
 
 API_KEY = keys.get('API_KEY')
 SECRET_KEY = keys.get('SECRET_KEY')
@@ -45,15 +45,16 @@ SECRET_KEY = keys.get('SECRET_KEY')
 
 
 pd.set_option('display.max_rows', None)
-data_source = DataFeed.SIP # DataFeed.IEX is default/free; SIP & OTC are available through paid subscription
+data_source = DataFeed.IEX # DataFeed. is default/free; SIP & OTC are available through paid subscription
+data_source_str = str(data_source)[-3:]
 
 stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
 
 # pre = 'bar_set'
 post = 'raw'
-default_local_data_pth = '../data'
+default_local_data_pth = 'data'
 
-save_template = "{data_pth}/csv/{pre}_{time_str}_{symbol_str}_{timeframe_str}_{post}.csv"
+save_template = "{data_pth}/{data_folder}/{pre}_{time_str}_{symbol_str}_{timeframe_str}_{post}_{data_source_str}.csv"
     
 
 def get_bars(symbol_lst, timeframe, start, end, limit, adjustment = 'all'):    
@@ -82,6 +83,11 @@ def get_quotes(symbol_or_symbol_lst, start, limit):
     pass
 
 
+
+
+
+
+# WHERE IS THIS USEFUL?
 # no need to use on trade data... for now.
 def complete_timestamp_with_all_symbol_lst(df):
     # fill each timestamp with all symbol_lst -- if no data, fill with -1
@@ -98,6 +104,13 @@ def complete_timestamp_with_all_symbol_lst(df):
     return full
 
 # this function assumes that 'full' has symbol as first index and timestamp as second index; and that each timestamp has all symbol_lst
+'''
+Fill the NAN/-1 values in the dataframe, mostly created by the expansion for each timestamp to include all symbols in symbol_lst.
+    Expected Input:
+        full: a pandas dataframe where EACH TIMESTAMP HAS ALL SYMBOLS IN SYMBOL_LST, has multi-level index (symbol, timestamp)
+        symbol_num: number of symbols in the symbol_lst
+
+'''
 # DON'T USE IT ON TRADE DATA.
 def infer_missing_data(full,symbol_num):
     # fill missing data with previous row (same symbol, previous timestamp)
@@ -111,15 +124,13 @@ def infer_missing_data(full,symbol_num):
         if -1.0 in row.values:
             symbol, timestamp = i
             # mask = (df_inferred.index.get_level_values(0) == symbol) & (df_inferred.index.get_level_values(1) < timestamp)
-            # prev_indexes = df_inferred.loc[mask].index
             if a < symbol_num:
                 print('no previous index (with same symbol) exist for ', i)
                 continue
-            prev_row = df_inferred.iloc[a-symbol_num]
-            new_row = [prev_row[3]]*4       # open, high, low, close = prev_close
-            new_row += [0.0]*2                # volume & trade_count = 0
-            new_row += [prev_row[6]]   # vwap = prev_vwap
-            # new_row += [1]                  # is_new_row = 1
+            prev_row  = df_inferred.iloc[a-symbol_num]
+            new_row   = [prev_row[3]]*4        # open, high, low, close = prev_close
+            new_row  += [0.0]*2                # volume & trade_count = 0
+            new_row  += [prev_row[6]]   # vwap                        = prev_vwap
             df_inferred.loc[i] = new_row
         if (a+1) % 100000 == 0:
             print(f'processed {a+1} rows')
@@ -160,22 +171,10 @@ def concat_symbol_lst(df):
 
 # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXassumes that df_bars is in the order of timestamp, symbol
 # UNTESTED
-def read_multiple_raw_data(symbol_str, time_strs, pre, post, data_pth = default_local_data_pth, timeframe = TimeFrame.Minute):
-    
-    start_time = time.time()
-    print('Reading multiple processed files...')
-    dfs = []
-    for time_str in time_strs:
-        csv_path = save_template.format(data_pth = data_pth, pre = pre, symbol_str = symbol_str, time_str = time_str, timeframe_str = timeframe.value, post = post)
-        df = pd.read_csv(csv_path, index_col = ['symbol', 'timestamp'])
-        dfs.append(df)
-    print(f'multiple csv reading completed in {time.time()-start_time:.2f} seconds')
-    return dfs
-
-# UNTESTED
 def combine_bars(df_bars, type = 'bars'):
     start_time = time.time()
     print('Combining multiple df...')
+
     combined_df = pd.concat(df_bars)
     # Remove rows where both indices are the same
     duplicated = combined_df.index.duplicated()
@@ -218,26 +217,26 @@ def get_and_process_quotes(symbol, timeframe, start, limit):
     pass
 
 ############################################################################################################
-# save_template = "{data_pth}/csv/{pre}_{time_str}_{symbol_str}_{timeframe_str}_{post}.csv"
-def format_save_pth(symbol_lst, timeframe, start, end, 
+def format_save_pth(symbol, timeframe, start, end, 
                     pre      = '', post = post,
                     data_pth = default_local_data_pth,
-                    type     = 'bars' ):
+                    type     = 'bars',
+                    data_folder   = 'raw_download'):
 
-    symbol_str = '_'.join(symbol_lst)
+    # symbol_str = symbol
     start_str  = start.strftime('%Y%m%d')
     end_str    = end.strftime('%Y%m%d')
     time_str   = f'{start_str}_{end_str}'
 
-    csv_pth = save_template.format(data_pth = data_pth, data_type = '{data_type}', pre = pre, symbol_str = symbol_str, time_str = time_str, timeframe_str = timeframe.value, post = post)
+    csv_pth = save_template.format(data_pth = data_pth, data_folder = data_folder, data_type = '{data_type}', pre = pre, symbol_str = symbol, time_str = time_str, timeframe_str = timeframe.value, post = post, data_source_str = data_source_str)
     return csv_pth
 
 '''
-Get data for symbol_lst from start to end in a single attempt TODO: autometically determine what new data to download; instead of downloading everything, only download the new dataXXXXXXXXXXXXXXXXXXXX Trerrible idea? 
+Get data for a single symbol from start to end in a single attempt TODO: autometically determine what new data to download; instead of downloading everything, only download the new dataXXXXXXXXXXXXXXXXXXXX Trerrible idea? 
 
     Expected Input:
         Request Parameters: 
-            symbol_lst
+            symbol (use [symbol] in request)
             timeframe
             start: datetime object
             end  : datetime object
@@ -257,7 +256,8 @@ Get data for symbol_lst from start to end in a single attempt TODO: autometicall
                 ARBB,   2023-04-05 15: 14: 00+00: 00, 3.6,  3.75, 3.55, 3.6,    297401.0, 213.0,       3.615044
                 ARBB,   2023-04-05 15: 15: 00+00: 00, 3.6,  3.85, 3.55, 3.85,   63472.0,  336.0,       3.708484
                 ARBB,   2023-04-05 15: 16: 00+00: 00, 3.8,  3.9,  3.75, 3.7925, 44114.0,  231.0,       3.835715
-        2) a saved .csv file of the returned pandas dataframe, according to the save_template
+        2) FEATURE REMOVED: a saved .csv file of the returned pandas dataframe, according to the save_template
+            This feature is now removed; all file-saving is now done in the get-load of data section.
     
     Useage:
         df = get_and_process_data(symbol_lst, timeframe, start, end, limit = None, download=False, pre = '', post = post, data_pth = default_local_data_pth, type = 'bars', adjustment ='all')
@@ -268,33 +268,24 @@ Get data for symbol_lst from start to end in a single attempt TODO: autometicall
         2.a. If download is True, get data from Alpaca API, and save to csv_pth
         2.b. If download is False, read from csv_pth
 '''
-def get_and_process_data(symbol_lst, timeframe, start, end, limit = None, adjustment ='all',
-                         pre      = '', post = post,
+def get_and_process_data(symbol, timeframe, start, end, limit = None, adjustment ='all',
+                         pre      = 'bar_set', post = post,
                          data_pth = default_local_data_pth,
                          type     = 'bars'):
     
-    if len(symbol_lst) != 1:
-        raise Warning(f'It is preferred that only a single symbol is downloaded at a time so as to avoid repeated download,\n received {len(symbol_lst)} symbols insteads: {symbol_lst}')
-    
-    if type == 'bars':
-        get_data = get_bars
-        pre = pre + 'bar_set'
-    elif type == 'trades':
-        get_data = get_trades
-        pre = pre + 'trade_set'
+    print("Getting Data for symbol:", symbol)
+    csv_pth = format_save_pth(symbol, timeframe, start, end,
+                            pre      = pre,      post = post,
+                            data_pth = data_pth,
+                            type     = type)
 
-    csv_pth = format_save_pth(symbol_lst, timeframe, start, end,
-                              pre      = pre,      post = post,
-                              data_pth = data_pth,
-                              type     = type)
-
+    print("csv_pth: ", csv_pth)
 
     if os.path.exists(csv_pth) == False:
-        print(f'Start Downloading {type}:')
-        dataset = get_data(symbol_lst, timeframe, start, end, limit, adjustment = adjustment)
+        print(f'Downloading {type} for {symbol}:')
+        dataset = get_data([symbol], timeframe, start, end, limit, adjustment = adjustment)
 
         # DEBUG
-        print("dataset type: ", dataset)
 
         df = dataset.df
         if type == 'trades':
@@ -305,12 +296,12 @@ def get_and_process_data(symbol_lst, timeframe, start, end, limit = None, adjust
         start_time = time.time()
         print(f'start saving to csv at: {csv_pth}')
         df.to_csv(csv_pth, index=True, index_label=['symbol', 'timestamp'])                       # note that the index_label is necessary; if not specified, the index name will not be saved
-        print(f'csv saving completed in {time.time()-start_time:.2f} seconds')
+        print(f'csv saving completed in {time.time()-start_time:.2f} seconds\n')
     else:
         start_time = time.time()
         print(f'reading from csv at: {csv_pth}')
         df = pd.read_csv(csv_pth, index_col = ['symbol', 'timestamp'])                            # note how index_label is used to save, and index_col is used to read... bizarre ain't it?
-        print(f'csv reading completed in {time.time()-start_time:.2f} seconds')
+        print(f'csv reading completed in {time.time()-start_time:.2f} seconds\n')
 
     return df
 
@@ -335,17 +326,56 @@ def get_next_end(start, raw_end, type = 'bars'):
     return end
 
 '''
+Get data for a single symbol from start to end in a single attempt TODO: autometically determine what new data to download; instead of downloading everything, only download the new dataXXXXXXXXXXXXXXXXXXXX Trerrible idea? 
+
+    Expected Input:
+        dfs: a list of different time_sessions; each time_session is a list of dataframes for each symbol
+    
+    Expected Result:
+        1) return: 
+            a pandas dataframe with ALL SYMBOLS INCLUDED, has multi-level index (symbol, timestamp), sorted by timestamp, and with the following features/columns: 
+                symbol, timestamp,                    open, high, low,  close,  volume,   trade_count, vwap
+                ARBB,   2023-04-05 15: 14: 00+00: 00, 3.6,  3.75, 3.55, 3.6,    297401.0, 213.0,       3.615044
+                ARBB,   2023-04-05 15: 15: 00+00: 00, 3.6,  3.85, 3.55, 3.85,   63472.0,  336.0,       3.708484
+                ARBB,   2023-04-05 15: 16: 00+00: 00, 3.8,  3.9,  3.75, 3.7925, 44114.0,  231.0,       3.835715
+        2) FEATURE REMOVED: a saved .csv file of the returned pandas dataframe, according to the save_template
+            This feature is now removed; all file-saving is now done in the get-load of data section.
+    
+    Useage:
+        df = get_and_process_data(symbol_lst, timeframe, start, end, limit = None, download=False, pre = '', post = post, data_pth = default_local_data_pth, type = 'bars', adjustment ='all')
+
+    
+    Steps/Process:
+        1. Format csv_pth
+        2.a. If download is True, get data from Alpaca API, and save to csv_pth
+        2.b. If download is False, read from csv_pth
+'''
+            
+    
+
+'''
 # for long timeframe and large symbol num, it might be necessary to split up the request, thus this function is needed TODO: autometically split up the request, and use this as default
 
     Expected Input:
         Request Parameters: Same as get_and_process_data
     
     Expected Result:
-'''
+''' 
+
+
 def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment = 'all',
                      pre      = '', post = post,
                      data_pth = default_local_data_pth,
-                     type     = 'bars'):
+                     type     = 'bars',
+                     combine  = False):
+    
+    if type == 'bars':
+        get_data = get_bars
+        pre = pre + 'bar_set'
+    elif type == 'trades':
+        get_data = get_trades
+        pre = pre + 'trade_set'
+
     
     raw_start = start
     raw_end = end
@@ -356,88 +386,73 @@ def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment
     start_time = time.time()
     print('Start getting multiple bars file')
 
-    
     start = raw_start
+    if type == 'bars':
+        start = start.replace(day=1, month = 1) # start from the first day of the month
     dfs = []
-    while start < raw_end:
-        end = get_next_end(start, raw_end, type = type)
+    if start >= raw_end:
+        raise Warning(f'start time {start} is later than end time {raw_end}')
+    for symbol in symbol_lst:
+        current_start = start  # Assuming initial_start is defined as the starting point
+        symbol_dfs = []
 
-        start_str = start.strftime('%Y%m%d')
-        end_str = end.strftime('%Y%m%d')
-        time_str = f'{start_str}_{end_str}'
-        print('getting data with time_str: ', time_str)
-        time_strs.append(time_str)
-        df = get_and_process_data(symbol_lst, timeframe, start, end, limit, adjustment, 
-                                pre      = pre,      post = post,
-                                data_pth = data_pth,
-                                type     = type)
+        while current_start < raw_end:
+            end = get_next_end(current_start, raw_end, type=type)
+
+            start_str = current_start.strftime('%Y%m%d')
+            end_str = end.strftime('%Y%m%d')
+            time_str = f'{start_str}_{end_str}'
+            print('getting data for time session: ', time_str)
+
+            if not time_str in time_strs:
+                time_strs.append(time_str)
+
+            df = get_and_process_data(symbol, timeframe, current_start, end, limit, adjustment, 
+                                    pre=pre, post=post, data_pth=data_pth, type=type)
+            
+            if combine:
+                symbol_dfs.append(df)
+
+            current_start = end
         
-        print(df.head(10))
+        if combine:
+            symbol_df = pd.concat(symbol_dfs)
+            csv_pth = format_save_pth(symbol, timeframe, start, end,
+                                        pre      = pre,      post = post,
+                                        data_pth = data_pth,
+                                        type     = type,
+                                        data_folder = 'raw_combine')
+            
+            if os.path.exists(csv_pth) == False:
+                print('saving combined df to: ', csv_pth)
+                symbol_df.to_csv(csv_pth, index=True, index_label=['symbol', 'timestamp'])
 
-        dfs.append(df)
-        start = end
+
 
     print(f'All files downloaded and processed in {time.time()-start_time:.2f} seconds')
 
     print('time_strs: ', time_strs)
 
-    # combine multiple csv files into one
-    symbol_str = '_'.join(symbol_lst)
-    # dfs = read_multiple_raw_data(symbol_str, time_strs, pre = pre, post = post, data_pth = data_pth, timeframe = timeframe)
-
-    df = combine_bars(dfs, type = type)
-
-    start_time = time.time()
-    print('start saving to csv...')
-    start_str = raw_start.strftime('%Y%m%d')
-    end_str = raw_end.strftime('%Y%m%d')
-    time_str = f'{start_str}_{end_str}'
-    csv_pth = save_template.format(data_pth = data_pth, data_type = 'csv', pre = pre, symbol_str = symbol_str, time_str = time_str, timeframe_str = timeframe.value, post = post)
-    df.to_csv(csv_pth, index=True, index_label=['symbol', 'timestamp'])
-    print(f'completed in {time.time()-start_time:.2f} seconds')
-
-def thread_function(start_time):
-    while True:
-        print(f"Thread Waiting...{time.time() - start_time:6.2f}", end = '\r')
-        time.sleep(1)
+    return dfs
 
 def main():
 
     # get_load_of_bars(symbol_lst, timeframe, start, end, limit = None, download=False)
 
-
-
     # symbol_lst = ['PDD', 'DQ', 'ARBB', 'JYD', 'MGIH', 'NVDA']
-    symbol_lst = ["MSFT"]
+    symbol_lst = ["MSFT", "AAPL"]
     timeframe = TimeFrame.Minute
-    start = datetime(2020,1,1) # 2020-01-01 is wednesday
-    end = datetime(2023,7,1) 
-    # end = datetime.now() 
-    # time_strs = ['20200101_20200201', '20200201_20200301', '20200301_20200701']
-    # dfs = read_multiple_raw_data(time_strs, type = 'trades')
+    start = datetime(2020,1,5) # 2020-01-01 is wednesday
+    end = datetime(2023,1,1) 
 
-    # df = combine_bars(dfs, type = 'trades')
-
-    # start_str = start.strftime('%Y%m%d')
-    # end_str = end.strftime('%Y%m%d')
-    # df.to_csv(f'{data_pth}csv/trade_set_{start_str}_{end_str}_{post}.csv', index=True, index_label=['symbol', 'timestamp'])
-    
-    # get_load_of_data(symbol_lst, timeframe, start, end, limit = None, download=False, type = 'trades')
-    # thread = threading.Thread(target=thread_function(time.time()))
-    # thread.start()
     print('start getting data\n')
-    get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment = 'all',
-                     pre = '', post = post, 
-                     type = 'bars')
+    dfs = get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment = 'all',
+                            pre = '', post = post, 
+                            type = 'bars',
+                            combine = True)
+    
 
-
-    # thread.join()
-    # last_week_bars(symbol_lst, timeframe = TimeFrame.Minute)
-
-    # df = get_bars(symbol_lst, timeframe, start, end, limit = None).df
-    # print(df)
-
-    # need to re-download prices adjusted for splits; experimetn with the parameter
+    # need to re-download prices adjusted for splits; experiment with the parameter
     # https://forum.alpaca.markets/t/getbars-adjustment/5056
 
 if __name__ == '__main__':
