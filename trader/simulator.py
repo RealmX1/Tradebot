@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import torch
 from data_prep import *
-from agents import Agent
+from trader.agents import Agent
 
 simulation_range = test_size # getting test_size from data_utils.py
 model_path = cwd+"/lstm.pt"

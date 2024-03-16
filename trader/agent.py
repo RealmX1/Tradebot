@@ -83,7 +83,7 @@ class Agent:
 
 
 
-def test_agent:
+def test_agent():
     agent = Agent(1000, 0, "model.pt")
     for i in range(100):
         agent.manage_stock("NVDA", 100)

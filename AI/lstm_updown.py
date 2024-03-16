@@ -33,12 +33,12 @@ from transformer import *
 np.set_printoptions(precision=4, suppress=True) 
 header = ['background_up', 'up_change_pred_pct', 'up_change_pred_precision', \
           'background_dn', 'dn_change_pred_pct', 'dn_change_pred_precision', \
-            'background_none', 'none_change_pred_pct', 'none_change_pred_precision', \
-                'accuracy', 'accuracy_lst', \
-                    'pred_thres_change_accuracy', 'pred_thres_change_accuracy_lst', \
-                        'pred_thres_change_precision', 'pred_thres_change_percision_lst', \
-                            'pred_thres_actual_change_precision', 'pred_thres_actual_change_precision_lst', 'pred_thres_up_actual_precision', 'pred_thres_dn_actual_precision',\
-                                'model_pth', 'time', 'best_k', 'epoch_num']
+          'background_none', 'none_change_pred_pct', 'none_change_pred_precision', \
+          'accuracy', 'accuracy_lst', \
+                'pred_thresed_change_accuracy', 'pred_thresed_change_accuracy_lst', \
+                    'pred_thresed_change_precision', 'pred_thresed_change_percision_lst', \
+                        'pred_thresed_actu_change_precision', 'pred_thresed_actu_change_precision_lst', 'pred_thresed_up_actu_precision', 'pred_thresed_dn_actu_precision',\
+                            'model_pth', 'time', 'best_k', 'epoch_num']
 
 
 loss_fn = nn.MSELoss(reduction = 'none')
@@ -47,82 +47,93 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 torch.autograd.set_detect_anomaly(True)
 
+threshold_pct = 0.0005 # 0.05%; for a stock of price 100, it is 0.05, for a stock of price 1000, it is 0.5
+# maybe the threshold should be computed not just as a function of price, but also as a function of fees, volatility, taxes, and more.
 
-def get_direct_diff(y_batch,y_pred):
-    y_batch_below_threshold = np.zeros_like(y_batch, dtype=bool)
-    y_batch_below_threshold[np.abs(y_batch) < policy_threshold] = True
-    actual_direct = np.clip(y_batch, 0, np.inf) # this turns negative to 0
-    actual_direct[actual_direct != 0] = 1
-    actual_direct[actual_direct == 0] = -1 # turns positive to 1
-    actual_thres_direct = actual_direct.copy()
-    actual_thres_direct[y_batch_below_threshold] = 0
-
-    y_pred_below_threshold = np.zeros_like(y_pred, dtype=bool)
-    y_pred_below_threshold[np.abs(y_pred) < policy_threshold] = True
-    pred_direct = np.clip(y_pred, 0, np.inf) # turn all 
-    pred_direct[pred_direct != 0] = 1
-    pred_direct[pred_direct == 0] = -1
-    pred_thres_direct = pred_direct.copy()
-    pred_thres_direct[y_pred_below_threshold] = 0
-
-
-
-    batch_size  = y_batch.shape[0]
-    pred_window = y_batch.shape[1]
-
-    all_cells_lst = np.full((pred_window,), batch_size)
-    all_cells = batch_size * pred_window
-
-    same_thres_cells_lst = np.count_nonzero(actual_thres_direct == pred_thres_direct, axis = 0)
-    same_thres_cells = np.count_nonzero(actual_thres_direct == pred_thres_direct)
-
-    actual_thres_change_lst = np.count_nonzero(actual_thres_direct != 0, axis = 0)
-    true_pred_thres_change_lst = np.count_nonzero((actual_thres_direct == pred_thres_direct) & (actual_thres_direct != 0), axis = 0)
-    all_pred_thres_change_lst = np.count_nonzero(pred_thres_direct != 0, axis = 0)
-
-    actual_thres_change = np.sum(actual_thres_change_lst)
-    true_pred_thres_change = np.sum(true_pred_thres_change_lst)
-    all_pred_thres_change = np.sum(all_pred_thres_change_lst)
+def get_dir_diff(y_batch,y_pred):
+    y_actu = y_batch # What shape are they of?
+    threshold = np.mean(y_actu) * threshold_pct
     
-    t_thres_up = np.sum((actual_thres_direct == 1) & (pred_thres_direct == 1))
-    f_thres_up = np.sum((actual_thres_direct != 1) & (pred_thres_direct == 1))
+    _actu_below_threshold                                    = np.zeros_like(y_actu, dtype=bool)
+    _actu_below_threshold[np.abs(y_actu) < threshold] = True # TODO： threshold should be dynamic, and be a percentage of stock price.
+    _actu_dir                                                = np.clip(y_actu, 0, np.inf) # this turns negative to 0
+    _actu_dir[_actu_dir != 0]                                = 1 # turns positive to 1
+    _actu_dir[_actu_dir == 0]                                = -1 # turns negative to -1
+    _actu_thresed_dir                                        = _actu_dir.copy()
+    _actu_thresed_dir[_actu_below_threshold]                 = 0
 
-    t_thres_dn = np.sum((actual_thres_direct == -1) & (pred_thres_direct == -1))
-    f_thres_dn = np.sum((actual_thres_direct != -1) & (pred_thres_direct == -1))
+    _pred_below_threshold                                    = np.zeros_like(y_pred, dtype=bool)
+    _pred_below_threshold[np.abs(y_pred) < threshold] = True
+    _pred_dir                                                = np.clip(y_pred, 0, np.inf) # this turns negative to 0
+    _pred_dir[_pred_dir != 0]                                = 1 # turns positive to 1
+    _pred_dir[_pred_dir == 0]                                = -1 # turns negative to -1
+    _pred_thresed_dir                                        = _pred_dir.copy()
+    _pred_thresed_dir[_pred_below_threshold]                 = 0
 
-    t_thres_no = np.sum((actual_thres_direct == 0) & (pred_thres_direct == 0))
-    f_thres_no = np.sum((actual_thres_direct != 0) & (pred_thres_direct == 0))
+    same_thresed_cells_lst = np.count_nonzero(_actu_thresed_dir == _pred_thresed_dir, axis = 0)
+    same_thresed_cells     = np.count_nonzero(_actu_thresed_dir == _pred_thresed_dir)
 
-    actual_thres_up = np.sum(actual_thres_direct == 1)
-    actual_thres_dn = np.sum(actual_thres_direct == -1)
-    actual_thres_no = np.sum(actual_thres_direct == 0)
+    actu_thresed_change_lst      = np.count_nonzero(_actu_thresed_dir != 0, axis = 0)
+    pred_thresed_change_lst      = np.count_nonzero(_pred_thresed_dir != 0, axis = 0)
+    true_pred_thresed_change_lst = np.count_nonzero((_actu_thresed_dir == _pred_thresed_dir) & (_actu_thresed_dir != 0), axis = 0)
+    
+    true_thresed_up  = np.sum((_actu_thresed_dir == 1) & (_pred_thresed_dir == 1))
+    false_thresed_up = np.sum((_actu_thresed_dir != 1) & (_pred_thresed_dir == 1))
 
-    assert actual_thres_up + actual_thres_dn + actual_thres_no == all_cells
-    assert t_thres_up + f_thres_up + t_thres_dn + f_thres_dn + t_thres_no + f_thres_no == all_cells
-    assert same_thres_cells == t_thres_up + t_thres_dn + t_thres_no, f'{same_thres_cells} != {t_thres_up} + {t_thres_dn} + {t_thres_no}'
+    true_thresed_dn  = np.sum((_actu_thresed_dir == -1) & (_pred_thresed_dir == -1))
+    false_thresed_dn = np.sum((_actu_thresed_dir != -1) & (_pred_thresed_dir == -1))
+
+    true_thresed_no  = np.sum((_actu_thresed_dir == 0) & (_pred_thresed_dir == 0))
+    false_thresed_no = np.sum((_actu_thresed_dir != 0) & (_pred_thresed_dir == 0))
+
+    actu_thresed_up = np.sum(_actu_thresed_dir == 1)
+    actu_thresed_dn = np.sum(_actu_thresed_dir == -1)
+    actu_thresed_no = np.sum(_actu_thresed_dir == 0)
+
+    pred_thresed_up         = true_thresed_up + false_thresed_up
+    assert pred_thresed_up == np.sum(_pred_thresed_dir == 1)
+    pred_thresed_dn         = true_thresed_dn + false_thresed_dn
+    assert pred_thresed_dn == np.sum(_pred_thresed_dir == -1)
+    pred_thresed_no         = true_thresed_no + false_thresed_no
+    assert pred_thresed_no == np.sum(_pred_thresed_dir == 0)
+
+    actu_thresed_change                 = actu_thresed_up + actu_thresed_dn
+    assert actu_thresed_change         == np.sum(actu_thresed_change)
+    pred_thresed_change                 = pred_thresed_up + pred_thresed_dn
+    assert pred_thresed_change         == np.sum(pred_thresed_change_lst)
+    true_pred_thresed_change            = true_thresed_up + true_thresed_dn
+    assert true_pred_thresed_change    == np.sum(true_pred_thresed_change_lst)
+    
+
+    
+    all_cells = batch_size * prediction_window
+    assert actu_thresed_up + actu_thresed_dn + actu_thresed_no                                                          == all_cells
+    assert true_thresed_up + true_thresed_dn                                                                            == true_pred_thresed_change
+    assert true_thresed_up + false_thresed_up + true_thresed_dn + false_thresed_dn + true_thresed_no + false_thresed_no == all_cells
+    assert true_thresed_up + true_thresed_dn + true_thresed_no                                                          == same_thresed_cells, f'{same_thresed_cells} != {true_thresed_up} + {true_thresed_dn} + {true_thresed_no}'
 
 
 
-    pred_thres_up_actual_up_lst = np.sum((actual_direct == 1) & (pred_thres_direct == 1), axis = 0)
-    pred_thres_dn_actual_dn_lst = np.sum((actual_direct == -1) & (pred_thres_direct == -1), axis = 0)
-    pred_thres_up_actual_up = np.sum(pred_thres_up_actual_up_lst)
-    pred_thres_dn_actual_dn = np.sum(pred_thres_dn_actual_dn_lst)
+    pred_thresed_up_actu_up_lst = np.sum((_actu_dir == 1) & (_pred_thresed_dir == 1), axis = 0)
+    pred_thresed_dn_actu_dn_lst = np.sum((_actu_dir == -1) & (_pred_thresed_dir == -1), axis = 0)
+    pred_thresed_up_actu_up = np.sum(pred_thresed_up_actu_up_lst)
+    pred_thresed_dn_actu_dn = np.sum(pred_thresed_dn_actu_dn_lst)
 
-    true_pred_thres_actual_change_lst = pred_thres_up_actual_up_lst + pred_thres_dn_actual_dn_lst
-    true_pred_thres_actual_change = np.sum(true_pred_thres_actual_change_lst)
+    true_pred_thresed_actu_change_lst = pred_thresed_up_actu_up_lst + pred_thresed_dn_actu_dn_lst
+    true_pred_thresed_actu_change = np.sum(true_pred_thresed_actu_change_lst)
 
-    pred_thres_up = np.sum(pred_thres_direct == 1)
+    pred_thresed_up = np.sum(_pred_thresed_dir == 1)
 
-    # print('get_direct_diff time: ', time.time()-start_time)
+    # print('get_dir_diff time: ', time.time()-start_time)
 
-    return all_cells, same_thres_cells, \
-            all_cells_lst, same_thres_cells_lst, \
+    return same_thresed_cells, \
+            same_thresed_cells_lst, \
             \
-            actual_thres_up, actual_thres_dn, actual_thres_no, \
-            t_thres_up, f_thres_up, t_thres_dn, f_thres_dn, t_thres_no, f_thres_no, \
+            actu_thresed_up, actu_thresed_dn, actu_thresed_no, \
+            true_thresed_up, false_thresed_up, true_thresed_dn, false_thresed_dn, true_thresed_no, false_thresed_no, \
             \
-            actual_thres_change, all_pred_thres_change, true_pred_thres_change, true_pred_thres_actual_change, pred_thres_up_actual_up, pred_thres_dn_actual_dn, pred_thres_up,\
-            actual_thres_change_lst, all_pred_thres_change_lst, true_pred_thres_change_lst, true_pred_thres_actual_change_lst
+            actu_thresed_change, pred_thresed_change, true_pred_thresed_change, true_pred_thresed_actu_change, pred_thresed_up_actu_up, pred_thresed_dn_actu_dn, pred_thresed_up,\
+            actu_thresed_change_lst, pred_thresed_change_lst, true_pred_thresed_change_lst, true_pred_thresed_actu_change_lst
 
 def calculate_policy_return(x_batch,y_batch,y_pred):
     pass
@@ -151,18 +162,18 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
             teacher_forcing_ratio = 0.0
             model.eval()
         start_time = time.time()
-        same_thres_cells = 0
+        same_thresed_cells = 0
 
         # count_tensor_num()
 
 
-        all_prediction_lst             = np.zeros(prediction_window) # one elemnt for each minute of prediction window
-        all_true_prediction_lst        = np.zeros(prediction_window)
-        actual_thres_change_lst               = np.zeros(prediction_window)
-        all_pred_thres_change_lst      = np.zeros(prediction_window)
+        all_pred_lst      = np.zeros(prediction_window) # one elemnt for each minute of prediction window
+        all_true_pred_lst = np.zeros(prediction_window)
+        actu_thresed_change_lst = np.zeros(prediction_window)
+        pred_thresed_change_lst = np.zeros(prediction_window)
 
-        all_true_pred_thres_change_lst = np.zeros(prediction_window)
-        all_true_pred_actual_thres_change_lst = np.zeros(prediction_window)
+        all_actu_pred_thresed_change_lst = np.zeros(prediction_window)
+        all_actu_pred_actu_thresed_change_lst = np.zeros(prediction_window)
 
         average_loss = 0
 
@@ -175,28 +186,28 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
         for epoch in range(num_epochs):
             epoch_loss = 0
             epoch_total_prediction = 0
-            epoch_true_pred_thres = 0
+            epoch_actu_pred_thres = 0
 
             epoch_total_change = 0
             epoch_total_change_prediction = 0
-            epoch_true_pred_thres_change = 0
-            epoch_actual_thres_direct_prediction = 0
+            epoch_actu_pred_thresed_change = 0
+            epoch__actu_thresed_dir_prediction = 0
             # New
-            epoch_pred_thres_up_actual_up = 0
-            epoch_pred_thres_dn_actual_dn = 0
-            epoch_pred_thres_up = 0
-            epoch_pred_thres_dn = 0
+            epoch_pred_thresed_up_actu_up = 0
+            epoch_pred_thresed_dn_actu_dn = 0
+            epoch_pred_thresed_up = 0
+            epoch_pred_thresed_dn = 0
 
-            epoch_t_thres_up = 0
-            epoch_f_thres_up = 0
-            epoch_t_thres_dn = 0
-            epoch_f_thres_dn = 0
-            epoch_t_thres_no = 0
-            epoch_f_thres_no = 0
+            epoch_true_thresed_up = 0
+            epoch_false_thresed_up = 0
+            epoch_true_thresed_dn = 0
+            epoch_false_thresed_dn = 0
+            epoch_true_thresed_no = 0
+            epoch_false_thresed_no = 0
 
-            epoch_up = 0
-            epoch_dn = 0
-            epoch_below_thres = 0
+            epoch_actu_up = 0
+            epoch_actu_dn = 0
+            epoch_actu_no = 0
             i=0
             for i, (x_batch, y_batch, x_raw_close, timestamp) in enumerate(data_loader):
 
@@ -207,7 +218,7 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
                 
                 # print('x_batch[0,:,:]: ', x_batch[0,:,:])
                 # x_batch   [N, hist_window, feature_num]
-                # y_batch & out_thres_uput  [N, prediction_window]
+                # y_batch & outrue_thresed_uput  [N, prediction_window]
                 x_batch = x_batch.float().to(device) # probably need to do numpy to pt tensor in the dataset; need testing on efficiency #!!! CAN'T BE DONE. before dataloarder they are numpy array, not torch tensor
                 # print('one input: ', x_batch[0:,:,:])
                 y_batch = y_batch.float().to(device)
@@ -251,106 +262,107 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
 
                 y_pred_safe = y_pred.clone().detach().cpu().numpy()[:,:,0]
 
-                all_cells, same_thres_cells, \
-                all_cells_lst, same_thres_cells_lst, \
+                same_thresed_cells, \
+                same_thresed_cells_lst, \
                 \
-                actual_thres_up, actual_thres_dn, actual_thres_no,\
-                t_thres_up, f_thres_up, t_thres_dn, f_thres_dn, t_thres_no, f_thres_no, \
+                actu_thresed_up, actu_thresed_dn, actu_thresed_no,\
+                true_thresed_up, false_thresed_up, true_thresed_dn, false_thresed_dn, true_thresed_no, false_thresed_no, \
                 \
-                actual_thres_change, all_pred_thres_change, true_pred_thres_change, true_pred_thres_actual_change, pred_thres_up_actual_up, pred_thres_dn_actual_dn, pred_thres_up, \
-                atcl, aptcl, tptcl, tptacl = get_direct_diff(y_batch_safe, y_pred_safe)
-                # print("DEBUG!!!!!")
-                # for x in tmp:
-                #     print(x)
+                actu_thresed_change, pred_thresed_change, true_pred_thresed_change, true_pred_thresed_actu_change, pred_thresed_up_actu_up, pred_thresed_dn_actu_dn, pred_thresed_up, \
+                atcl, aptcl, tptcl, tptacl = get_dir_diff(y_batch_safe, y_pred_safe)
+
+                all_cells = batch_size * prediction_window
+                all_cells_lst = np.full(prediction_window, batch_size)
                 
                 epoch_total_prediction += all_cells
-                epoch_true_pred_thres += same_thres_cells
+                epoch_actu_pred_thres += same_thresed_cells
 
-                epoch_total_change += actual_thres_change
-                epoch_total_change_prediction += all_pred_thres_change
-                epoch_true_pred_thres_change += true_pred_thres_change
-                epoch_actual_thres_direct_prediction += true_pred_thres_actual_change
-                # News
-                epoch_pred_thres_up += pred_thres_up
-                epoch_pred_thres_dn += all_pred_thres_change - pred_thres_up
-                epoch_pred_thres_up_actual_up += pred_thres_up_actual_up
-                epoch_pred_thres_dn_actual_dn += pred_thres_dn_actual_dn
-
-
-                epoch_t_thres_up += t_thres_up
-                epoch_f_thres_up += f_thres_up
-                epoch_t_thres_dn += t_thres_dn
-                epoch_f_thres_dn += f_thres_dn
-                epoch_t_thres_no += t_thres_no
-                epoch_f_thres_no += f_thres_no
-
-                epoch_up += actual_thres_up
-                epoch_dn += actual_thres_dn
-                epoch_below_thres += actual_thres_no
+                epoch_total_change += actu_thresed_change
+                epoch_total_change_prediction += pred_thresed_change
+                epoch_actu_pred_thresed_change += true_pred_thresed_change
+                epoch__actu_thresed_dir_prediction += true_pred_thresed_actu_change
+                
+                epoch_pred_thresed_up += pred_thresed_up
+                epoch_pred_thresed_dn += pred_thresed_change - pred_thresed_up
+                epoch_pred_thresed_up_actu_up += pred_thresed_up_actu_up
+                epoch_pred_thresed_dn_actu_dn += pred_thresed_dn_actu_dn
 
 
-                all_prediction_lst += all_cells_lst
-                all_true_prediction_lst += same_thres_cells_lst
+                epoch_true_thresed_up += true_thresed_up
+                epoch_false_thresed_up += false_thresed_up
+                epoch_true_thresed_dn += true_thresed_dn
+                epoch_false_thresed_dn += false_thresed_dn
+                epoch_true_thresed_no += true_thresed_no
+                epoch_false_thresed_no += false_thresed_no
 
-                actual_thres_change_lst += atcl
-                all_pred_thres_change_lst += aptcl
-                all_true_pred_thres_change_lst += tptcl
-                all_true_pred_actual_thres_change_lst += tptacl
+                epoch_actu_up += actu_thresed_up
+                epoch_actu_dn += actu_thresed_dn
+                epoch_actu_no += actu_thresed_no
+
+
+                all_pred_lst += all_cells_lst
+                all_true_pred_lst += same_thresed_cells_lst
+
+                actu_thresed_change_lst += atcl
+                pred_thresed_change_lst += aptcl
+                all_actu_pred_thresed_change_lst += tptcl
+                all_actu_pred_actu_thresed_change_lst += tptacl
 
                 
                 epoch_loss += loss_val
                 
             epoch_loss /= (i+1)
             average_loss += epoch_loss
-            accuracy = epoch_true_pred_thres / epoch_total_prediction * 100
-            change_pred_precision = epoch_true_pred_thres_change / epoch_total_change_prediction * 100
-            pred_thres_change_actual_pred_thres_change_precision = (epoch_pred_thres_up_actual_up+epoch_pred_thres_dn_actual_dn) / (epoch_total_change_prediction) * 100
-            pred_thres_up_actual_precision = epoch_pred_thres_up_actual_up / epoch_pred_thres_up * 100
-            pred_thres_dn_actual_precision = epoch_pred_thres_dn_actual_dn / epoch_pred_thres_dn * 100
+            accuracy = epoch_actu_pred_thres / epoch_total_prediction * 100
+            change_pred_precision = epoch_actu_pred_thresed_change / epoch_total_change_prediction * 100
+            pred_thresed_change_actu_pred_thresed_change_precision = (epoch_pred_thresed_up_actu_up+epoch_pred_thresed_dn_actu_dn) / (epoch_total_change_prediction) * 100
+            pred_thresed_up_actu_precision = epoch_pred_thresed_up_actu_up / epoch_pred_thresed_up * 100
+            pred_thresed_dn_actu_precision = epoch_pred_thresed_dn_actu_dn / epoch_pred_thresed_dn * 100
             
 
-            assert epoch_t_thres_up + epoch_f_thres_up + epoch_t_thres_dn + epoch_f_thres_dn + epoch_t_thres_no + epoch_f_thres_no == epoch_total_prediction
-            assert epoch_up + epoch_dn + epoch_below_thres == epoch_total_prediction
-            # assert epoch_t_thres_up + epoch_f_dn == epoch_up No longer applicable after adding below_thres
-            # assert epoch_f_thres_up + epoch_t_dn == epoch_dn
+            assert epoch_true_thresed_up + epoch_false_thresed_up + epoch_true_thresed_dn + epoch_false_thresed_dn + epoch_true_thresed_no + epoch_false_thresed_no == epoch_total_prediction
+            assert epoch_actu_up + epoch_actu_dn + epoch_actu_no == epoch_total_prediction
+            # assert epoch_true_thresed_up + epoch_f_dn == epoch_actu_up No longer applicable after adding below_thres
+            # assert epoch_false_thresed_up + epoch_t_dn == epoch_actu_dn
 
-            epoch_up_pred = epoch_t_thres_up + epoch_f_thres_up
-            epoch_dn_pred = epoch_f_thres_dn + epoch_t_thres_dn
-            epoch_below_thres_pred = epoch_t_thres_no + epoch_f_thres_no
+            epoch_actu_up_pred = epoch_true_thresed_up + epoch_false_thresed_up
+            epoch_dn_pred = epoch_false_thresed_dn + epoch_true_thresed_dn
+            epoch_actu_noed_pred = epoch_true_thresed_no + epoch_false_thresed_no
 
             time_per_epoch = (time.time()-start_time)/(epoch+1)
             
-            # print('debug: ', pred_thres_change_actual_pred_thres_change_precision)
-            general_stat_str=   f'Epoch {epoch+1:3}/{num_epochs:3}, ' + \
+            # print('debug: ', pred_thresed_change_actu_pred_thresed_change_precision)
+            general_stat_str = f'Epoch {epoch+1:3}/{num_epochs:3}, ' + \
                             f'Loss: {                   epoch_loss:10.7f}, \n' + \
                             f'Time/epoch: {             time_per_epoch:.2f} seconds, ' + \
                             f'\u2713 pred accuracy: {       accuracy:.2f}%, ' + \
                             f'\u2713 change pred precision: {change_pred_precision:.2f}%, \n' + \
-                            f'\u2713 pred_thres_change_actual precision: {pred_thres_change_actual_pred_thres_change_precision:.2f}%, ' + \
-                            f'\u2713 pred_thres_up_actual precision: {pred_thres_up_actual_precision:.2f}%, ' + \
-                            f'\u2713 pred_thres_dn_actual precision: {pred_thres_dn_actual_precision:.2f}%, ' + \
+                            f'\u2713 pred_thresed_change_actual precision: {pred_thresed_change_actu_pred_thresed_change_precision:.2f}%, ' + \
+                            f'\u2713 pred_thresed_up_actual precision: {pred_thresed_up_actu_precision:.2f}%, ' + \
+                            f'\u2713 pred_thresed_dn_actual precision: {pred_thresed_dn_actu_precision:.2f}%, ' + \
                             f'Encocder LR: {            get_current_lr(optimizers[0]):9.8f},' # Decoder LR: {get_current_lr(optimizers[1]):9.8f}, '
-            background_up = epoch_up / epoch_total_prediction * 100 
-            up_change_pred_pct = epoch_up_pred / epoch_total_prediction * 100
-            up_change_pred_precision = epoch_t_thres_up / epoch_up_pred * 100
+            
+            background_up            = epoch_actu_up / epoch_total_prediction * 100
+            up_change_pred_pct       = epoch_actu_up_pred / epoch_total_prediction * 100
+            up_change_pred_precision = epoch_true_thresed_up / epoch_actu_up_pred * 100
 
             change_up_str = f'Background \u2191: {  background_up:7.4f}%, ' + \
                             f'\u2191 Pred pct: {    up_change_pred_pct:7.4f}%, ' + \
                             f'\u2191 Precision: {   up_change_pred_precision:7.4f}%, '
             
-            background_dn = epoch_dn / epoch_total_prediction * 100
-            dn_change_pred_pct = epoch_dn_pred / epoch_total_prediction * 100
-            dn_change_pred_precision = epoch_t_thres_dn / epoch_dn_pred * 100
+            background_dn            = epoch_actu_dn / epoch_total_prediction * 100
+            dn_change_pred_pct       = epoch_dn_pred / epoch_total_prediction * 100
+            dn_change_pred_precision = epoch_true_thresed_dn / epoch_dn_pred * 100
 
-            change_dn_str=f'Background \u2193: {  background_dn:7.4f}%, ' + \
+            change_dn_str = f'Background \u2193: {  background_dn:7.4f}%, ' + \
                             f'\u2193 Pred pct: {    dn_change_pred_pct:7.4f}%, ' + \
                             f'\u2193 Precision: {   dn_change_pred_precision:7.4f}%, '
 
-            background_none = epoch_below_thres / epoch_total_prediction * 100
-            none_change_pred_pct = epoch_below_thres_pred / epoch_total_prediction * 100
-            none_change_pred_precision = epoch_t_thres_no / epoch_below_thres_pred * 100
+            background_none            = epoch_actu_no / epoch_total_prediction * 100
+            none_change_pred_pct       = epoch_actu_noed_pred / epoch_total_prediction * 100
+            none_change_pred_precision = epoch_true_thresed_no / epoch_actu_noed_pred * 100
                 
-            change_none_str=f'Background \u2192: {  background_none:7.4f}%, ' + \
+            change_none_str = f'Background \u2192: {  background_none:7.4f}%, ' + \
                             f'\u2192 Pred pct: {    none_change_pred_pct:7.4f}%, ' + \
                             f'\u2192 Precision: {   none_change_pred_precision:7.4f}%, '
             
@@ -364,21 +376,21 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
                 
             del x_batch, y_batch, y_pred, loss, weighted_loss, final_loss
         
-        average_loss /= num_epochs
-        accuracy_lst = all_true_prediction_lst / all_prediction_lst * 100
-        accuracy_lst_print = [round(x, 3) for x in accuracy_lst]
-        pred_thres_change_accuracy_lst = all_true_pred_thres_change_lst / actual_thres_change_lst * 100
-        pred_thres_change_accuracy_lst_print = [round(x, 3) for x in pred_thres_change_accuracy_lst]
+        average_loss                         /= num_epochs
+        accuracy_lst                          = all_true_pred_lst / all_pred_lst * 100
+        accuracy_lst_print                    = [round(x, 3) for x in accuracy_lst]
+        pred_thresed_change_accuracy_lst        = all_actu_pred_thresed_change_lst / actu_thresed_change_lst * 100
+        pred_thresed_change_accuracy_lst_print  = [round(x, 3) for x in pred_thresed_change_accuracy_lst]
 
-        pred_thres_change_percision_lst = all_true_pred_thres_change_lst / all_pred_thres_change_lst * 100
-        pred_thres_change_percision_lst_print = [round(x, 3) for x in pred_thres_change_percision_lst]
-        true_pred_thres_actual_pred_thres_change_precision_lst = all_true_pred_actual_thres_change_lst/ all_pred_thres_change_lst * 100
-        true_pred_thres_actual_pred_thres_change_precision_lst_print = [round(x, 3) for x in true_pred_thres_actual_pred_thres_change_precision_lst]
+        pred_thresed_change_percision_lst                              = all_actu_pred_thresed_change_lst / pred_thresed_change_lst * 100
+        pred_thresed_change_percision_lst_print                        = [round(x, 3) for x in pred_thresed_change_percision_lst]
+        true_pred_thresed_actu_pred_thresed_change_precision_lst       = all_actu_pred_actu_thresed_change_lst/ pred_thresed_change_lst * 100
+        true_pred_thresed_actu_pred_thresed_change_precision_lst_print = [round(x, 3) for x in true_pred_thresed_actu_pred_thresed_change_precision_lst]
         print('Accuracy List: ', accuracy_lst_print)
-        print('Change Accuracy List: ', pred_thres_change_accuracy_lst_print)
+        print('Change Accuracy List: ', pred_thresed_change_accuracy_lst_print)
 
-        print('Change Direction Pred Precision List: ', pred_thres_change_percision_lst_print)
-        print('Pred thres actual change precision: ', true_pred_thres_actual_pred_thres_change_precision_lst_print)
+        print('Change Direction Pred Precision List: ', pred_thresed_change_percision_lst_print)
+        print('Pred thres actual change precision: ', true_pred_thresed_actu_pred_thresed_change_precision_lst_print)
         # print(f'completed in {time.time()-start_time:.2f} seconds')
 
 
@@ -386,58 +398,58 @@ def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False,
         if train:
             return average_loss
         else:
-            pred_thres_change_accuracy = epoch_true_pred_thres_change / epoch_total_change * 100
+            pred_thresed_change_accuracy = epoch_actu_pred_thresed_change / epoch_total_change * 100
 
-            pred_thres_change_precision = sum(pred_thres_change_percision_lst)/len(pred_thres_change_percision_lst)
+            pred_thresed_change_precision = sum(pred_thresed_change_percision_lst)/len(pred_thresed_change_percision_lst)
 
-            pred_thres_actual_change_precision = sum(all_true_pred_actual_thres_change_lst)/sum(all_pred_thres_change_lst) * 100
-            # assert tmp == pred_thres_change_actual_pred_thres_change_precision, f'something is wrong: {tmp}, {pred_thres_change_actual_pred_thres_change_precision}'
-            pred_thres_actual_change_precision_lst = true_pred_thres_actual_pred_thres_change_precision_lst
+            pred_thresed_actu_change_precision = sum(all_actu_pred_actu_thresed_change_lst)/sum(pred_thresed_change_lst) * 100
+            # assert tmp == pred_thresed_change_actu_pred_thresed_change_precision, f'something is wrong: {tmp}, {pred_thresed_change_actu_pred_thresed_change_precision}'
+            pred_thresed_actu_change_precision_lst = true_pred_thresed_actu_pred_thresed_change_precision_lst
             # Define a sample row as a dictionary
             row_dict = {
-                'background_up': background_up,
-                'up_change_pred_pct': up_change_pred_pct,
-                'up_change_pred_precision': up_change_pred_precision,
-                'background_dn': background_dn,
-                'dn_change_pred_pct': dn_change_pred_pct,
-                'dn_change_pred_precision': dn_change_pred_precision,
-                'background_none': background_none,
-                'none_change_pred_pct': none_change_pred_pct,
-                'none_change_pred_precision': none_change_pred_precision,
-                'accuracy': accuracy,
-                'accuracy_lst': accuracy_lst,
-                'pred_thres_change_accuracy': pred_thres_change_accuracy,
-                'pred_thres_change_accuracy_lst': pred_thres_change_accuracy_lst,
-                'pred_thres_change_precision': pred_thres_change_precision,
-                'pred_thres_change_percision_lst': pred_thres_change_percision_lst,
-                'pred_thres_actual_change_precision': pred_thres_actual_change_precision,
-                'pred_thres_actual_change_precision_lst': pred_thres_actual_change_precision_lst,
+                'background_up'                         : background_up,
+                'up_change_pred_pct'                    : up_change_pred_pct,
+                'up_change_pred_precision'              : up_change_pred_precision,
+                'background_dn'                         : background_dn,
+                'dn_change_pred_pct'                    : dn_change_pred_pct,
+                'dn_change_pred_precision'              : dn_change_pred_precision,
+                'background_none'                       : background_none,
+                'none_change_pred_pct'                  : none_change_pred_pct,
+                'none_change_pred_precision'            : none_change_pred_precision,
+                'accuracy'                              : accuracy,
+                'accuracy_lst'                          : accuracy_lst,
+                'pred_thresed_change_accuracy'            : pred_thresed_change_accuracy,
+                'pred_thresed_change_accuracy_lst'        : pred_thresed_change_accuracy_lst,
+                'pred_thresed_change_precision'           : pred_thresed_change_precision,
+                'pred_thresed_change_percision_lst'       : pred_thresed_change_percision_lst,
+                'pred_thresed_actu_change_precision'    : pred_thresed_actu_change_precision,
+                'pred_thresed_actu_change_precision_lst': pred_thresed_actu_change_precision_lst,
 
-                'pred_thres_up_actual_precision': pred_thres_up_actual_precision,
-                'pred_thres_dn_actual_precision': pred_thres_dn_actual_precision,
+                'pred_thresed_up_actu_precision': pred_thresed_up_actu_precision,
+                'pred_thresed_dn_actu_precision': pred_thresed_dn_actu_precision,
             }
             print(row_dict['accuracy'])
-            print(row_dict['pred_thres_change_accuracy'])
-            print(row_dict['pred_thres_change_precision'])
-            print(row_dict['pred_thres_actual_change_precision'])
+            print(row_dict['pred_thresed_change_accuracy'])
+            print(row_dict['pred_thresed_change_precision'])
+            print(row_dict['pred_thresed_actu_change_precision'])
 
             # print(row_dict)
-            return true_pred_thres_actual_pred_thres_change_precision_lst, average_loss, row_dict, 
+            return true_pred_thresed_actu_pred_thresed_change_precision_lst, average_loss, row_dict, 
     except KeyboardInterrupt:
-        average_loss /= num_epochs
-        accuracy_lst = all_true_prediction_lst / all_prediction_lst * 100
-        accuracy_lst_print = [round(x, 3) for x in accuracy_lst]
-        pred_thres_change_accuracy_lst = all_true_pred_thres_change_lst / actual_thres_change_lst * 100
-        pred_thres_change_accuracy_lst_print = [round(x, 3) for x in pred_thres_change_accuracy_lst]
+        average_loss                         /= num_epochs
+        accuracy_lst                          = all_true_pred_lst / all_pred_lst * 100
+        accuracy_lst_print                    = [round(x, 3) for x in accuracy_lst]
+        pred_thresed_change_accuracy_lst        = all_actu_pred_thresed_change_lst / actu_thresed_change_lst * 100
+        pred_thresed_change_accuracy_lst_print  = [round(x, 3) for x in pred_thresed_change_accuracy_lst]
 
-        pred_thres_change_percision_lst = all_true_pred_thres_change_lst / all_pred_thres_change_lst * 100
-        pred_thres_change_percision_lst_print = [round(x, 3) for x in pred_thres_change_percision_lst]
-        true_pred_thres_actual_pred_thres_change_precision_lst = all_true_pred_actual_thres_change_lst/ all_pred_thres_change_lst * 100
-        true_pred_thres_actual_pred_thres_change_precision_lst_print = [round(x, 3) for x in true_pred_thres_actual_pred_thres_change_precision_lst]
+        pred_thresed_change_percision_lst                              = all_actu_pred_thresed_change_lst / pred_thresed_change_lst * 100
+        pred_thresed_change_percision_lst_print                        = [round(x, 3) for x in pred_thresed_change_percision_lst]
+        true_pred_thresed_actu_pred_thresed_change_precision_lst       = all_actu_pred_actu_thresed_change_lst/ pred_thresed_change_lst * 100
+        true_pred_thresed_actu_pred_thresed_change_precision_lst_print = [round(x, 3) for x in true_pred_thresed_actu_pred_thresed_change_precision_lst]
         print('Accuracy List: ', accuracy_lst_print)
-        print('Change Accuracy List: ', pred_thres_change_accuracy_lst_print)
-        print('Change Precision List: ', pred_thres_change_percision_lst_print)
-        print('Prediction of Change Precision List: ', true_pred_thres_actual_pred_thres_change_precision_lst_print)
+        print('Change Accuracy List: ', pred_thresed_change_accuracy_lst_print)
+        print('Change Precision List: ', pred_thresed_change_percision_lst_print)
+        print('Prediction of Change Precision List: ', true_pred_thresed_actu_pred_thresed_change_precision_lst_print)
         raise KeyboardInterrupt
 
 def plot(predictions, targets, test_size):
@@ -483,7 +495,7 @@ def ask_for_log(log_pth):
         elif tolog == 'n':
             return False
 
-def get_pth(pth_to_main):
+def get_model_pth(pth_to_main):
     best_model_pth = f'{pth_to_main}/model/model_{config_name}.pt'
     last_model_pth = f'{pth_to_main}/model/last_model_{config_name}.pt'
     model_training_param_pth = f'{pth_to_main}/model/training_param_{config_name}.json'
@@ -493,8 +505,10 @@ def get_pth(pth_to_main):
 def main():
     """
         steps:
-        1. log the training purpose
+        1. setup training log
         2. load data and model
+        3. train model & log result
+        4. save model
 
     """
 
@@ -502,16 +516,22 @@ def main():
     pth_to_main = '..'
     train_purporse_log_pth = f'{pth_to_main}/log/train_purpose_log.txt'
     should_log_result = ask_for_log(train_purporse_log_pth)
+    training_log_pth = f"{pth_to_main}/log/training_log.csv"
+    if not os.path.exists(training_log_pth):
+        # If not, create the file with the header
+        with open(training_log_pth, 'w', newline='') as csvfile:
+            csv_writer = csv.DictWriter(csvfile, fieldnames=header)
+            csv_writer.writeheader()
 
     
     ############################## 2. load data and model ##############################
     # CHANGE CONFIG NAME to save a new model; normally, CONFIG NAME is created autometically in model_structure_param.py
+    
     start_time = time.time()
 
     print('loading data & model')
-    best_model_pth, last_model_pth, model_training_param_pth = get_pth(pth_to_main)
+    best_model_pth, last_model_pth, model_training_param_pth = get_model_pth(pth_to_main)
 
-    training_log_pth = f"{pth_to_main}/log/training_log.csv"
 
     # model, best_model, model_lr, best_prediction, best_k, epoch_nu
     print('loading model')
@@ -592,7 +612,7 @@ def main():
         fig.subplots_adjust(top=0.95, bottom=0.05)
         manager = plt.get_current_fig_manager()
         manager.full_screen_toggle()
-        # test_pred_thres_change_precision_hist = np.zeros((prediction_window,1))
+        # test_pred_thresed_change_precision_hist = np.zeros((prediction_window,1))
         # eval_loss_hist = []
         # train_loss_hist = []
 
@@ -619,7 +639,7 @@ def main():
             print(f'Epoch {epoch+1}/{num_epochs}')
             if test_every_x_epoch != 0 and epoch % test_every_x_epoch == 0:
                 with torch.no_grad():
-                    true_pred_thres_actual_pred_thres_change_precision_lst, average_loss, row_dict = work(model, test_loader, optimizers, num_epochs = 1, train = False)
+                    true_pred_thresed_actu_pred_thresed_change_precision_lst, average_loss, row_dict = work(model, test_loader, optimizers, num_epochs = 1, train = False)
                     for key, value in row_dict.items():
                         if key not in plot_hist_dict:
                             plot_hist_dict[key] = []
@@ -630,11 +650,7 @@ def main():
                     row_dict['time'] = datetime.now()
                     row_dict['best_k'] = best_k
                     row_dict['epoch_num'] = epoch_num
-                    if not os.path.exists(training_log_pth):
-                        # If not, create the file with the header
-                        with open(training_log_pth, 'w', newline='') as csvfile:
-                            csv_writer = csv.DictWriter(csvfile, fieldnames=header)
-                            csv_writer.writeheader()
+                    \
 
                     # Append the new row to the CSV file
                     with open(training_log_pth, 'a', newline='') as csvfile:
@@ -643,24 +659,24 @@ def main():
 
 
                     epoch_best_weights = weights_lst[0]
-                    highest_pred_thres_change_precision = 0.0
+                    highest_pred_thresed_change_precision = 0.0
                     improved = False
                     epoch_best_k = -100
                     for k, weights in enumerate(weights_lst):
                         # print(weights)
-                        pred_thres_change_precision = true_pred_thres_actual_pred_thres_change_precision_lst.reshape(1,prediction_window)*weights
-                        pred_thres_change_precision = pred_thres_change_precision.sum()/np.sum(weights)
-                        if pred_thres_change_precision > highest_pred_thres_change_precision:
-                            highest_pred_thres_change_precision = pred_thres_change_precision
+                        pred_thresed_change_precision = true_pred_thresed_actu_pred_thresed_change_precision_lst.reshape(1,prediction_window)*weights
+                        pred_thresed_change_precision = pred_thresed_change_precision.sum()/np.sum(weights)
+                        if pred_thresed_change_precision > highest_pred_thresed_change_precision:
+                            highest_pred_thresed_change_precision = pred_thresed_change_precision
                             epoch_best_k = k
                             epoch_best_weights = weights
-                        if pred_thres_change_precision > best_prediction: 
+                        if pred_thresed_change_precision > best_prediction: 
                             best_k = k
                             has_improvement = True
                             improved = True
                             print(epoch_best_weights)
-                            print(f'\nNEW BEST prediction: {pred_thres_change_precision:.4f}% at k: {best_k}\n')
-                            best_prediction = pred_thres_change_precision
+                            print(f'\nNEW BEST prediction: {pred_thresed_change_precision:.4f}% at k: {best_k}\n')
+                            best_prediction = pred_thresed_change_precision
                             best_model_state = model.state_dict()
                     tmp_weight_decay = pow(0.8, epoch_best_k)
                     ma_weight_decay = tmp_weight_decay * 0.1 + ma_weight_decay * 0.9
@@ -668,7 +684,7 @@ def main():
                     train_weights = torch.pow(torch.tensor(ma_weight_decay), torch.arange(prediction_window).float()).to(device)
                     if not improved:
                         print(epoch_best_weights)
-                        print(f'\ncurrent best change prediction precision: {highest_pred_thres_change_precision:.4f}% at k: {epoch_best_k}\n')
+                        print(f'\ncurrent best change prediction precision: {highest_pred_thresed_change_precision:.4f}% at k: {epoch_best_k}\n')
             # endif
 
             # actually train the model
@@ -689,16 +705,16 @@ def main():
             print(f'NO IMPROVEMENET from {start_best_prediction:.2f}%')
         print('\n\n')
 
-        print(test_pred_thres_change_precision_hist.shape)
+        print(test_pred_thresed_change_precision_hist.shape)
         # predictions = np.mean(predictions, axis = )
         # plt.ion()
         # for i in range(prediction_window):
-        #     predictions = test_pred_thres_change_precision_hist[i,:]
+        #     predictions = test_pred_thresed_change_precision_hist[i,:]
         #     plt.plot(predictions, label=f'{i+1} min prediction', linestyle='solid')
-        # plt.plot(test_pred_thres_change_precision_hist.mean(axis=0), label=f'average prediction', linestyle='dashed')
+        # plt.plot(test_pred_thresed_change_precision_hist.mean(axis=0), label=f'average prediction', linestyle='dashed')
         # weights = np.linspace(1, 0.1, num=prediction_window)
         # weights = weights.reshape(prediction_window,1)
-        # plt.plot((test_pred_thres_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted prediction', linestyle='dotted')
+        # plt.plot((test_pred_thresed_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted prediction', linestyle='dotted')
         # plt.legend()
 
         print('Training Complete')
@@ -713,14 +729,14 @@ def main():
         # start_time = time.time()
         # print('Testing model')
         # with torch.no_grad():
-        #     test_pred_thres_change_percision_lst, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
-        #     test_pred_thres_change_precision_hist[:,0] = test_pred_thres_change_percision_lst
+        #     test_pred_thresed_change_percision_lst, average_loss = work(model, test_loader, optimizers, num_epochs = 1, mode = 1)
+        #     test_pred_thresed_change_precision_hist[:,0] = test_pred_thresed_change_percision_lst
         #     plt.clf()
         #     for i in range(prediction_window):
-        #         predictions = test_pred_thres_change_precision_hist[i,:]
+        #         predictions = test_pred_thresed_change_precision_hist[i,:]
         #         plt.plot(predictions, 0, label=f'{i+1} min accuracy', marker = 'o')
-        #     plt.plot(test_pred_thres_change_precision_hist.mean(axis=0), 0, label=f'average accuracy', marker = 'o')
-        #     plt.plot((test_pred_thres_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
+        #     plt.plot(test_pred_thresed_change_precision_hist.mean(axis=0), 0, label=f'average accuracy', marker = 'o')
+        #     plt.plot((test_pred_thresed_change_precision_hist*weights).sum(axis=0)/np.sum(weights), label=f'weighted accuracy', linestyle='dotted')
         #     plt.legend()
         #     plt.ylim(0, 1)
         #     plt.show()

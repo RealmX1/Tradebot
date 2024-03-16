@@ -46,29 +46,29 @@ trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 def handler(new_data = None):
     for symbol in symbols:
 
-    stream_df = df.tail(hist_window+1000)
-    indicated = append_indicators(stream_df)
+        stream_df = df.tail(hist_window+1000)
+        indicated = append_indicators(stream_df)
 
-    x_np = normalize_data(indicated.tail(hist_window))
-    x_batch = torch.tensor(x_np).view(1, hist_window, input_size).float().to(device)
-    print(x_batch.shape)
+        x_np = normalize_data(indicated.tail(hist_window))
+        x_batch = torch.tensor(x_np).view(1, hist_window, input_size).float().to(device)
+        print(x_batch.shape)
 
-    y_pred = model(x_batch, None, teacher_forcing_ratio=0)
+        y_pred = model(x_batch, None, teacher_forcing_ratio=0)
 
-    prediction = y_pred.clone().detach().cpu()
-    weighted_prediction = (prediction * weights).sum() / weights.sum()
-    
-    alpaca_account = trading_client.get_account()
-    decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names, alpaca_account)
+        prediction = y_pred.clone().detach().cpu()
+        weighted_prediction = (prediction * weights).sum() / weights.sum()
+        
+        alpaca_account = trading_client.get_account()
+        decision = policy.decide('AAPL', x_batch.clone().detach().cpu(), price, weighted_prediction, col_names, alpaca_account)
 
-    if decision[0] == 'b':
-        order_side = OrderSide.BUY
-    elif decision[0] == 's':
-        order_side = OrderSide.SELL
-    else:
-        return #???
-    qty = decision[1]
-    create_limit_order(symbol, qty, price, order_side, tif = TimeInForce.DAY, stop = None) # probably should ask policy to provide symbol.; maybe policy should be multiple decision tuples -- one for each symbol.
+        if decision[0] == 'b':
+            order_side = OrderSide.BUY
+        elif decision[0] == 's':
+            order_side = OrderSide.SELL
+        else:
+            return #???
+        qty = decision[1]
+        create_limit_order(symbol, qty, price, order_side, tif = TimeInForce.DAY, stop = None) # probably should ask policy to provide symbol.; maybe policy should be multiple decision tuples -- one for each symbol.
 
 
 

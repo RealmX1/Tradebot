@@ -692,8 +692,8 @@ class GlobalWeightedAveragePool1d(Module):
         self.bias = nn.Parameter(torch.zeros(1, n_in, seq_len))
 
     def forward(self, x):
-        ¦Á = F.softmax(torch.sigmoid(x * self.weight + self.bias), dim=-1)
-        return (x * ¦Á).sum(-1)
+        ï¿½ï¿½ = F.softmax(torch.sigmoid(x * self.weight + self.bias), dim=-1)
+        return (x * ï¿½ï¿½).sum(-1)
 
 GWAP1d = GlobalWeightedAveragePool1d
 

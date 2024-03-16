@@ -29,7 +29,7 @@ def norm_param_2_idx(col_names):
 def batch_norm(x_raw, not_close_batch_norm_lst, close_idx):
     x_mean = np.mean(x_raw[:,:,close_idx:close_idx+1], axis=1)
     x_mean = np.tile(x_mean, (1, feature_num))
-    x_std = np.copy(x_mean) / 100
+    x_std = np.copy(x_mean) / 100 
     x_mean[:,not_close_batch_norm_lst] = 0 
     x_std[:,not_close_batch_norm_lst] = 1
 

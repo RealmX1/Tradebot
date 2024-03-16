@@ -97,7 +97,7 @@ def main():
 
     symbols = ['AAPL', 'TSLA', 'NVDA', 'PDD', 'DQ', 'ARBB', 'VZ', 'JYD', 'MGIH']
         
-        df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
+    df = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
 
     download = True
     # for symbol in symbols:

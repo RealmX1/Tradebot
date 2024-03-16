@@ -52,7 +52,7 @@ stock_client = StockHistoricalDataClient(API_KEY,  SECRET_KEY)
 
 # pre = 'bar_set'
 post = 'raw'
-default_local_data_pth = 'data'
+default_data_pth = 'data' #currently, launch by default from the project main folder
 
 save_template = "{data_pth}/{data_folder}/{pre}_{time_str}_{symbol_str}_{timeframe_str}_{post}_{data_source_str}.csv"
     
@@ -204,7 +204,7 @@ def get_latest_bars(symbol_or_symbol_lst):
 
     return bar_set
 
-def last_week_bars(symbol_lst, timeframe = TimeFrame.Minute, data_pth = default_local_data_pth, download = True):
+def last_week_bars(symbol_lst, timeframe = TimeFrame.Minute, data_pth = default_data_pth, download = True):
     # get the last week of data
     end = datetime.now()
     start = (end - timedelta(days=end.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -219,7 +219,7 @@ def get_and_process_quotes(symbol, timeframe, start, limit):
 ############################################################################################################
 def format_save_pth(symbol, timeframe, start, end, 
                     pre      = '', post = post,
-                    data_pth = default_local_data_pth,
+                    data_pth = default_data_pth,
                     type     = 'bars',
                     data_folder   = 'raw_download'):
 
@@ -260,7 +260,7 @@ Get data for a single symbol from start to end in a single attempt TODO: automet
             This feature is now removed; all file-saving is now done in the get-load of data section.
     
     Useage:
-        df = get_and_process_data(symbol_lst, timeframe, start, end, limit = None, download=False, pre = '', post = post, data_pth = default_local_data_pth, type = 'bars', adjustment ='all')
+        df = get_and_process_data(symbol_lst, timeframe, start, end, limit = None, download=False, pre = '', post = post, data_pth = default_data_pth, type = 'bars', adjustment ='all')
 
     
     Steps/Process:
@@ -270,8 +270,9 @@ Get data for a single symbol from start to end in a single attempt TODO: automet
 '''
 def get_and_process_data(symbol, timeframe, start, end, limit = None, adjustment ='all',
                          pre      = 'bar_set', post = post,
-                         data_pth = default_local_data_pth,
-                         type     = 'bars'):
+                         data_pth = default_data_pth,
+                         type     = 'bars',
+                         get_data = get_bars):
     
     print("Getting Data for symbol:", symbol)
     csv_pth = format_save_pth(symbol, timeframe, start, end,
@@ -342,7 +343,7 @@ Get data for a single symbol from start to end in a single attempt TODO: automet
             This feature is now removed; all file-saving is now done in the get-load of data section.
     
     Useage:
-        df = get_and_process_data(symbol_lst, timeframe, start, end, limit = None, download=False, pre = '', post = post, data_pth = default_local_data_pth, type = 'bars', adjustment ='all')
+        df = get_and_process_data(symbol_lst, timeframe, start, end, limit = None, download=False, pre = '', post = post, data_pth = default_data_pth, type = 'bars', adjustment ='all')
 
     
     Steps/Process:
@@ -365,10 +366,10 @@ Get data for a single symbol from start to end in a single attempt TODO: automet
 
 def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment = 'all',
                      pre      = '', post = post,
-                     data_pth = default_local_data_pth,
+                     data_pth = default_data_pth,
                      type     = 'bars',
                      combine  = False):
-    
+    get_data = get_bars
     if type == 'bars':
         get_data = get_bars
         pre = pre + 'bar_set'
@@ -389,7 +390,7 @@ def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment
     start = raw_start
     if type == 'bars':
         start = start.replace(day=1, month = 1) # start from the first day of the month
-    dfs = []
+    # dfs = []
     if start >= raw_end:
         raise Warning(f'start time {start} is later than end time {raw_end}')
     for symbol in symbol_lst:
@@ -408,7 +409,7 @@ def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment
                 time_strs.append(time_str)
 
             df = get_and_process_data(symbol, timeframe, current_start, end, limit, adjustment, 
-                                    pre=pre, post=post, data_pth=data_pth, type=type)
+                                    pre=pre, post=post, data_pth=data_pth, type=type, get_data=get_data)
             
             if combine:
                 symbol_dfs.append(df)
@@ -433,7 +434,7 @@ def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment
 
     print('time_strs: ', time_strs)
 
-    return dfs
+    # return dfs
 
 def main():
 

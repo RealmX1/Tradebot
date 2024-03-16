@@ -27,6 +27,7 @@ start_time = time.time()
 ma_time = 0
 
 for index, bar_row in bar_df.iterrows():
+    pass
     
     # print('bar row: ', bar_row['timestamp'])
     # # get the rounded timestamp value

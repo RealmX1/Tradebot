@@ -9,7 +9,7 @@ import ast
 from datetime import datetime
 
 from indicator_param import *
-from alpaca_history import get_load_of_data
+from alpaca_history import get_load_of_data, default_data_pth
 from alpaca.data.timeframe import TimeFrame
 from alpaca.data.enums import Exchange, DataFeed
 # pd.set_option('display.max_columns', None)
@@ -20,10 +20,6 @@ indicators to calculate:
     - bollinger bands
     - rsi
 '''
-
-# Define function to apply to rolling window
-def func(x): 
-    return x.sum()
 
 def add_time_embedding(df): 
     # Create a column from the timestamp index (second index), make sure the index is timezone aware (in UTC);
@@ -123,19 +119,27 @@ def log_feature_record(feature_lst, feature_hist_df):
 
     return feature_record, feature_hist_df
 
-def main(): 
+def indicate(symbol_lst = ['NVDA','AAPL','MSFT','GOOG','TSLA'], training = True): 
     timeframe = TimeFrame.Minute
     
-    training = True # HYPERPARAMETER
+    # training = False # HYPERPARAMETER
     pre  = "bar_set"
     post = "raw"
 
-    start = datetime(2020, 1, 1)
-    end   = datetime(2023, 1, 1)
-    time_str = start.strftime('%Y%m%d') + '_' + end.strftime('%Y%m%d')  # test = '20230101_20230701'; train = '20200101_20230101'
-    symbols     = ['NVDA','AAPL','MSFT','GOOG','TSLA']
+    # train = '20200101_20230101'; test = '20230101_20230701'
+    # TODO: Comback to resolve this when 
+    # when testing data is getting generated, for each timestamp where data exist, does information for other symbols need to be inferred? Or should they be predicted seperately?
+
+    if training:
+        start = datetime(2020, 1, 1)
+        end   = datetime(2023, 1, 1)
+    else:
+        start = datetime(2023, 1, 1)
+        end   = datetime(2023, 7, 1)
+
+    time_str   = start.strftime('%Y%m%d') + '_' + end.strftime('%Y%m%d')  
     # Download all required data using alpaca_history's get_loads_of_data
-    get_load_of_data(symbols, timeframe, start, end, limit = None, adjustment = 'all',
+    get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment = 'all',
                     pre      = '', post = post,
                     type     = 'bars',
                     combine  = True)
@@ -150,13 +154,13 @@ def main():
 
     # Generate save path and input path
     
-    timeframe         = TimeFrame.Minute.value
-    data_source = DataFeed.IEX # DataFeed. is default/free; SIP & OTC are available through paid subscription
+    timeframe       = TimeFrame.Minute.value
+    data_source     = DataFeed.IEX # DataFeed. is default/free; SIP & OTC are available through paid subscription
     data_source_str = str(data_source)[-3:]
     
-    input_pth_template = 'data/raw_combine/{pre}_{time_str}_{symbol}_{timeframe}_{post}_{data_source}.csv'.format(pre = pre, time_str = time_str, timeframe = timeframe, post = post, data_source = data_source_str,
+    input_pth_template = '{data_pth}/raw_combine/{pre}_{time_str}_{symbol}_{timeframe}_{post}_{data_source}.csv'.format(data_pth = default_data_pth, pre = pre, time_str = time_str, timeframe = timeframe, post = post, data_source = data_source_str,
                                                                                                         symbol = '{symbol}')
-    save_pth_template  = 'data/{purpose}/{pre}_{time_str}_{symbol}_{timeframe}_{feature_record}_{data_source}.csv'.format(pre = pre, time_str = time_str, timeframe = timeframe, data_source = data_source_str,
+    save_pth_template  = '{data_pth}/{purpose}/{pre}_{time_str}_{symbol}_{timeframe}_{feature_record}_{data_source}.csv'.format(data_pth = default_data_pth, pre = pre, time_str = time_str, timeframe = timeframe, data_source = data_source_str,
                                                                                                           purpose = '{purpose}', symbol = '{symbol}', feature_record = '{feature_record}')
     
     if training == True:
@@ -166,7 +170,7 @@ def main():
         save_pth_template = save_pth_template.format(purpose = 'test', symbol = '{symbol}', feature_record = '{feature_record}')
         mock_trade        = True
     
-    for symbol in symbols: 
+    for symbol in symbol_lst: 
         input_path                  = input_pth_template.format(pre = 'bar_set', symbol = symbol, time_str = time_str, timeframe = timeframe, post = 'raw')
         indicated_save_pth_template = save_pth_template.format(pre = 'bar_set', symbol = symbol, time_str = time_str, timeframe = timeframe, feature_record = '{feature_record}')
         df                          = pd.read_csv(input_path, index_col = ['symbol', 'timestamp'])
@@ -197,28 +201,27 @@ def main():
         # this is to avoid saving the same feature set multiple times and mixing them up.
         feature_record, feature_hist_df = log_feature_record(feature_lst, feature_hist_df)
         
-        save_pth  = indicated_save_pth_template.format(feature_record = feature_record)
-        df.to_csv(save_pth, index=True, index_label=['symbol', 'timestamp'])
-        print('start saving to: ', save_pth)
+        save_pth        = indicated_save_pth_template.format(feature_record = feature_record)
+        mock_trade_path = f'{default_data_pth}/test/mock_trade/{symbol}{time_str}_{symbol}.csv'
         if mock_trade: 
+            print('start saving to: ', save_pth, '\n', mock_trade_path)
             assert 2*df.shape[0] == mock_trade_df.shape[0]
-            mock_trade_path       = f'../data/csv/test/mock_trade_{time_str}_{symbol}.csv'
             mock_trade_df.to_csv(mock_trade_path)
+        else: 
+            print('start saving to: ', save_pth)
+        df.to_csv(save_pth, index=True, index_label=['symbol', 'timestamp'])
         csv_saving_time        = time.time() - start_time2
         total_csv_saving_time += csv_saving_time
         print(f'finished calculating indicators for {symbol} in {csv_saving_time:4.2f} seconds')
         # df.to_csv(f'data/csv/test.csv', index=True, index_label=['symbol', 'timestamp'])
 
-    print(f'finished calculating indicators for all symbols in {time.time() - start_time} seconds')
+    print(f'finished calculating indicators for all symbol_lst in {time.time() - start_time} seconds')
     print(feature_lst)
 
-    # data = df.values
-    # plot close_price
-    # plt.plot(data[:,3])
-    # plt.show()
-    
-    # print(feature_hist_dict)
     feature_hist_df.to_csv(features_hist_pth, index=False)
+
+def main():    
+    indicate()
 
 if __name__ == '__main__':
     main()

@@ -1,0 +1,29 @@
+{
+  "nodes": [
+    {
+      "id": "8088e7eb-e45a-4559-837e-93f098d668db",
+      "data": {
+        "isHead": true,
+        "sourceLocation": {
+          "uri": "vscode-remote://wsl%2Bubuntu-22.04/mnt/c/Users/zhang/Desktop/github/Tradebot/AI/lstm_updown.py",
+          "line": 144,
+          "character": 8
+        },
+        "note": "def work(model, data_loader, optimizers, num_epochs = num_epochs, train = False, schedulers = None): # mode 0: train, mode 1: test, mode 2: PLOT"
+      },
+      "position": {
+        "x": 138,
+        "y": 177
+      },
+      "width": 200,
+      "height": 70,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 138,
+        "y": 177
+      },
+      "dragging": false
+    }
+  ],
+  "edges": []
+}
