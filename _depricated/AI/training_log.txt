@@ -1,0 +1,17 @@
+Epoch   1/  1, Loss:  4.8944726, Time/epoch: 1.50 seconds, ? Direction: 16.97%, ? change Direction: 53.43%, Encocder LR: 0.00004608,
+Background ¡ü: 41.7601%, ¡ü Pred pct:  6.2347%, ¡ü Precision: 40.7382%, 
+Background ¡ý: 41.3860%, ¡ý Pred pct:  3.1340%, ¡ý Precision: 20.4755%, 
+Background ¡ú: 16.8539%, ¡ú Pred pct: 90.6313%, ¡ú Precision: 15.2100%
+Accuracy List:  [28.931, 19.438, 14.37, 11.813, 10.282]
+Change Accuracy List:  [14.526, 4.771, 1.302, 0.393, 0.158]
+Change Precision List:  [34.57, 34.08, 31.155, 26.923, 32.277]
+Prediction of Change Precision List:  [50.635, 56.885, 66.146, 70.316, 76.369]
+
+NEW BEST prediction: 75.6589% at weight decay: 9.31322574615478
+
+current change prediction precision: 75.4580%
+
+
+
+WOW....
+saving model to:  ../model/model_lstm_attention_16f1l200h30hist5pred3decay.pt

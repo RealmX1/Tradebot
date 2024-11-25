@@ -1,0 +1,71 @@
+Epoch  50/ 50, Loss:  0.0000085, Time per epoch: 10.56 seconds, Correct Direction: 80.93%
+completed in 527.85 seconds
+Accuracy List:  [89.8366 86.2637 83.3591 81.9756 80.4131 79.0991 78.1381 77.1597 76.3297
+ 75.5613]
+
+Testing model
+Epoch   1/  1, Loss:  0.0008721, Time per epoch: 3.68 seconds, Correct Direction: 81.40%
+completed in 3.68 seconds
+Accuracy List:  [90.8375 87.3368 84.5302 82.6297 80.949  79.6614 78.3793 77.4144 76.5734
+ 75.6458]
+
+Making Prediction
+Epoch   1/  1, Loss:  0.0001830, Time per epoch: 21.01 seconds, Correct Direction: 81.14%
+completed in 21.01 seconds
+Accuracy List:  [89.7819 86.9023 83.9347 82.3788 80.5962 79.619  78.339  77.2917 76.6633
+ 75.8702]
+total entry:  738991
+
+
+
+
+
+
+
+A LARGER 16 layer lstm model didn't return better result after 50 epochs:
+Epoch  50/ 50, Loss:  0.0000085, Time per epoch: 14.78 seconds, Correct Direction: 79.54%
+completed in 738.82 seconds
+Accuracy List:  [77.6985 77.1064 74.5213 73.6367 74.9868 74.1615 71.2326 71.9581 70.8473
+ 69.6432]
+
+Testing model
+Epoch   1/  1, Loss:  0.0008721, Time per epoch: 2.07 seconds, Correct Direction: 81.40%
+completed in 2.07 seconds
+Accuracy List:  [91.1426 87.33   84.3766 82.6425 80.9463 79.6215 78.3996 77.3738 76.5538
+ 75.6546]
+
+Making Prediction
+Epoch   1/  1, Loss:  0.0001830, Time per epoch: 11.17 seconds, Correct Direction: 81.17%
+completed in 11.17 seconds
+Accuracy List:  [90.7711 86.9136 83.204  82.484  80.7202 79.3882 78.503  77.2249 76.6193
+ 75.8699]
+total entry:  738991
+
+
+
+another training of 50 epochs confirmed the idea:
+Epoch  50/ 50, Loss:  0.0000085, Time per epoch: 14.65 seconds, Correct Direction: 80.88%
+completed in 732.49 seconds
+Accuracy List:  [89.6506 86.3136 83.637  81.8572 80.4012 79.2362 78.0859 77.1794 76.2992
+ 75.2956]
+
+Testing model
+Epoch   1/  1, Loss:  0.0008721, Time per epoch: 2.13 seconds, Correct Direction: 81.38%
+completed in 2.13 seconds
+Accuracy List:  [91.0736 87.309  84.5417 82.5519 80.7068 79.5999 78.361  77.449  76.5728
+ 75.616 ]
+
+Making Prediction
+Epoch   1/  1, Loss:  0.0001830, Time per epoch: 10.61 seconds, Correct Direction: 81.12%
+completed in 10.61 seconds
+Accuracy List:  [90.538  86.79   83.9963 82.2532 79.8345 79.496  78.4305 77.5403 76.6568
+ 75.7028]
+total entry:  738991
+
+
+tested on data from other stocks; yields pretty good generalization result:
+Testing model
+Epoch   1/  1, Loss:  0.0002726, Time per epoch: 9.96 seconds, Correct Direction: 80.83%
+completed in 9.96 seconds
+Accuracy List:  [91.0109 87.0846 84.0093 82.0764 79.5943 79.0549 77.824  76.8036 75.876
+ 74.9517]

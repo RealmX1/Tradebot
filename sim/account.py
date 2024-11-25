@@ -1,191 +1,126 @@
+from dataclasses import dataclass
+from typing import Dict, Tuple
 import math
-just_one_more_constant = 0.375 # https://www.youtube.com/watch?v=_FuuYSM7yOo&list=TLPQMjkwNDIwMjOTFJtp1wN2Pg&index=3
 
-#https://alpaca.markets/support/regulatory-fees
-SEC = 8.00 / 1000000 # SEC regulation fee is applied at 22.90 dollars per million dollars in sale.
-# which is 0.000008 dollars per dollar, or 0.0008% of each trade
-# IT NEED TO BE ROUNDED TO NEAREST CENT
+@dataclass
+class Position:
+    shares: int = 0
+    avg_price: float = 0.0
 
-TAF = 0.000145 # TAF Trading Activity Fee (TAF) from FINRA is applied at 0.000145 dollars per share. no greater than $7.27.
-TAF_CEIL = 7.27
-# for a 500$ share it is 0.000145 / 500 = 2.9E-7 which is 0.000029%
-# for a 1$ share it is 0.000145 / 1 = 0.000145 which is 0.0145%
-# IT NEED TO BE ROUNDED TO NEAREST CENT
-# It can be no greater than $5.95
-
+@dataclass 
+class Order:
+    shares: int
+    price: float
+    timestamp: str
 
 class Account:
-    def __init__(self, balance, symbols):
-        self.balance = balance
-        self.frozen_balance = 0 # for shorting.
-        self.account_value = balance
-
-        self.symbols = symbols
-        self.holding = {symbol:[0,0] for symbol in symbols}
+    """Simulates a trading account with cash and positions"""
+    
+    def __init__(self, initial_cash: float):
+        self.initial_cash = initial_cash
+        self.cash = initial_cash
+        self.positions: Dict[str, Position] = {}  # symbol -> Position
+        self.pending_orders: Dict[str, Order] = {}  # order_id -> Order
         
-        self.orders = {symbol:{} for symbol in symbols}
-
-
-    # buy order functions
-    def place_buy_order(self, symbol, price, shares, order_id):
-        affordable_shares = (self.balance + self.frozen_balance) // price
-        if affordable_shares < shares:
-            return 0
-        else:
-            self.orders[symbol][order_id] = (shares, price)
-            self.holding[symbol][1] = price
-            self.balance -= price * shares
-            return 1
+        # Constants for fees
+        self.SEC_FEE_RATE = 8.00 / 1000000  # $22.90 per million dollars sold
+        self.TAF_FEE_RATE = 0.000145  # $0.000145 per share
+        self.TAF_FEE_CAP = 7.27
     
-    def place_buy_max_order(self, symbol, price, order_id, optimal = True):
-        shares = (self.balance + self.frozen_balance) // price
+    def reset(self) -> None:
+        """Resets the account state"""
+        self.cash = self.initial_cash
+        self.positions.clear()
+        self.pending_orders.clear()
         
-        if optimal:
-            current_holding = self.holding[symbol][0]
-            if current_holding >= 0:
-                shares = int(shares*just_one_more_constant)
-            else: # fill short position, then purchase as much asneeded
-                shares = -current_holding + int((shares+current_holding) * just_one_more_constant)
-
-        if shares <= 0:
-            return 0
-        else:
-            self.place_buy_order(symbol, price, shares, order_id)
+    def place_buy_order(self, symbol: str, shares: int, price: float, 
+                       timestamp: str) -> str:
+        """
+        Attempts to place a buy order
+        Returns order_id if successful, None if insufficient funds
+        """
+        cost = shares * price
+        if cost > self.cash:
+            return None
+            
+        order_id = f"buy_{timestamp}_{symbol}"
+        self.pending_orders[order_id] = Order(shares, price, timestamp)
+        self.cash -= cost
         
-        return shares
-    
-    def cancel_buy_order(self, symbol, order_id):
-        self.balance += self.orders[symbol][order_id][0] * self.orders[symbol][order_id][1]
-        del self.orders[symbol][order_id]
-    
-    def complete_buy_order(self, symbol, order_id):
-        shares = self.orders[symbol][order_id][0]
-        self.holding[symbol][0] += shares
-        if self.holding[symbol][0] >= 0:
-            self.balance += self.frozen_balance
-            self.frozen_balance = 0
-        del self.orders[symbol][order_id]
-        return shares
-
-    # sell order functions
-    def place_sell_order(self, symbol, price, shares, order_id):
-        self.orders[symbol][order_id] = (shares, price)
-        self.holding[symbol][1] = price
-        self.holding[symbol][0] -= shares
-
-    def place_sell_max_order(self, symbol, price, order_id):
-        shares = self.holding[symbol][0]
-        self.holding[symbol][1] = price
-        self.orders[symbol][order_id] = (shares, price)
-        self.holding[symbol][0] = 0
-        return shares
-    
-    def cancel_sell_order(self, symbol, order_id):
-        self.holding[symbol][0] += self.orders[symbol][order_id][0]
-        del self.orders[symbol][order_id]
-
-    def complete_sell_order(self, symbol, order_id):
-        shares = self.orders[symbol][order_id][0]
-        price = self.orders[symbol][order_id][1]
-        value = shares * price
-        SEC_FEE = math.ceil(value * SEC * 100) / 100
-        TAF_FEE = math.ceil(shares * TAF * 100) / 100
-        TAF_FEE = min (TAF_CEIL, TAF_FEE)
-        print(f'TAF_FEE: {TAF_FEE}, SEC_FEE: {SEC_FEE}')
-        self.balance += value - TAF_FEE - SEC_FEE
-        del self.orders[symbol][order_id]
-        return shares
-    
-    # short order functions
-    def place_short_order(self, symbol, price, shares, order_id):
-        affordable_shares = self.balance // price
-        if affordable_shares < shares:
-            return 0
-        else:
-            self.orders[symbol][order_id] = (-shares, price)
-            self.holding[symbol][1] = price
-            cost = price * shares
-            self.balance -= cost
-            self.frozen_balance += 2 * cost
-            return 1
-
-    def place_short_max_order(self, symbol, price, order_id, optimal = True):
-        shares = self.balance // price
-
-        if optimal:
-            shares = int(shares*just_one_more_constant)
+        if symbol not in self.positions:
+            self.positions[symbol] = Position()
+            
+        return order_id
         
-        self.place_short_order(symbol, price, shares, order_id)
-
-        if shares <= 0:
-            return 0
-
-        return shares
-    
-    def cancel_short_order(self, symbol, order_id):
-        cost = self.orders[symbol][order_id][0] * self.orders[symbol][order_id][1]
-        self.balance -= cost
-        self.frozen_balance += 2 * cost
-        del self.orders[symbol][order_id]
-    
-    def complete_short_order(self, symbol, order_id):
-        self.holding[symbol][0] += self.orders[symbol][order_id][0]
+    def place_sell_order(self, symbol: str, shares: int, price: float, 
+                        timestamp: str) -> str:
+        """
+        Attempts to place a sell order
+        Returns order_id if successful, None if insufficient shares
+        """
+        if symbol not in self.positions or self.positions[symbol].shares < shares:
+            return None
+            
+        order_id = f"sell_{timestamp}_{symbol}"
+        self.pending_orders[order_id] = Order(shares, price, timestamp)
+        self.positions[symbol].shares -= shares
         
-        shares = -self.orders[symbol][order_id][0]
-        price = self.orders[symbol][order_id][1]
-        value = shares * price
-        TAF_FEE = math.ceil(shares * TAF * 100) / 100
-        TAF_FEE = min (TAF_CEIL, TAF_FEE)
-        SEC_FEE = math.ceil(value * SEC * 100) / 100
-        self.balance = self.balance - TAF_FEE - SEC_FEE
-        del self.orders[symbol][order_id]
-        return shares # positive shares
-
-
-
-    def place_reverse_short_order(self, symbol, price, order_id):
-        shares = self.holding[symbol][0]
-        if shares >= 0:
-            return 0
-        else:
-            has_money = self.place_buy_order(symbol, price, -shares, order_id)
-
-            if has_money:
-                return -shares
-            else:
-                print('not enough to close short position!!!')
-                return -1
-    
-    def complete_reverse_short_order(self, symbol, order_id):
-        return self.complete_buy_order(symbol, order_id)
-
-    def cancel_reverse_short_order(self, symbol, order_id):
-        self.cancel_buy_order(symbol, order_id)
-
-    def get_free_account_balance(self):
-        return self.balance
-
-    def get_total_account_balance(self):
-        return self.balance + self.frozen_balance
-    
-    def evaluate(self):
-        self.account_value = self.balance + self.frozen_balance
-        for symbol in self.symbols:
-            self.account_value += self.holding[symbol][0] * self.holding[symbol][1]
-        return self.account_value
-
-if __name__ == '__main__':
-    acc = Account(100000, ['BABA'])
-    print(acc.holding)
-    print(acc.balance)
-    acc.place_buy_max_order('BABA', 100, 0)
-    print(acc.holding)
-    print(acc.orders)
-    print(acc.balance)
-    acc.complete_buy_order('BABA', 0)
-    print(acc.holding)
-    print(acc.orders)
-    print(acc.balance)
-    print(acc.holding)
-
-    print(acc.evaluate())
+        return order_id
+        
+    def execute_buy(self, order_id: str) -> None:
+        """Executes a filled buy order"""
+        order = self.pending_orders[order_id]
+        symbol = order_id.split('_')[2]
+        
+        position = self.positions[symbol]
+        total_cost = position.shares * position.avg_price
+        new_shares = position.shares + order.shares
+        new_cost = total_cost + (order.shares * order.price)
+        
+        position.shares = new_shares
+        position.avg_price = new_cost / new_shares
+        
+        del self.pending_orders[order_id]
+        
+    def execute_sell(self, order_id: str) -> None:
+        """Executes a filled sell order"""
+        order = self.pending_orders[order_id]
+        
+        # Calculate fees
+        value = order.shares * order.price
+        sec_fee = math.ceil(value * self.SEC_FEE_RATE * 100) / 100
+        taf_fee = min(
+            self.TAF_FEE_CAP,
+            math.ceil(order.shares * self.TAF_FEE_RATE * 100) / 100
+        )
+        
+        self.cash += value - sec_fee - taf_fee
+        del self.pending_orders[order_id]
+        
+    def cancel_order(self, order_id: str) -> None:
+        """Cancels a pending order"""
+        order = self.pending_orders[order_id]
+        if order_id.startswith('buy'):
+            self.cash += order.shares * order.price
+        else:  # sell order
+            symbol = order_id.split('_')[2]
+            self.positions[symbol].shares += order.shares
+        del self.pending_orders[order_id]
+        
+    def get_position(self, symbol: str) -> Tuple[int, float]:
+        """Returns (shares, avg_price) for given symbol"""
+        if symbol not in self.positions:
+            return (0, 0.0)
+        pos = self.positions[symbol]
+        return (pos.shares, pos.avg_price)
+        
+    def get_total_value(self, price_lookup: Dict[str, float]) -> float:
+        """
+        Calculate total account value using provided prices
+        price_lookup: Dict[symbol -> current_price]
+        """
+        value = self.cash
+        for symbol, pos in self.positions.items():
+            if symbol in price_lookup:
+                value += pos.shares * price_lookup[symbol]
+        return value 

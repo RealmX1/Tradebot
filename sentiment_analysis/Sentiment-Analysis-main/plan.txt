@@ -1,3 +1,0 @@
-write a program that checks the credibility (check with stock movement after the predictions) of each twitter account (of the famous predictors)
-
-then use this collected credibility data to train sentiment analysis transformer

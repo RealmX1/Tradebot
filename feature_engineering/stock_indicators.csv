@@ -1,0 +1,90 @@
+type,name,url
+Price trends,ATR Trailing Stop,https://python.stockindicators.dev/indicators/AtrStop/#content
+Price trends,Aroon,https://python.stockindicators.dev/indicators/Aroon/#content
+Price trends,Average Directional Index (ADX),https://python.stockindicators.dev/indicators/Adx/#content
+Price trends,Directional Movement Index (DMI),https://python.stockindicators.dev/indicators/Adx/#content
+Price trends,Elder-ray Index,https://python.stockindicators.dev/indicators/ElderRay/#content
+Price trends,Gator Oscillator,https://python.stockindicators.dev/indicators/Gator/#content
+Price trends,Hurst Exponent,https://python.stockindicators.dev/indicators/Hurst/#content
+Price trends,Ichimoku Cloud,https://python.stockindicators.dev/indicators/Ichimoku/#content
+Price trends,Moving Average Convergence / Divergence (MACD),https://python.stockindicators.dev/indicators/Macd/#content
+Price trends,SuperTrend,https://python.stockindicators.dev/indicators/SuperTrend/#content
+Price trends,Vortex Indicator (VI),https://python.stockindicators.dev/indicators/Vortex/#content
+Price trends,Williams Alligator,https://python.stockindicators.dev/indicators/Alligator/#content
+Price channels,Bollinger Bands庐,https://python.stockindicators.dev/indicators/BollingerBands/#content
+Price channels,Donchian Channels,https://python.stockindicators.dev/indicators/Donchian/#content
+Price channels,Fractal Chaos Bands (FCB),https://python.stockindicators.dev/indicators/Fcb/#content
+Price channels,Keltner Channels,https://python.stockindicators.dev/indicators/Keltner/#content
+Price channels,Moving Average Envelopes,https://python.stockindicators.dev/indicators/MaEnvelopes/#content
+Price channels,Pivot Points,https://python.stockindicators.dev/indicators/PivotPoints/#content
+Price channels,Price Channels,https://python.stockindicators.dev/indicators/Donchian/#content
+Price channels,Rolling Pivot Points,https://python.stockindicators.dev/indicators/RollingPivots/#content
+Price channels,STARC Bands,https://python.stockindicators.dev/indicators/StarcBands/#content
+Price channels,Standard Deviation Channels,https://python.stockindicators.dev/indicators/StdDevChannels/#content
+Oscillators,Awesome Oscillator (AO),https://python.stockindicators.dev/indicators/Awesome/#content
+Oscillators,Chande Momentum Oscillator (CMO),https://python.stockindicators.dev/indicators/Cmo/#content
+Oscillators,Commodity Channel Index (CCI),https://python.stockindicators.dev/indicators/Cci/#content
+Oscillators,ConnorsRSI,https://python.stockindicators.dev/indicators/ConnorsRsi/#content
+Oscillators,Detrended Price Oscillator (DPO),https://python.stockindicators.dev/indicators/Dpo/#content
+Oscillators,KDJ Index,https://python.stockindicators.dev/indicators/Stoch/#content
+Oscillators,Relative Strength Index (RSI),https://python.stockindicators.dev/indicators/Rsi/#content
+Oscillators,Schaff Trend Cycle,https://python.stockindicators.dev/indicators/Stc/#content
+Oscillators,Stochastic Momentum Index (SMI),https://python.stockindicators.dev/indicators/Smi/#content
+Oscillators,Stochastic Oscillator,https://python.stockindicators.dev/indicators/Stoch/#content
+Oscillators,Stochastic RSI,https://python.stockindicators.dev/indicators/StochRsi/#content
+Oscillators,Triple EMA Oscillator (TRIX),https://python.stockindicators.dev/indicators/Trix/#content
+Oscillators,Ultimate Oscillator,https://python.stockindicators.dev/indicators/Ultimate/#content
+Oscillators,Williams %R,https://python.stockindicators.dev/indicators/WilliamsR/#content
+Stop and reverse,Chandelier Exit,https://python.stockindicators.dev/indicators/Chandelier/#content
+Stop and reverse,Parabolic SAR,https://python.stockindicators.dev/indicators/ParabolicSar/#content
+Stop and reverse,SuperTrend,https://python.stockindicators.dev/indicators/SuperTrend/#content
+Stop and reverse,Volatility Stop,https://python.stockindicators.dev/indicators/VolatilityStop/#content
+Candlestick patterns,Doji (Preview),https://python.stockindicators.dev/indicators/Doji/#content
+Candlestick patterns,Marubozu (Preview),https://python.stockindicators.dev/indicators/Marubozu/#content
+Volume-based,Accumulation / Distribution Line (ADL),https://python.stockindicators.dev/indicators/Adl/#content
+Volume-based,Chaikin Money Flow (CMF),https://python.stockindicators.dev/indicators/Cmf/#content
+Volume-based,Chaikin Oscillator,https://python.stockindicators.dev/indicators/ChaikinOsc/#content
+Volume-based,Force Index,https://python.stockindicators.dev/indicators/ForceIndex/#content
+Volume-based,Klinger Volume Oscillator,https://python.stockindicators.dev/indicators/Kvo/#content
+Volume-based,Money Flow Index (MFI),https://python.stockindicators.dev/indicators/Mfi/#content
+Volume-based,On-Balance Volume (OBV),https://python.stockindicators.dev/indicators/Obv/#content
+Volume-based,Percentage Volume Oscillator (PVO),https://python.stockindicators.dev/indicators/Pvo/#content
+Moving averages,Arnaud Legoux Moving Average (ALMA),https://python.stockindicators.dev/indicators/Alma/#content
+Moving averages,Double Exponential Moving Average (DEMA),https://python.stockindicators.dev/indicators/Dema/#content
+Moving averages,Endpoint Moving Average (EPMA),https://python.stockindicators.dev/indicators/Epma/#content
+Moving averages,Exponential Moving Average (EMA),https://python.stockindicators.dev/indicators/Ema/#content
+Moving averages,Hilbert Transform Instantaneous Trendline,https://python.stockindicators.dev/indicators/HtTrendline/#content
+Moving averages,Hull Moving Average (HMA),https://python.stockindicators.dev/indicators/Hma/#content
+Moving averages,Kaufman's Adaptive Moving Average (KAMA),https://python.stockindicators.dev/indicators/Kama/#content
+Moving averages,Least Squares Moving Average (LSMA),https://python.stockindicators.dev/indicators/Epma/#content
+Moving averages,MESA Adaptive Moving Average (MAMA),https://python.stockindicators.dev/indicators/Mama/#content
+Moving averages,McGinley Dynamic,https://python.stockindicators.dev/indicators/Dynamic/#content
+Moving averages,Modified Moving Average (MMA),https://python.stockindicators.dev/indicators/Smma/#content
+Moving averages,Running Moving Average (RMA),https://python.stockindicators.dev/indicators/Smma/#content
+Moving averages,Simple Moving Average (SMA),https://python.stockindicators.dev/indicators/Sma/#content
+Moving averages,Smoothed Moving Average (SMMA),https://python.stockindicators.dev/indicators/Smma/#content
+Moving averages,Tillson T3 Moving Average,https://python.stockindicators.dev/indicators/T3/#content
+Moving averages,Triple Exponential Moving Average (TEMA),https://python.stockindicators.dev/indicators/Tema/#content
+Moving averages,Volume Weighted Average Price (VWAP),https://python.stockindicators.dev/indicators/Vwap/#content
+Moving averages,Volume Weighted Moving Average (VWMA),https://python.stockindicators.dev/indicators/Vwma/#content
+Moving averages,Weighted Moving Average (WMA),https://python.stockindicators.dev/indicators/Wma/#content
+Price transforms,Ehlers Fisher Transform,https://python.stockindicators.dev/indicators/FisherTransform/#content
+Price transforms,Heikin-Ashi,https://python.stockindicators.dev/indicators/HeikinAshi/#content
+Price transforms,Renko Chart,https://python.stockindicators.dev/indicators/Renko/#content
+Price transforms,Zig Zag,https://python.stockindicators.dev/indicators/ZigZag/#content
+Price characteristics,Average True Range (ATR),https://python.stockindicators.dev/indicators/Atr/#content
+Price characteristics,Balance of Power (BOP),https://python.stockindicators.dev/indicators/Bop/#content
+Price characteristics,Bull and Bear Power,https://python.stockindicators.dev/indicators/ElderRay/#content
+Price characteristics,Choppiness Index,https://python.stockindicators.dev/indicators/Chop/#content
+Price characteristics,Dominant Cycle Periods,https://python.stockindicators.dev/indicators/HtTrendline/#content
+Price characteristics,Historical Volatility (HV),https://python.stockindicators.dev/indicators/StdDev/#content
+Price characteristics,Hurst Exponent,https://python.stockindicators.dev/indicators/Hurst/#content
+Price characteristics,Momentum Oscillator,https://python.stockindicators.dev/indicators/Roc/#content
+Price characteristics,Normalized Average True Range,https://python.stockindicators.dev/indicators/Atr/#content
+Price characteristics,Price Momentum Oscillator (PMO),https://python.stockindicators.dev/indicators/Pmo/#content
+Price characteristics,Price Relative Strength (PRS),https://python.stockindicators.dev/indicators/Prs/#content
+Price characteristics,Rate of Change (ROC),https://python.stockindicators.dev/indicators/Roc/#content
+Price characteristics,Rescaled Range Analysis,https://python.stockindicators.dev/indicators/Hurst/#content
+Price characteristics,True Range (TR),https://python.stockindicators.dev/indicators/Atr/#content
+Price characteristics,True Strength Index (TSI),https://python.stockindicators.dev/indicators/Tsi/#content
+Price characteristics,Ulcer Index (UI),https://python.stockindicators.dev/indicators/UlcerIndex/#content

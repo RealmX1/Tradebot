@@ -1,0 +1,12 @@
+lstm_updown_S2S_GREAT_SHORT_TERM_PRED.pt
+First model after addressing S2S.
+
+
+Testing the addition of a general fully connected linear layer that is shared by both Encoder and Decoder
+Failed; since the current output & input have different feature num;
+
+Testing the addition of a batchnorm layer between at the end of encoder & decoder
+https://www.youtube.com/watch?v=G45TuC6zRf4 Transformer layer normalization explained.
+DOn't see where this can be implemented in LSTM...
+
+Trying LSTM with attention

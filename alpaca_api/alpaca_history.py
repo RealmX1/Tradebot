@@ -55,11 +55,17 @@ post = 'raw'
 default_data_pth = 'data' #currently, launch by default from the project main folder
 
 save_template = "{data_pth}/{data_folder}/{pre}_{time_str}_{symbol_str}_{timeframe_str}_{post}_{data_source_str}.csv"
-    
+
 
 def get_bars(symbol_lst, timeframe, start, end, limit, adjustment = 'all'):    
     request = StockBarsRequest(
-        symbol_or_symbols=symbol_lst, timeframe=timeframe, start=start, end=end, limit=limit, adjustment=adjustment, feed = data_source
+        symbol_or_symbols=symbol_lst, 
+        timeframe=timeframe, 
+        start=start, 
+        end=end, 
+        limit=limit, 
+        adjustment=adjustment, 
+        feed = data_source
     )
     
     print('Start request')
@@ -86,8 +92,7 @@ def get_quotes(symbol_or_symbol_lst, start, limit):
 
 
 
-
-# WHERE IS THIS USEFUL?
+# Since for each recorded time not necessarily all symbols have trade data. This 
 # no need to use on trade data... for now.
 def complete_timestamp_with_all_symbol_lst(df):
     # fill each timestamp with all symbol_lst -- if no data, fill with -1
@@ -221,7 +226,7 @@ def format_save_pth(symbol, timeframe, start, end,
                     pre      = '', post = post,
                     data_pth = default_data_pth,
                     type     = 'bars',
-                    data_folder   = 'raw_download'):
+                    data_folder   = 'raw'):
 
     # symbol_str = symbol
     start_str  = start.strftime('%Y%m%d')
@@ -272,13 +277,19 @@ def get_and_process_data(symbol, timeframe, start, end, limit = None, adjustment
                          pre      = 'bar_set', post = post,
                          data_pth = default_data_pth,
                          type     = 'bars',
-                         get_data = get_bars):
+                         get_data = get_bars,
+                         overwrite = False):
     
     print("Getting Data for symbol:", symbol)
     csv_pth = format_save_pth(symbol, timeframe, start, end,
                             pre      = pre,      post = post,
                             data_pth = data_pth,
                             type     = type)
+    
+    if not overwrite:
+        if os.path.exists(csv_pth):
+            print(f'{csv_pth} already exists')
+            return pd.read_csv(csv_pth, index_col = ['symbol', 'timestamp'])
 
     print("csv_pth: ", csv_pth)
 
@@ -368,7 +379,9 @@ def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment
                      pre      = '', post = post,
                      data_pth = default_data_pth,
                      type     = 'bars',
-                     combine  = False):
+                     combine  = False,
+                     overwrite = False):
+
     get_data = get_bars
     if type == 'bars':
         get_data = get_bars
@@ -409,7 +422,7 @@ def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment
                 time_strs.append(time_str)
 
             df = get_and_process_data(symbol, timeframe, current_start, end, limit, adjustment, 
-                                    pre=pre, post=post, data_pth=data_pth, type=type, get_data=get_data)
+                                    pre=pre, post=post, data_pth=data_pth, type=type, get_data=get_data, overwrite=overwrite)
             
             if combine:
                 symbol_dfs.append(df)
@@ -418,15 +431,21 @@ def get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment
         
         if combine:
             symbol_df = pd.concat(symbol_dfs)
+            
+            
             csv_pth = format_save_pth(symbol, timeframe, start, end,
                                         pre      = pre,      post = post,
                                         data_pth = data_pth,
                                         type     = type,
-                                        data_folder = 'raw_combine')
+                                        data_folder = 'raw')
             
-            if os.path.exists(csv_pth) == False:
-                print('saving combined df to: ', csv_pth)
-                symbol_df.to_csv(csv_pth, index=True, index_label=['symbol', 'timestamp'])
+            print('saving combined df to: ', csv_pth)
+            if not overwrite:
+                if os.path.exists(csv_pth):
+                    print(f'{csv_pth} already exists')
+                    continue
+            symbol_df.to_csv(csv_pth, index=True, index_label=['symbol', 'timestamp'])
+            print(f'saved.')
 
 
 
@@ -443,8 +462,8 @@ def main():
     # symbol_lst = ['PDD', 'DQ', 'ARBB', 'JYD', 'MGIH', 'NVDA']
     symbol_lst = ["MSFT", "AAPL"]
     timeframe = TimeFrame.Minute
-    start = datetime(2020,1,5) # 2020-01-01 is wednesday
-    end = datetime(2023,1,1) 
+    start = datetime(2023,1,1) # 2020-01-01 is wednesday
+    end = datetime(2023,2,1) 
 
     print('start getting data\n')
     dfs = get_load_of_data(symbol_lst, timeframe, start, end, limit = None, adjustment = 'all',

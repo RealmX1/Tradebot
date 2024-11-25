@@ -1,0 +1,14 @@
+alpaca-py
+fasttext
+matplotlib
+msgpack_python
+nltk
+numpy
+pandas
+pandas_ta # technical analysis library on pandas dataframe
+psutil
+python_dateutil
+pytz
+scipy
+torch
+yfinance

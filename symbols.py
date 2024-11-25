@@ -1,1 +1,0 @@
-symbols = ['AAPL', 'TSLA', 'NVDA', 'PDD', 'DQ', 'ARBB', 'VZ', 'JYD', 'MGIH']
