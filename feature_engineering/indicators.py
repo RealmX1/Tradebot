@@ -182,11 +182,11 @@ def indicate(symbol_lst=symbols, training=True, timeframe = TimeFrame.Day):
     paths = PathConfig(purpose='train' if training else 'test')
     
     if training:
-        start = datetime(2015, 1, 1)
-        end = datetime(2023, 1, 1)
+        start = datetime(2021, 1, 1)
+        end = datetime(2024, 7, 1)
     else:
-        start = datetime(2023, 1, 1)
-        end = datetime(2023, 7, 1)
+        start = datetime(2020, 1, 1)
+        end = datetime(2021, 1, 1)
 
     time_str = start.strftime('%Y%m%d') + '_' + end.strftime('%Y%m%d')
     

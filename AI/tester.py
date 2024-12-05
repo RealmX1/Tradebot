@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 class Tester:
-    def __init__(self, config: Dict[str, Any], use_fine_tuned: bool = False):
+    def __init__(self, config: Dict[str, Any], use_fine_tuned: bool = True):
         self.config = config
         self.use_fine_tuned = use_fine_tuned
         self.data_loader = DataLoader(

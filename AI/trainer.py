@@ -81,7 +81,6 @@ class Trainer:
                 
                 self.bar_data = self.all_data[symbol]['bar_data']
                 self.mock_trades = self.all_data[symbol]['mock_trades']
-                print(self.mock_trades.head())
                 
                 # Initialize simulator with current symbol's data
                 self.simulator = TradingSimulator(
