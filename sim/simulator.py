@@ -9,12 +9,16 @@ class TradingSimulator:
     def __init__(self, 
                  initial_cash: float,
                  trade_data: pd.DataFrame,
-                 reward_calculator: RewardCalculator):
+                 reward_calculator: RewardCalculator,
+                 symbol: str):
         """
         trade_data: DataFrame with columns [timestamp, price, volume]
         """
-        self.account = Account(initial_cash)
+        self.initial_cash = initial_cash
         self.trade_data = trade_data
+        price = trade_data.iloc[0]['price']
+        price_lookup = {symbol: price}
+        self.account = Account(initial_cash, price_lookup)
         self.reward_calc = reward_calculator
         
         # Track metrics
@@ -26,7 +30,7 @@ class TradingSimulator:
             timestamp: str,
             symbol: str, 
             action: int,  # 0: hold, 1: buy, 2: sell
-            shares: int
+            shares: int = -1
             ) -> Tuple[float, Dict, bool]:
         """
         Executes one step of trading simulation
@@ -39,39 +43,40 @@ class TradingSimulator:
             
         # Execute action
         order_id = None
-        reward = 0.0
+        order_invalid = False
+        order_unfilled = False
         
         if action == 1:  # Buy
             current_price = trades.iloc[0]['price']
             order_id = self.account.place_buy_order(
                 symbol, shares, current_price, timestamp
             )
+            if not order_id:
+                order_invalid = True
             
         elif action == 2:  # Sell
             current_price = trades.iloc[0]['price']
             order_id = self.account.place_sell_order(
                 symbol, shares, current_price, timestamp
             )
+            if not order_id:
+                order_invalid = True
             
         # Check if order was placed successfully
-        if order_id:
+        if order_id: # has madeorder
             # Try to fill the order
-            order_filled = self._try_fill_order(order_id, trades)
-            if order_filled:
+            order_unfilled = not self._try_fill_order(order_id, trades)
+            if not order_unfilled:
                 self.filled_orders.append(order_id)
-                # Calculate reward only for filled orders
-                reward = self.reward_calc.calculate_filled_order_reward(
-                    self.account,
-                    order_id,
-                    trades
-                )
             else:
                 self.unfilled_orders.append(order_id)
                 self.account.cancel_order(order_id)
-                reward = self.reward_calc.calculate_unfilled_order_penalty()
-        else:
-            # Order couldn't be placed (insufficient funds/shares)
-            reward = self.reward_calc.calculate_invalid_order_penalty()
+            
+        reward = self.reward_calc.calculate_reward(
+            self.account, symbol, trades.iloc[-1]['price'],
+            order_id, order_invalid, order_unfilled
+        )
+            
                 
         # Prepare info dict
         info = {

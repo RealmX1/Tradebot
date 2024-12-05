@@ -158,25 +158,31 @@ class PathConfig:
     
     def get_processed_path(self, symbol, timeframe, time_str, feature_record, data_source):
         """Get path for processed data files"""
-        path = self.base_dir / self.purpose / f'bar_set_{time_str}_{symbol}_{timeframe}_{feature_record}_{data_source}.csv'
+        path = self.base_dir / self.purpose / f'{time_str}_{symbol}_{timeframe}_{feature_record}_{data_source}.csv'
         # create the directory if it doesn't exist
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
     
-    def get_mock_trade_path(self, symbol, time_str):
+    def get_mock_trade_path(self, symbol, timeframe, time_str):
         """Get path for mock trade files"""
-        path = self.base_dir / self.purpose / 'mock_trade' / f'{time_str}_{symbol}.csv'
+        path = self.base_dir / self.purpose / 'mock_trade' / f'{time_str}_{symbol}_{timeframe}.csv'
         # create the directory if it doesn't exist
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
     
+symbols = [
+    "AAPL", "NVDA", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "BRK.B", "GOOG", "AVGO",
+    "JPM", "LLY", "UNH", "V", "XOM", "COST", "MA", "HD", "PG", "WMT",
+    "NFLX", "JNJ", "CRM", "BAC", "ABBV", "ORCL", "CVX", "MRK", "WFC", "KO",
+    "CSCO", "ADBE", "AMD", "NOW", "ACN", "LIN", "PEP", "IBM", "DIS", "MCD",
+    "PM", "TMO", "ABT", "GE", "ISRG", "CAT", "GS", "INTU", "QCOM", "TXN"
+]
 
-def indicate(symbol_lst=['NVDA', 'AAPL', 'MSFT', 'GOOG', 'TSLA'], training=True):
-    timeframe = TimeFrame.Minute
+def indicate(symbol_lst=symbols, training=True, timeframe = TimeFrame.Day):
     paths = PathConfig(purpose='train' if training else 'test')
     
     if training:
-        start = datetime(2020, 1, 1)
+        start = datetime(2015, 1, 1)
         end = datetime(2023, 1, 1)
     else:
         start = datetime(2023, 1, 1)
@@ -199,6 +205,7 @@ def indicate(symbol_lst=['NVDA', 'AAPL', 'MSFT', 'GOOG', 'TSLA'], training=True)
     
     for symbol in symbol_lst:
         input_path = paths.get_raw_path(symbol, timeframe.value, time_str, data_source)
+        print(f"Loading data for {symbol} from {input_path}")
         df = pd.read_csv(input_path, index_col=['symbol', 'timestamp'])
         
         feature_lst, mock_trade_df = append_indicators(df)
@@ -209,7 +216,7 @@ def indicate(symbol_lst=['NVDA', 'AAPL', 'MSFT', 'GOOG', 'TSLA'], training=True)
             symbol, timeframe.value, time_str, feature_record, data_source
         )
         
-        mock_trade_path = paths.get_mock_trade_path(symbol, time_str)
+        mock_trade_path = paths.get_mock_trade_path(symbol, timeframe.value, time_str)
         mock_trade_df.to_csv(mock_trade_path)
             
         df.to_csv(save_path, index=True, index_label=['symbol', 'timestamp'])

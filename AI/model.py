@@ -25,7 +25,7 @@ class DQNAgent:
                  state_size: int,
                  device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
                  hidden_size: int = 64,
-                 learning_rate: float = 1e-4,
+                 learning_rate: float = 1e-5,
                  gamma: float = 0.99,
                  epsilon_start: float = 1.0,
                  epsilon_end: float = 0.01,

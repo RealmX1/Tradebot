@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, Tuple
 import math
+import numpy as np
 
 @dataclass
 class Position:
@@ -16,7 +17,7 @@ class Order:
 class Account:
     """Simulates a trading account with cash and positions"""
     
-    def __init__(self, initial_cash: float):
+    def __init__(self, initial_cash: float, price_lookup: Dict[str, float]):
         self.initial_cash = initial_cash
         self.cash = initial_cash
         self.positions: Dict[str, Position] = {}  # symbol -> Position
@@ -26,6 +27,8 @@ class Account:
         self.SEC_FEE_RATE = 8.00 / 1000000  # $22.90 per million dollars sold
         self.TAF_FEE_RATE = 0.000145  # $0.000145 per share
         self.TAF_FEE_CAP = 7.27
+        
+        self.price_lookup = price_lookup
     
     def reset(self) -> None:
         """Resets the account state"""
@@ -39,9 +42,15 @@ class Account:
         Attempts to place a buy order
         Returns order_id if successful, None if insufficient funds
         """
-        cost = shares * price
-        if cost > self.cash:
+        if shares == -1:
+            shares = int(self.get_total_value() / price)
+        
+        shares = min(shares, int(self.cash / price))
+        if shares == 0:
             return None
+        
+        
+        cost = shares * price
             
         order_id = f"buy_{timestamp}_{symbol}"
         self.pending_orders[order_id] = Order(shares, price, timestamp)
@@ -58,7 +67,16 @@ class Account:
         Attempts to place a sell order
         Returns order_id if successful, None if insufficient shares
         """
-        if symbol not in self.positions or self.positions[symbol].shares < shares:
+        # have the actual shares count be the smaller of the shares requested and the shares available
+        if shares == -1:
+            shares = int(self.get_total_value() / price)
+            
+        if symbol in self.positions:
+            shares = min(shares, self.positions[symbol].shares)
+        else:
+            shares = 0
+        
+        if shares == 0:
             return None
             
         order_id = f"sell_{timestamp}_{symbol}"
@@ -107,20 +125,84 @@ class Account:
             self.positions[symbol].shares += order.shares
         del self.pending_orders[order_id]
         
-    def get_position(self, symbol: str) -> Tuple[int, float]:
-        """Returns (shares, avg_price) for given symbol"""
+    def get_position(self, symbol: str) -> Tuple[float, float]:
+        """Returns (percentage of account value in cash, log10(avg_price)) for given symbol"""
         if symbol not in self.positions:
             return (0, 0.0)
-        pos = self.positions[symbol]
-        return (pos.shares, pos.avg_price)
+        cash_ratio = self.cash / self.get_total_value()
+        return (cash_ratio, np.log10(self.positions[symbol].avg_price))
         
-    def get_total_value(self, price_lookup: Dict[str, float]) -> float:
+    def get_total_value(self, price_lookup: Dict[str, float] = None, log: bool = False) -> float:
         """
         Calculate total account value using provided prices
         price_lookup: Dict[symbol -> current_price]
         """
         value = self.cash
+        if not price_lookup:
+            price_lookup = self.price_lookup
+        self.price_lookup = price_lookup
+            
+        if log:
+            print("calculating total value")
         for symbol, pos in self.positions.items():
-            if symbol in price_lookup:
-                value += pos.shares * price_lookup[symbol]
+            assert symbol in price_lookup
+            value += pos.shares * price_lookup[symbol]
+            if log:
+                print(f"added {pos.shares} shares of {symbol} at {price_lookup[symbol]}, total value is {value}")
         return value 
+
+    def get_state_normalized(self, price_lookup: Dict[str, float]) -> np.ndarray:
+        """
+        Returns normalized state representation of the account
+        [holdings_value_1/total_value, ..., holdings_value_n/total_value, cash/total_value]
+        """
+        total_value = self.get_total_value(price_lookup)
+        if total_value == 0:
+            return np.zeros(len(price_lookup) + 1)
+        
+        # Calculate normalized holdings values
+        normalized_holdings = []
+        for symbol, price in price_lookup.items():
+            position = self.positions.get(symbol, Position())
+            holding_value = position.shares * price
+            normalized_holdings.append(holding_value / total_value)
+        
+        # Add normalized cash
+        normalized_holdings.append(self.cash / total_value)
+        
+        return np.array(normalized_holdings)
+
+    def get_state_raw(self, price_lookup: Dict[str, float]) -> np.ndarray:
+        """
+        Returns raw state representation of the account
+        [holdings_1, ..., holdings_n, cash]
+        """
+        holdings = []
+        for symbol in price_lookup.keys():
+            position = self.positions.get(symbol, Position())
+            holdings.append(position.shares)
+        
+        holdings.append(self.cash)
+        return np.array(holdings)
+
+    def get_portfolio_metrics(self, price_lookup: Dict[str, float]) -> Dict:
+        """
+        Calculate various portfolio metrics
+        """
+        total_value = self.get_total_value(price_lookup)
+        metrics = {
+            'total_value': total_value,
+            'cash_ratio': self.cash / total_value if total_value > 0 else 0,
+            'positions': {}
+        }
+        
+        for symbol, price in price_lookup.items():
+            position = self.positions.get(symbol, Position())
+            position_value = position.shares * price
+            metrics['positions'][symbol] = {
+                'shares': position.shares,
+                'value': position_value,
+                'weight': position_value / total_value if total_value > 0 else 0
+            }
+        
+        return metrics

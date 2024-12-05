@@ -461,7 +461,7 @@ def main():
 
     # symbol_lst = ['PDD', 'DQ', 'ARBB', 'JYD', 'MGIH', 'NVDA']
     symbol_lst = ["MSFT", "AAPL"]
-    timeframe = TimeFrame.Minute
+    timeframe = TimeFrame(10, TimeFrame.Minute)
     start = datetime(2023,1,1) # 2020-01-01 is wednesday
     end = datetime(2023,2,1) 
 
