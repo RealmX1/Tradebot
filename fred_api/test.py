@@ -1,9 +1,8 @@
-from fredapi import Fred
-import os
+import pandas as pd
 
-fred_key = open(os.path.join(os.path.dirname(__file__), 'fred.key'), 'r').read()
-fred = Fred(api_key=fred_key)
-data = fred.get_series('UMCSENT')
-print(data)
-data.to_csv('consumer_sentiment.csv')
+df = pd.read_csv('fred_series.csv')
+
+# print the name column, one by one
+for name in df['name']:
+    print(name)
 

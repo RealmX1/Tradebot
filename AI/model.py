@@ -29,7 +29,7 @@ class DQNAgent:
                  gamma: float = 0.99,
                  epsilon_start: float = 1.0,
                  epsilon_end: float = 0.01,
-                 epsilon_decay: float = 0.995,
+                 epsilon_decay: float = 0.999,
                  memory_size: int = 10000,
                  batch_size: int = 64):
         

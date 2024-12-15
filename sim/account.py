@@ -7,6 +7,7 @@ import numpy as np
 class Position:
     shares: int = 0
     avg_price: float = 0.0
+    utilization_periods: int = 0  # New field to track periods with position
 
 @dataclass 
 class Order:
@@ -29,12 +30,33 @@ class Account:
         self.TAF_FEE_CAP = 7.27
         
         self.price_lookup = price_lookup
+        
+        # Add tracking for utilization
+        self.total_periods = 0
+        self.utilized_periods = 0
+        self.utilization_rate = 0.0
+        
+        # Add tracking for fees
+        self.total_sec_fees = 0.0
+        self.total_taf_fees = 0.0
+    
+    def update_utilization(self, symbol: str) -> None:
+        """Update utilization metrics for each time period"""
+        self.total_periods += 1
+        if symbol in self.positions and self.positions[symbol].shares > 0:
+            self.utilized_periods += 1
+        self.utilization_rate = self.utilized_periods / self.total_periods if self.total_periods > 0 else 0
     
     def reset(self) -> None:
         """Resets the account state"""
         self.cash = self.initial_cash
         self.positions.clear()
         self.pending_orders.clear()
+        self.total_periods = 0
+        self.utilized_periods = 0
+        self.utilization_rate = 0.0
+        self.total_sec_fees = 0.0
+        self.total_taf_fees = 0.0
         
     def place_buy_order(self, symbol: str, shares: int, price: float, 
                        timestamp: str) -> str:
@@ -112,6 +134,10 @@ class Account:
             math.ceil(order.shares * self.TAF_FEE_RATE * 100) / 100
         )
         
+        # Track fees
+        self.total_sec_fees += sec_fee
+        self.total_taf_fees += taf_fee
+        
         self.cash += value - sec_fee - taf_fee
         del self.pending_orders[order_id]
         
@@ -125,7 +151,7 @@ class Account:
             self.positions[symbol].shares += order.shares
         del self.pending_orders[order_id]
         
-    def get_position(self, symbol: str) -> Tuple[float, float]:
+    def get_position(self, symbol: str) -> Tuple[float, float]: # returns (cash as percentage of portfolio value, log10(avg_price))
         """Returns (percentage of account value in cash, log10(avg_price)) for given symbol"""
         if symbol not in self.positions:
             return (0, 0.0)

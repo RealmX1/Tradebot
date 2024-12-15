@@ -7,7 +7,8 @@ import os
 import ast
 from datetime import datetime
 
-from alpaca_api.alpaca_history import get_load_of_data, default_data_pth
+from data_util.alpaca_api.alpaca_history import get_load_of_data as get_load_of_data_alpaca, default_data_pth
+from data_util.yfinance_history import get_load_of_data as get_load_of_data_yf
 from alpaca.data.timeframe import TimeFrame
 from alpaca.data.enums import Exchange, DataFeed
 # pd.set_option('display.max_columns', None)
@@ -119,7 +120,8 @@ def log_feature_record(feature_lst, feature_hist_df):
     id           = 0
 
     for index, record in feature_hist_df.iterrows(): 
-        print("type of feature list is:", type(record['feature_lst']))
+        # print("type of feature list is:", type(record['feature_lst']))
+        # type of feature_lst is: <class 'str'>; need to convert to list using ast.literal_eval
         record_feature_set = set(ast.literal_eval(record['feature_lst']))
         record_feature_num = int(record['feature_num'])
         record_id          = int(record['id'])
@@ -131,11 +133,12 @@ def log_feature_record(feature_lst, feature_hist_df):
         if record_feature_set == feature_set:
             exist_record = True
             id           = record_id
-            print('found existing feature_hist')
+            # print('found existing feature_hist')
             break
 
     # If no existing record found, insert a new row
     if not exist_record: 
+        print('no matching feature_hist found, creating a new one')
         current_timestamp = datetime.now()
         new_row           = {'feature_num': feature_num, 'timestamp': current_timestamp, 'feature_lst': str(feature_lst), 'id': id}
         feature_hist_df   = feature_hist_df._append(new_row, ignore_index=True)
@@ -169,24 +172,36 @@ class PathConfig:
         # create the directory if it doesn't exist
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
-    
-symbols = [
-    "AAPL", "NVDA", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "BRK.B", "GOOG", "AVGO",
-    "JPM", "LLY", "UNH", "V", "XOM", "COST", "MA", "HD", "PG", "WMT",
-    "NFLX", "JNJ", "CRM", "BAC", "ABBV", "ORCL", "CVX", "MRK", "WFC", "KO",
-    "CSCO", "ADBE", "AMD", "NOW", "ACN", "LIN", "PEP", "IBM", "DIS", "MCD",
-    "PM", "TMO", "ABT", "GE", "ISRG", "CAT", "GS", "INTU", "QCOM", "TXN"
-]
 
-def indicate(symbol_lst=symbols, training=True, timeframe = TimeFrame.Day):
+
+# Top 50 symbols
+# symbols = [
+#     "AAPL", "NVDA", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "BRK.B", "GOOG", "AVGO",
+#     "JPM", "LLY", "UNH", "V", "XOM", "COST", "MA", "HD", "PG", "WMT",
+#     "NFLX", "JNJ", "CRM", "BAC", "ABBV", "ORCL", "CVX", "MRK", "WFC", "KO",
+#     "CSCO", "ADBE", "AMD", "NOW", "ACN", "LIN", "PEP", "IBM", "DIS", "MCD",
+#     "PM", "TMO", "ABT", "GE", "ISRG", "CAT", "GS", "INTU", "QCOM", "TXN"
+# ]
+from data_util.symbols import pre_2000_snp_stock_symbols
+symbols = pre_2000_snp_stock_symbols
+
+def indicate(symbol_lst=symbols, training=True, timeframe = TimeFrame.Day, data_source='yf'):
+    if data_source == 'yf':
+        get_load_of_data = get_load_of_data_yf
+    elif data_source == 'alpaca':
+        get_load_of_data = get_load_of_data_alpaca
+        data_source = str(DataFeed.IEX)[-3:]
+    else:
+        raise ValueError(f"Invalid data source: {data_source}")
+    
     paths = PathConfig(purpose='train' if training else 'test')
     
     if training:
-        start = datetime(2021, 1, 1)
-        end = datetime(2024, 7, 1)
+        start = datetime(2000, 1, 1)
+        end = datetime(2020, 1, 1)
     else:
         start = datetime(2020, 1, 1)
-        end = datetime(2021, 1, 1)
+        end = datetime(2024, 1, 1)
 
     time_str = start.strftime('%Y%m%d') + '_' + end.strftime('%Y%m%d')
     
@@ -200,12 +215,10 @@ def indicate(symbol_lst=symbols, training=True, timeframe = TimeFrame.Day):
         feature_hist_df = pd.read_csv(features_hist_pth)
     else:
         feature_hist_df = pd.DataFrame(columns=['feature_num', 'timestamp', 'feature_lst', 'id'])
-
-    data_source = str(DataFeed.IEX)[-3:]
     
     for symbol in symbol_lst:
         input_path = paths.get_raw_path(symbol, timeframe.value, time_str, data_source)
-        print(f"Loading data for {symbol} from {input_path}")
+        print(f"Indicating {symbol} from {input_path}")
         df = pd.read_csv(input_path, index_col=['symbol', 'timestamp'])
         
         feature_lst, mock_trade_df = append_indicators(df)
@@ -220,6 +233,7 @@ def indicate(symbol_lst=symbols, training=True, timeframe = TimeFrame.Day):
         mock_trade_df.to_csv(mock_trade_path)
             
         df.to_csv(save_path, index=True, index_label=['symbol', 'timestamp'])
+        print(f"Saved {symbol} to {save_path}")
 
     feature_hist_df.to_csv(features_hist_pth, index=False)
 

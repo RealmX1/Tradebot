@@ -3,7 +3,7 @@ import numpy as np
 from matplotlib.scale import SymmetricalLogTransform
 
 class TrainingPlotter:
-    def __init__(self, window_size=100, ema_alpha=0.05):
+    def __init__(self, window_size=1000, ema_alpha=0.05):
         """Initialize the training metrics plotter
         
         Args:
@@ -46,9 +46,13 @@ class TrainingPlotter:
         ax4.set_title('Account Value')
         ax4.set_xlabel('Training Steps')
         ax4.set_ylabel('Value ($)')
+        ax4.set_yscale('log')
         ax4.grid(True, alpha=0.3)
         
-        return self.fig, (ax1, ax2, ax3, ax4)
+        # Create twin axis for stock price
+        ax4_twin = ax4.twinx()
+        
+        return self.fig, (ax1, ax2, ax3, ax4, ax4_twin)
     
     def _calculate_ema(self, values):
         """Calculate exponential moving average"""
@@ -64,7 +68,7 @@ class TrainingPlotter:
             
         return emas
     
-    def update_plot(self, losses, rewards, actions, account_values):
+    def update_plot(self, losses, rewards, actions, account_values, stock_prices=None):
         """Update all subplots with new data
         
         Args:
@@ -72,23 +76,40 @@ class TrainingPlotter:
             rewards: List of all reward values
             actions: List of all action values
             account_values: List of all account values
+            stock_prices: List of stock prices
         """
         if self.fig is None:
-            self.fig, (ax1, ax2, ax3, ax4) = self.create_plot()
+            self.fig, (ax1, ax2, ax3, ax4, ax4_twin) = self.create_plot()
         else:
-            ax1, ax2, ax3, ax4 = self.axes = self.fig.axes
+            ax1, ax2, ax3, ax4, ax4_twin = self.axes = self.fig.axes
         
         # Clear previous plots
         ax1.clear()
         ax2.clear()
         ax3.clear()
         ax4.clear()
+        ax4_twin.clear()
         
         # Get recent data
-        recent_losses = losses[-self.window_size:] if len(losses) > self.window_size else losses
-        recent_rewards = rewards[-self.window_size:] if len(rewards) > self.window_size else rewards
-        recent_actions = actions[-self.window_size:] if len(actions) > self.window_size else actions
-        recent_account_values = account_values[-self.window_size:] if len(account_values) > self.window_size else account_values
+        record_length = len(losses)
+        if record_length < self.window_size:
+            recent_losses = losses
+            recent_rewards = rewards
+            recent_actions = actions
+            recent_account_values = account_values
+            stock_price_start = 0
+            stock_price_end = record_length
+        else:
+            recent_losses = losses[-self.window_size:]
+            recent_rewards = rewards[-self.window_size:]
+            recent_actions = actions[-self.window_size:]
+            recent_account_values = account_values[-self.window_size:]
+            stock_price_start = record_length - self.window_size
+            stock_price_end = record_length
+        
+        start_price = stock_prices[0]
+        assert len(stock_prices) > 0, f"expected at least len {self.window_size} stock prices, but got {len(stock_prices)}"
+        recent_stock_prices = stock_prices[stock_price_start:stock_price_end]
         
         # Calculate step numbers for x-axis
         current_step = len(losses)
@@ -99,7 +120,8 @@ class TrainingPlotter:
         loss_emas = self._calculate_ema(recent_losses)
         reward_emas = self._calculate_ema(recent_rewards)
         account_value_emas = self._calculate_ema(recent_account_values)
-        
+        stock_price_emas = self._calculate_ema(recent_stock_prices)
+
         # Plot loss
         ax1.set_title('Training Loss')
         ax1.set_xlabel('Training Steps')
@@ -148,14 +170,49 @@ class TrainingPlotter:
                 ax3.plot(x, 0, marker='o', markersize=4, color='gray',
                         alpha=0.5, markeredgecolor='darkgray', markeredgewidth=1)
         
-        # Plot account value
-        ax4.set_title('Account Value')
+        # Plot account value vs stock price
+        ax4.set_title('Account Value vs Stock Price')
         ax4.set_xlabel('Training Steps')
-        ax4.set_ylabel('Value ($)')
-        ax4.grid(True, alpha=0.3)
-        ax4.plot(x_range, recent_account_values, 'purple', alpha=0.3, label='Raw Value')
-        ax4.plot(x_range, account_value_emas, 'purple', label='EMA Value')
-        ax4.legend(loc='upper left')
+        ax4.set_ylabel('Account Value ($)', color='purple')
+        ax4_twin.set_ylabel('Stock Price ($)', color='orange')
+        
+        # Plot the data
+        ax4.plot(x_range, recent_account_values, 'purple', alpha=0.3, label='Raw Account Value')
+        ax4.plot(x_range, account_value_emas, 'purple', label='EMA Account Value')            
+        ax4_twin.plot(x_range, recent_stock_prices, 'orange', alpha=0.3, label='Raw Stock Price')
+        ax4_twin.plot(x_range, stock_price_emas, 'orange', label='EMA Stock Price')
+
+        # Calculate ranges and starting points
+        account_start = recent_account_values[0]
+        stock_start = recent_stock_prices[0]
+        
+        account_min = min(recent_account_values)
+        account_max = max(recent_account_values)
+        account_decrease_pct = account_min / account_start
+        account_increase_pct = account_max / account_start
+        
+        stock_min = min(recent_stock_prices)
+        stock_max = max(recent_stock_prices)
+        stock_decrease_pct = stock_min / stock_start
+        stock_increase_pct = stock_max / stock_start
+        
+        max_decrease_pct = max(account_decrease_pct, stock_decrease_pct)
+        max_increase_pct = max(account_increase_pct, stock_increase_pct)
+        
+        # Calculate limits that maintain relative scale but align starting points
+        account_y_min = account_start - max_decrease_pct * account_start
+        account_y_max = account_start + max_increase_pct * account_start
+        stock_y_min = stock_start - max_decrease_pct * stock_start
+        stock_y_max = stock_start + max_increase_pct * stock_start
+        
+        # Set the limits
+        ax4.set_ylim(account_y_min, account_y_max)
+        ax4_twin.set_ylim(stock_y_min, stock_y_max)
+        
+        # Add legends
+        lines1, labels1 = ax4.get_legend_handles_labels()
+        lines2, labels2 = ax4_twin.get_legend_handles_labels()
+        ax4.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
         
         # Set the same x-axis limits for all plots
         ax1.set_xlim(start_step, current_step)
@@ -169,6 +226,11 @@ class TrainingPlotter:
         # Update display
         plt.draw()
         plt.pause(0.01)
+    
+    def reset(self):
+        """Reset the plot"""
+        self.axes = None
+        self.step_counter = 0
     
     def close(self):
         """Close the plot"""

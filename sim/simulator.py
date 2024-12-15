@@ -1,25 +1,28 @@
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
+import time
 from .account import Account
 from .reward import RewardCalculator
+from util.timer import TimingStats
 
 class TradingSimulator:
     """Simulates trading with an RL agent"""
     
     def __init__(self, 
                  initial_cash: float,
-                 trade_data: pd.DataFrame,
+                 mock_trades: pd.DataFrame,
                  reward_calculator: RewardCalculator,
                  symbol: str):
         """
-        trade_data: DataFrame with columns [timestamp, price, volume]
+        mock_trades: DataFrame with columns [timestamp, price, volume]
         """
         self.initial_cash = initial_cash
-        self.trade_data = trade_data
-        price = trade_data.iloc[0]['price']
+        self.mock_trades = mock_trades
+        price = mock_trades.iloc[0]['price']
         price_lookup = {symbol: price}
         self.account = Account(initial_cash, price_lookup)
         self.reward_calc = reward_calculator
+        self.timing_stats = TimingStats()
         
         # Track metrics
         self.filled_orders: List[str] = []
@@ -36,18 +39,23 @@ class TradingSimulator:
         Executes one step of trading simulation
         Returns: (reward, info_dict, done)
         """
+        t0 = time.time()
         # Get trade data for this timestamp
-        trades = self.trade_data[self.trade_data.index == timestamp]
+        trades = self.mock_trades[self.mock_trades.index == timestamp]
         if trades.empty:
+            raise ValueError(f"No trades found for timestamp: {timestamp}")
             return 0.0, {}, True
             
+        self.timing_stats.update('data_lookup', time.time() - t0)
+        
         # Execute action
+        t1 = time.time()
         order_id = None
         order_invalid = False
         order_unfilled = False
+        current_price = trades.iloc[0]['price']
         
         if action == 1:  # Buy
-            current_price = trades.iloc[0]['price']
             order_id = self.account.place_buy_order(
                 symbol, shares, current_price, timestamp
             )
@@ -55,13 +63,15 @@ class TradingSimulator:
                 order_invalid = True
             
         elif action == 2:  # Sell
-            current_price = trades.iloc[0]['price']
             order_id = self.account.place_sell_order(
                 symbol, shares, current_price, timestamp
             )
             if not order_id:
                 order_invalid = True
-            
+                
+        self.timing_stats.update('order_placement', time.time() - t1)
+        
+        t2 = time.time()
         # Check if order was placed successfully
         if order_id: # has madeorder
             # Try to fill the order
@@ -71,13 +81,17 @@ class TradingSimulator:
             else:
                 self.unfilled_orders.append(order_id)
                 self.account.cancel_order(order_id)
-            
+                
+        self.timing_stats.update('order_processing', time.time() - t2)
+        
+        t3 = time.time()
         reward = self.reward_calc.calculate_reward(
-            self.account, symbol, trades.iloc[-1]['price'],
+            self.account, symbol, current_price,
             order_id, order_invalid, order_unfilled
         )
+        self.timing_stats.update('reward_calculation', time.time() - t3)
             
-                
+        t4 = time.time()    
         # Prepare info dict
         info = {
             'filled_orders': len(self.filled_orders),
@@ -86,6 +100,7 @@ class TradingSimulator:
                 {symbol: trades.iloc[-1]['price']}
             )
         }
+        self.timing_stats.update('info_preparation', time.time() - t4)
         
         return reward, info, False
         
@@ -120,3 +135,4 @@ class TradingSimulator:
         self.filled_orders.clear()
         self.unfilled_orders.clear()
         self.rewards.clear() 
+        self.reward_calc.reset()
