@@ -5,7 +5,7 @@ import signal
 import sys
 import time
 from collections import defaultdict
-from visualization.train_plot import TrainingPlotter
+from visualization.train_plot import TrainingPlotter, LossPlotter
 from sim.simulator import TradingSimulator
 from sim.reward import RewardCalculator
 from AI.model import DQNAgent
@@ -65,6 +65,7 @@ class Trainer:
                 self.agent.load(str(self.model_path))
         
         self.plotter = TrainingPlotter()
+        self.loss_plotter = LossPlotter()
         
         # Set up signal handler for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -72,18 +73,24 @@ class Trainer:
         self.timing_stats = TimingStats()
         
     def _signal_handler(self, signum, frame):
-        """Handle Ctrl+C by saving the model before exit"""
+        """Handle Ctrl+C by saving the model and showing final loss plot before exit"""
         print('\nSaving model before exit...')
         self.agent.save(str(self.model_path))
         print(f'Model saved to {self.model_path}')
+        
+        # Add these lines to show the loss plot
+        print('Showing final loss plot...')
+        self.loss_plotter.update_plot(self.all_losses)
+        self.loss_plotter.show_plot()
+        time.sleep(100)
         sys.exit(0)
         
     def train(self):
         try:
-            all_losses = []
-            all_rewards = []
-            all_actions = []
-            all_account_values = []
+            self.all_losses = []
+            self.all_rewards = []
+            self.all_actions = []
+            self.all_account_values = []
             
             for episode in range(self.config['episodes']):
                 # Symbol selection based on mode
@@ -107,18 +114,19 @@ class Trainer:
                     symbol
                 )
                 
-                episode_stats = self._run_episode(episode, all_losses, all_rewards, all_actions, all_account_values, symbol)
+                episode_stats = self._run_episode(episode, self.all_losses, self.all_rewards, self.all_actions, self.all_account_values, symbol)
                 self._handle_episode_end(episode, episode_stats, symbol)
                 
-            # Save final model after training completion
-            print('\nTraining completed. Saving final model...')
-            self.agent.save(str(self.model_path))
-            print(f'Final model saved to {self.model_path}')
+                # Update loss plot periodically
+                
+            # Show final loss plot after training completion
+            print('Showing final loss plot...')
+            
+            self.loss_plotter.update_plot(self.all_losses)
+            self.loss_plotter.show_plot()
+
         except KeyboardInterrupt:
-            print('\nSaving model before exit...')
-            self.agent.save(str(self.model_path))
-            print(f'Model saved to {self.model_path}')
-            sys.exit(0)
+            self._signal_handler(None, None)
         # finally:
         #     self.plotter.close()
     

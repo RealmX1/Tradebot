@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.scale import SymmetricalLogTransform
+from scipy.signal import savgol_filter
 
 class TrainingPlotter:
     def __init__(self, window_size=1000, ema_alpha=0.05):
@@ -236,3 +237,51 @@ class TrainingPlotter:
         """Close the plot"""
         plt.ioff()
         plt.show() 
+
+class LossPlotter:
+    def __init__(self, window_length=1001, poly_order=3):
+        """Initialize the loss plotter with Savitzky-Golay filter parameters
+        
+        Args:
+            window_length: Length of the smoothing window (must be odd)
+            poly_order: Order of the polynomial used for smoothing
+        """
+        self.window_length = window_length
+        self.poly_order = poly_order
+        self.fig = None
+        self.ax = None
+        
+    def update_plot(self, losses):
+        """Update the loss plot with smoothed data"""
+        if len(losses) < self.window_length:
+            return
+            
+        if self.fig is None:
+            plt.ion()
+            self.fig, self.ax = plt.subplots(figsize=(12, 6))
+            
+        self.ax.clear()
+        
+        # Apply Savitzky-Golay smoothing
+        smoothed_losses = savgol_filter(losses, self.window_length, self.poly_order)
+        
+        # Plot both raw and smoothed data
+        self.ax.plot(losses, 'b-', alpha=0.2, label='Raw Loss')
+        self.ax.plot(smoothed_losses, 'r-', linewidth=2, label='Smoothed Loss')
+        
+        self.ax.set_title('Training Loss Over Time')
+        self.ax.set_xlabel('Training Steps')
+        self.ax.set_ylabel('Loss')
+        self.ax.set_yscale('log')
+        self.ax.grid(True, alpha=0.3)
+        self.ax.legend()
+        
+        plt.tight_layout()
+        plt.draw()
+        plt.pause(0.01)
+        
+    def show_plot(self):
+        """Show the final plot and keep it displayed"""
+        if self.fig is not None:
+            plt.ioff()
+            plt.show() 
